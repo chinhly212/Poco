@@ -1,12 +1,9 @@
 package com.contentautomation
 
 import android.app.Application
-import android.content.Context
 import androidx.work.Configuration
 import com.contentautomation.data.db.AppDatabase
 import com.contentautomation.data.prefs.AppPreferences
-import com.contentautomation.domain.drive.GoogleDriveService
-import com.contentautomation.domain.ffmpeg.VideoProcessor
 import com.contentautomation.domain.tiktok.TikTokClient
 import com.contentautomation.domain.translate.TranslationService
 import com.contentautomation.work.WorkScheduler
@@ -17,8 +14,8 @@ class ContentAutomationApp : Application(), Configuration.Provider {
 
     val database by lazy { AppDatabase.get(this) }
     val prefs by lazy { AppPreferences(this) }
-    val driveService by lazy { GoogleDriveService(this) }
-    val videoProcessor by lazy { VideoProcessor() }
+    
+    // Đã xóa driveService và videoProcessor vì Server đảm nhận rồi
     val translationService by lazy {
         TranslationService { runBlocking { prefs.translationApiKey.first() } }
     }
@@ -30,7 +27,6 @@ class ContentAutomationApp : Application(), Configuration.Provider {
         )
     }
 
-    fun driveFolderId(): String = runBlocking { prefs.driveFolderId.first() }
     fun defaultHashtag(): String = runBlocking { prefs.defaultHashtag.first() }
     fun currentScanIntervalSeconds(): Int = runBlocking { prefs.scanIntervalSeconds.first() }
 
