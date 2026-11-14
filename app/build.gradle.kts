@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization") // <--- THÊM DÒNG NÀY
     id("com.google.devtools.ksp")
 }
 
@@ -13,8 +14,8 @@ android {
         applicationId = "com.contentautomation"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4 // Tăng lên 4 để cài đè
+        versionName = "1.3.0"
         multiDexEnabled = true
     }
 
@@ -51,9 +52,11 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.1")
     implementation("androidx.core:core-ktx:1.13.1")
 
-    // Supabase SDK
+    // Supabase SDK (Đã thêm Postgrest và Serialization)
     implementation(platform("io.github.jan-tennert.supabase:bom:3.0.0"))
     implementation("io.github.jan-tennert.supabase:auth-kt")
+    implementation("io.github.jan-tennert.supabase:postgrest-kt") // <--- Đọc ghi DB
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3") // <--- Chuyển đổi JSON
     implementation("io.ktor:ktor-client-android:3.0.0")
 
     // Room
