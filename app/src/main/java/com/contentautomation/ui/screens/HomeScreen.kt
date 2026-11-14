@@ -1,52 +1,78 @@
-package com.contentautomation.ui
+package com.contentautomation.ui.screens
 
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.navigation.compose.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.contentautomation.service.AutomationForegroundService
+import com.contentautomation.ui.MainViewModel
 
 @Composable
-fun AppNavHost(vm: MainViewModel) {
-    val nav = rememberNavController()
+fun HomeScreen(vm: MainViewModel) {
+    val context = LocalContext.current
+    val failedVideos by vm.failedVideos.collectAsStateWithLifecycle()
     
-    // Đã cập nhật thành 4 Tab theo yêu cầu
-    val tabs = listOf(
-        Triple("home", "Trang chủ", Icons.Default.Home),
-        Triple("system", "Hệ thống", Icons.Default.Build),
-        Triple("storage", "Lưu trữ", Icons.Default.Folder),
-        Triple("settings", "Cài đặt", Icons.Default.Settings)
-    )
-    
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                val entry by nav.currentBackStackEntryAsState()
-                val route = entry?.destination?.route
-                tabs.forEach { (r, label, icon) ->
-                    NavigationBarItem(
-                        selected = route == r,
-                        onClick = { 
-                            nav.navigate(r) { 
-                                popUpTo(nav.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            } 
-                        },
-                        icon = { Icon(icon, contentDescription = label) },
-                        label = { Text(label) }
-                    )
+    // Lấy trạng thái bật/tắt từ bộ nhớ máy
+    val isRunning by vm.isSystemRunning.collectAsStateWithLifecycle()
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp)
+    ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Hệ thống 24/7", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Tự động quét và đăng video", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
+                Switch(
+                    checked = isRunning,
+                    onCheckedChange = {
+                        vm.setSystemRunning(it)
+                        if (it) {
+                            AutomationForegroundService.start(context)
+                        } else {
+                            AutomationForegroundService.stop(context)
+                        }
+                    }
+                )
             }
         }
-    ) { pad ->
-        NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
-            composable("home") { com.contentautomation.ui.screens.HomeScreen(vm) }
-            composable("system") { com.contentautomation.ui.screens.SystemScreen(vm) }
-            composable("storage") { com.contentautomation.ui.screens.StorageScreen(vm) }
-            composable("settings") { com.contentautomation.ui.screens.SettingsScreen(vm) } // File này đã có sẵn từ trước
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text("Thông báo lỗi", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (failedVideos.isEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(10.dp).background(Color.Green, CircleShape))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Không có lỗi nào xảy ra", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(failedVideos) { video ->
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("Lỗi: ${video.lastError ?: "Không rõ nguyên nhân"}", color = Color.Red, fontWeight = FontWeight.Bold)
+                            Text("Video ID: ${video.externalVideoId}", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
         }
     }
 }
