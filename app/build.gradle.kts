@@ -69,13 +69,12 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.code.gson:gson:2.11.0")
 
-    // FFmpegKit (community fork, đang bảo trì)
-    implementation("io.github.jamaismagic.ffmpeg:ffmpeg-kit-full:6.0-2")
-    // Fallback: implementation("com.arthenica:ffmpeg-kit-full:6.0-2")
+    // FFmpegKit (Đã sửa lại đường dẫn Jitpack chuẩn)
+    implementation("com.github.jamaismagic.ffmpeg-kit:ffmpeg-kit-full:6.0-2")
 
-    // Google Drive (service account + REST)
+    // Google Drive (Đã sửa lại version tồn tại trên Maven Central)
     implementation("com.google.auth:google-auth-library-oauth2-http:1.20.0")
-    implementation("com.google.apis:google-api-services-drive:v3-rev20240131-2.0.0")
+    implementation("com.google.apis:google-api-services-drive:v3-rev20240509-2.0.0")
     implementation("com.google.http-client:google-http-client-gson:1.43.3")
 
     // Secure prefs
