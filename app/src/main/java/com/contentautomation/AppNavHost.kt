@@ -14,12 +14,11 @@ import androidx.navigation.compose.*
 fun AppNavHost(vm: MainViewModel) {
     val nav = rememberNavController()
     val tabs = listOf(
-        Triple("dashboard", "Tổng quan", Icons.Default.Dashboard),
-        Triple("new", "Video mới", Icons.Default.NewReleases),
-        Triple("pending", "Chờ đăng", Icons.Default.Schedule),
-        Triple("history", "Lịch sử", Icons.Default.History),
-        Triple("settings", "Cài đặt", Icons.Default.Settings)
-    )
+    Triple("home", "Trang chủ", Icons.Default.Home),
+    Triple("system", "Hệ thống", Icons.Default.Settings),
+    Triple("storage", "Lưu trữ", Icons.Default.Folder),
+    Triple("settings", "Cài đặt", Icons.Default.Settings)
+)
     Scaffold(
         bottomBar = {
             NavigationBar {
