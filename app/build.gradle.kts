@@ -14,7 +14,7 @@ android {
         applicationId = "com.contentautomation"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4 // Tăng lên 4 để cài đè
+        versionCode = 6 // Tăng lên 4 để cài đè
         versionName = "1.3.0"
         multiDexEnabled = true
     }
