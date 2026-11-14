@@ -1,19 +1,21 @@
 package com.contentautomation.work
 
 import android.content.Context
-import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.SourceVideo
 import com.contentautomation.data.db.entity.VideoStatus
 import com.contentautomation.domain.source.SourceAdapterFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class ScanWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, params) {
-
+class ScanWorker(ctx: Context, params: WorkerParameters) : androidx.work.CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        val app = applicationContext as ContentAutomationApp
+        val db = app.database
         val accounts = db.sourceAccountDao().getEnabled()
+        
         for (account in accounts) {
             try {
                 val adapter = SourceAdapterFactory.create(account.platform)
@@ -34,7 +36,6 @@ class ScanWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, param
                 }
                 db.sourceAccountDao().updateLastScan(account.id, System.currentTimeMillis())
             } catch (e: Exception) {
-                // Không chặn account khác; ghi log và tiếp tục
                 android.util.Log.w("ScanWorker", "Scan failed for ${account.accountName}: ${e.message}")
             }
         }
