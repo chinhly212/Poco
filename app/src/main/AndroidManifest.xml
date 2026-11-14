@@ -13,7 +13,7 @@
     <application
         android:name=".ContentAutomationApp"
         android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@android:drawable/sym_def_app_icon"
         android:label="Content Automation"
         android:theme="@style/Theme.Material3.DayNight"
         android:usesCleartextTraffic="false">
