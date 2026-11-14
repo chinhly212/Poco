@@ -1,5 +1,5 @@
 package com.contentautomation
-
+import io.github.jan.supabase.postgrest.Postgrest
 import android.app.Application
 import androidx.work.Configuration
 import com.contentautomation.data.db.AppDatabase
@@ -29,14 +29,15 @@ class ContentAutomationApp : Application(), Configuration.Provider {
     val translationService by lazy {
         TranslationService { runBlocking { prefs.translationApiKey.first() } }
     }
-    val tiktokClient by lazy {
-        TikTokClient(
-            prefs,
-            clientKeyProvider = { runBlocking { prefs.tiktokClientKey.first() } },
-            clientSecretProvider = { runBlocking { prefs.tiktokClientSecret.first() } }
-        )
+    val supabase by lazy {
+    createSupabaseClient(
+        supabaseUrl = "https://lkiigrddlancxisbczln.supabase.co",
+        supabaseKey = "sb_publishable_tjOYRm0Jxe5QHcGFSfcXcQ_SOsg9C7M"
+    ) {
+        install(Auth)
+        install(Postgrest) // <--- THÊM DÒNG NÀY
     }
-
+    }
     fun defaultHashtag(): String = runBlocking { prefs.defaultHashtag.first() }
     fun currentScanIntervalSeconds(): Int = runBlocking { prefs.scanIntervalSeconds.first() }
 
