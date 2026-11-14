@@ -85,4 +85,7 @@ dependencies {
 
     // Coil
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Thư viện tạo hiệu ứng Kính mờ (Glassmorphism) cho giao diện mới
+    implementation("dev.chrisbanes.haze:haze:1.2.2")
 }
