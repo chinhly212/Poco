@@ -1,6 +1,5 @@
 package com.contentautomation
-import io.github.jan.supabase.createSupabaseClient
-import io.github.jan.supabase.auth.Auth
+
 import android.app.Application
 import androidx.work.Configuration
 import com.contentautomation.data.db.AppDatabase
@@ -8,15 +7,25 @@ import com.contentautomation.data.prefs.AppPreferences
 import com.contentautomation.domain.tiktok.TikTokClient
 import com.contentautomation.domain.translate.TranslationService
 import com.contentautomation.work.WorkScheduler
+import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.auth.Auth
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
 class ContentAutomationApp : Application(), Configuration.Provider {
-
     val database by lazy { AppDatabase.get(this) }
     val prefs by lazy { AppPreferences(this) }
-    
-    // Đã xóa driveService và videoProcessor vì Server đảm nhận rồi
+
+    // KẾT NỐI SUPABASE
+    val supabase by lazy {
+        createSupabaseClient(
+            supabaseUrl = "https://lkiigrddlancxisbczln.supabase.co",
+            supabaseKey = "sb_publishable_tjOYRm0Jxe5QHcGFSfcXcQ_SOsg9C7M"
+        ) {
+            install(Auth)
+        }
+    }
+
     val translationService by lazy {
         TranslationService { runBlocking { prefs.translationApiKey.first() } }
     }
@@ -40,12 +49,4 @@ class ContentAutomationApp : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setMinimumLoggingLevel(android.util.Log.INFO)
             .build()
-}
-val supabase by lazy {
-    createSupabaseClient(
-        supabaseUrl = "https://lkiigrddlancxisbczln.supabase.co",
-        supabaseKey = "sb_publishable_tjOYRm0Jxe5QHcGFSfcXcQ_SOsg9C7M"
-    ) {
-        install(Auth)
-    }
 }
