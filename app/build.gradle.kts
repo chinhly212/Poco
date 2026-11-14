@@ -9,13 +9,33 @@ android {
     namespace = "com.contentautomation"
     compileSdk = 34
 
+    // CẤU HÌNH CHỮ KÝ CỐ ĐỊNH ĐỂ KHÔNG BỊ XUNG ĐỘT KHI CÀI ĐÈ
+    signingConfigs {
+        create("release") {
+            storeFile = file("keystore.jks") // File bạn đã upload lên thư mục app/
+            storePassword = "123456"
+            keyAlias = "poco-key"
+            keyPassword = "123456"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.contentautomation"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3 // Đã tăng lên 3
+        versionName = "1.2.0" // Đã tăng lên 1.2.0
         multiDexEnabled = true
+    }
+
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("release")
+        }
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+        }
     }
 
     buildFeatures { compose = true }
@@ -50,10 +70,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("androidx.navigation:navigation-compose:2.8.1")
     implementation("androidx.core:core-ktx:1.13.1")
+
+    // Supabase SDK (Đã xóa dòng bị lặp)
     implementation(platform("io.github.jan-tennert.supabase:bom:3.0.0"))
-implementation(platform("io.github.jan-tennert.supabase:bom:3.0.0"))
-implementation("io.github.jan-tennert.supabase:auth-kt")
-implementation("io.ktor:ktor-client-android:3.0.0")
+    implementation("io.github.jan-tennert.supabase:auth-kt")
+    implementation("io.ktor:ktor-client-android:3.0.0")
+
     // Room
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
