@@ -1,75 +1,83 @@
 package com.contentautomation.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.unit.sp
 import com.contentautomation.ui.MainViewModel
+import com.contentautomation.ui.components.*
+import com.contentautomation.ui.models.PipelineState
+import com.contentautomation.ui.models.PipelineSteps
 
 @Composable
-fun SystemScreen(vm: MainViewModel) {
-    val activeVideo by vm.currentProcessingVideo.collectAsStateWithLifecycle()
-
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp)
-    ) {
-        Text("Tiến trình hệ thống", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (activeVideo == null) {
-            // Không có video nào đang chạy
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(12.dp).background(Color.Red, CircleShape))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Không phát hiện video mới", color = Color.Gray, style = MaterialTheme.typography.bodyLarge)
+fun SystemScreen(vm: MainViewModel, state: PipelineState) {
+    ScreenColumn(title = "Hệ thống", subtitle = "Tiến trình xử lý video tự động") {
+        if (state is PipelineState.Idle) {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    StatusDot(GlassColors.Red)
+                    Spacer(Modifier.width(12.dp))
+                    GText("Không phát hiện video mới", 15.sp, color = GlassColors.InkSoft)
+                }
             }
-        } else {
-            // Đang có video chạy
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(12.dp).background(Color.Green, CircleShape))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Đang xử lý video mới!", color = Color.Green, fontWeight = FontWeight.Bold)
+        } else if (state is PipelineState.Running) {
+            val currentStep = state.stepIndex
+            val progress = (currentStep + 1) / PipelineSteps.all.size.toFloat()
+
+            GlassCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        StatusDot(GlassColors.Green)
+                        Spacer(Modifier.width(12.dp))
+                        GText("Đang xử lý video mới!", 15.sp, color = GlassColors.Green, weight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth().height(8.dp),
+                        color = GlassColors.Blue,
+                        trackColor = GlassColors.InkFaint
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    GText("Bước ${currentStep + 1}/${PipelineSteps.all.size}", 13.sp, color = GlassColors.InkSoft)
+                    if (state.retry > 0) {
+                        GText("Đang thử lại lần ${state.retry}...", 12.sp, color = GlassColors.Amber)
+                    }
+                }
             }
-            Spacer(modifier = Modifier.height(24.dp))
 
-            // Tính toán tiến trình dựa trên trạng thái
-            val (stepNumber, stepName) = getStepInfo(activeVideo?.status ?: "")
-            val progress = stepNumber / 13f
-
-            Text("Bước $stepNumber/13: $stepName", style = MaterialTheme.typography.bodyLarge)
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
+            GText("Chi tiết các bước", 16.sp, weight = FontWeight.SemiBold)
             
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier.fillMaxWidth().height(12.dp),
-            )
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("Video ID: ${activeVideo?.externalVideoId}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            PipelineSteps.all.forEachIndexed { index, step ->
+                val isDone = index < currentStep
+                val isRunning = index == currentStep
+                GlassCard(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        val dotColor = when {
+                            isDone -> GlassColors.Green
+                            isRunning -> GlassColors.Blue
+                            else -> GlassColors.InkFaint
+                        }
+                        StatusDot(dotColor)
+                        Spacer(Modifier.width(12.dp))
+                        GText(
+                            text = when {
+                                isDone -> step.done
+                                isRunning -> step.running
+                                else -> step.pending
+                            },
+                            size = 14.sp,
+                            color = if (isRunning) GlassColors.Blue else if (isDone) GlassColors.Ink else GlassColors.InkSoft,
+                            weight = if (isRunning) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
         }
-    }
-}
-
-// Hàm ánh xạ trạng thái sang 13 bước
-private fun getStepInfo(status: String): Pair<Int, String> {
-    return when (status) {
-        "NEW" -> 1 to "Phát hiện video mới từ kênh nguồn"
-        "FETCHING_METADATA" -> 2 to "Đang copy link video"
-        "DOWNLOADING" -> 3 to "Đang tải video không logo..."
-        "UPLOADED_TO_DRIVE" -> 4 to "Đang chuyển hướng sang TikTok"
-        "PROCESSING_VIDEO" -> 6 to "Đang ghép nhạc vào video..."
-        "TRANSLATING" -> 7 to "Đang tạo mô tả video & hashtag"
-        "READY_TO_PUBLISH" -> 8 to "Đang kiểm tra toàn bộ video..."
-        "PUBLISHING" -> 9 to "Đang đăng lên TikTok..."
-        "PUBLISHED" -> 13 to "Đã đăng thành công! Hoàn tất."
-        "FAILED" -> 0 to "Gặp lỗi (Đang chờ thử lại)"
-        else -> 1 to "Đang khởi tạo..."
     }
 }
