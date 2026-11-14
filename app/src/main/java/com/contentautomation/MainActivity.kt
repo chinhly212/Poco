@@ -9,11 +9,16 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.contentautomation.ui.AppNavHost
 import com.contentautomation.ui.MainViewModel
+import com.contentautomation.ui.auth.AuthRoot
+import io.github.jan.supabase.auth.auth
 
 class MainActivity : ComponentActivity() {
 
@@ -23,10 +28,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        // Đề nghị bỏ tối ưu pin (tuỳ chọn, giúp service chạy ổn định)
+        
         val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
         if (!pm.isIgnoringBatteryOptimizations(packageName)) {
             runCatching {
@@ -36,20 +42,23 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-    MaterialTheme {
-        Surface(Modifier.fillMaxSize()) {
-            val app = applicationContext as ContentAutomationApp
-            // Kiểm tra xem đã đăng nhập Supabase chưa
-            var isLoggedIn by remember { mutableStateOf(app.supabase.auth.currentSessionOrNull() != null) }
+            MaterialTheme {
+                Surface(Modifier.fillMaxSize()) {
+                    val app = applicationContext as ContentAutomationApp
+                    
+                    // Kiểm tra xem đã đăng nhập Supabase chưa
+                    var isLoggedIn by remember { mutableStateOf(app.supabase.auth.currentSessionOrNull() != null) }
 
-            if (!isLoggedIn) {
-                com.contentautomation.ui.auth.AuthRoot(
-                    onLoginSuccess = { isLoggedIn = true }
-                )
-            } else {
-                val vm: com.contentautomation.ui.MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-                com.contentautomation.ui.AppNavHost(vm)
+                    if (!isLoggedIn) {
+                        AuthRoot(
+                            onLoginSuccess = { isLoggedIn = true }
+                        )
+                    } else {
+                        val vm: MainViewModel = viewModel()
+                        AppNavHost(vm)
+                    }
+                }
             }
         }
     }
-        }
+}
