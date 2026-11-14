@@ -1,11 +1,11 @@
 package com.contentautomation.ui
 
-import com.contentautomation.data.prefs.AppPreferences
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.*
+import com.contentautomation.data.prefs.AppPreferences
 import com.contentautomation.work.DownloadWorker
 import com.contentautomation.work.ProcessWorker
 import com.contentautomation.work.PublishWorker
@@ -26,6 +26,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val db = application.database
     private val prefs = application.prefs
 
+    // --- CÁC BIẾN CŨ ---
     val accounts = db.sourceAccountDao().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -51,6 +52,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             readyToPublish = arr[3], published = arr[4], failed = arr[5]
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardStats())
+
+    // --- CÁC BIẾN MỚI CHO GIAO DIỆN 4 TAB ---
+    
+    // 1. Lấy danh sách video lỗi để hiển thị ở Tab Trang Chủ
+    val failedVideos = db.sourceVideoDao().observeByStatus(VideoStatus.FAILED.name)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // 2. Lấy video đang xử lý (để hiển thị thanh tiến trình ở Tab Hệ thống)
+    val currentProcessingVideo = db.sourceVideoDao().observeByStatus(VideoStatus.PROCESSING_VIDEO.name)
+        .map { list -> list.firstOrNull() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // 3. Quản lý trạng thái Bật/Tắt 24/7
+    val isSystemRunning = prefs.foregroundEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+
+    // --- CÁC HÀM XỬ LÝ ---
+    fun setSystemRunning(isRunning: Boolean) {
+        viewModelScope.launch {
+            prefs.set(AppPreferences.KEY_FOREGROUND_ENABLED, isRunning)
+        }
+    }
 
     fun addAccount(platform: String, name: String, identifier: String) {
         viewModelScope.launch {
