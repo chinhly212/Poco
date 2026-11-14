@@ -1,5 +1,5 @@
 package com.contentautomation
-import io.github.jan.supabase.postgrest.Postgrest
+
 import android.app.Application
 import androidx.work.Configuration
 import com.contentautomation.data.db.AppDatabase
@@ -9,6 +9,7 @@ import com.contentautomation.domain.translate.TranslationService
 import com.contentautomation.work.WorkScheduler
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
@@ -16,34 +17,39 @@ class ContentAutomationApp : Application(), Configuration.Provider {
     val database by lazy { AppDatabase.get(this) }
     val prefs by lazy { AppPreferences(this) }
 
-    // KẾT NỐI SUPABASE
+    // CHỈ KHAI BÁO SUPABASE 1 LẦN DUY NHẤT Ở ĐÂY
     val supabase by lazy {
         createSupabaseClient(
             supabaseUrl = "https://lkiigrddlancxisbczln.supabase.co",
             supabaseKey = "sb_publishable_tjOYRm0Jxe5QHcGFSfcXcQ_SOsg9C7M"
         ) {
             install(Auth)
+            install(Postgrest)
         }
     }
 
     val translationService by lazy {
         TranslationService { runBlocking { prefs.translationApiKey.first() } }
     }
-    val supabase by lazy {
-    createSupabaseClient(
-        supabaseUrl = "https://lkiigrddlancxisbczln.supabase.co",
-        supabaseKey = "sb_publishable_tjOYRm0Jxe5QHcGFSfcXcQ_SOsg9C7M"
-    ) {
-        install(Auth)
-        install(Postgrest) // <--- THÊM DÒNG NÀY
+    
+    val tiktokClient by lazy {
+        TikTokClient(
+            prefs,
+            clientKeyProvider = { runBlocking { prefs.tiktokClientKey.first() } },
+            clientSecretProvider = { runBlocking { prefs.tiktokClientSecret.first() } }
+        )
     }
-    }
+
     fun defaultHashtag(): String = runBlocking { prefs.defaultHashtag.first() }
     fun currentScanIntervalSeconds(): Int = runBlocking { prefs.scanIntervalSeconds.first() }
 
     override fun onCreate() {
         super.onCreate()
-        WorkScheduler.schedulePeriodicScan(this)
+        try {
+            WorkScheduler.schedulePeriodicScan(this)
+        } catch (e: Exception) {
+            android.util.Log.e("AppInit", "Lỗi WorkManager: ${e.message}")
+        }
     }
 
     override val workManagerConfiguration: Configuration
