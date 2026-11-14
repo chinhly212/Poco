@@ -1,5 +1,6 @@
 package com.contentautomation
-
+import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.auth.Auth
 import android.app.Application
 import androidx.work.Configuration
 import com.contentautomation.data.db.AppDatabase
@@ -39,4 +40,12 @@ class ContentAutomationApp : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setMinimumLoggingLevel(android.util.Log.INFO)
             .build()
+}
+val supabase by lazy {
+    createSupabaseClient(
+        supabaseUrl = "https://lkiigrddlancxisbczln.supabase.co",
+        supabaseKey = "sb_publishable_tjOYRm0Jxe5QHcGFSfcXcQ_SOsg9C7M"
+    ) {
+        install(Auth)
+    }
 }
