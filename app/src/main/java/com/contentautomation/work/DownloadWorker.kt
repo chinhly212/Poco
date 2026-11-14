@@ -1,16 +1,13 @@
 package com.contentautomation.work
 
 import android.content.Context
+import android.util.Log
 import androidx.work.*
-import com.contentautomation.data.db.entity.AudioMode
-import com.contentautomation.data.db.entity.ProcessedVideo
 import com.contentautomation.data.db.entity.VideoStatus
-import com.contentautomation.domain.source.SourceAdapterFactory
+import com.contentautomation.data.network.AutomationApi
+import com.contentautomation.data.network.ProcessVideoRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 class DownloadWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, params) {
@@ -21,6 +18,7 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, p
         fun enqueue(context: Context, videoId: String) {
             val req = OneTimeWorkRequestBuilder<DownloadWorker>()
                 .setInputData(workDataOf(KEY_VIDEO_ID to videoId))
+                // Nếu gọi server lỗi, nó sẽ tự động thử lại sau 30s, 1 phút, 2 phút...
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .setConstraints(Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -38,62 +36,40 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, p
             ?: return@withContext Result.failure()
 
         try {
+            // 1. Cập nhật trạng thái để App biết đang gửi lên Server
             db.sourceVideoDao().updateStatus(videoId, VideoStatus.DOWNLOADING.name)
 
-            val adapter = SourceAdapterFactory.create(account.platform)
-            val url = adapter.getDownloadUrl(video.externalVideoId)
-                ?: throw IllegalStateException("Không lấy được URL tải (platform có thể chặn)")
-
-            val dir = File(applicationContext.filesDir, "videos").apply { mkdirs() }
-            val outFile = File(dir, "${video.externalVideoId}.mp4")
-
-            OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(120, TimeUnit.SECONDS).build()
-                .newCall(Request.Builder().url(url).build())
-                .execute().use { resp ->
-                    if (!resp.isSuccessful) throw RuntimeException("HTTP ${resp.code}")
-                    resp.body?.byteStream()?.use { input ->
-                        outFile.outputStream().use { output -> input.copyTo(output) }
-                    } ?: throw RuntimeException("Empty body")
-                }
-
-            // Upload lên Drive (nếu được cấu hình) — nếu không, chỉ lưu local
-            var driveFileId: String? = null
-            try {
-                val folderId = app.driveFolderId()
-                if (folderId.isNotBlank()) {
-                    val folderName = "${account.platform.lowercase()}-${account.accountName}"
-                    val sub = app.driveService.ensureFolder(folderId, folderName)
-                    val orig = app.driveService.ensureFolder(sub, "original")
-                    driveFileId = app.driveService.upload(
-                        outFile.absolutePath, orig, "video/mp4",
-                        "${video.externalVideoId}.mp4"
-                    )
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("DownloadWorker", "Drive upload failed: ${e.message}")
+            // 2. Gọi API Server (Server sẽ tự tải video, cắt ghép FFmpeg, dịch và đăng)
+            val api = AutomationApi.create()
+            val request = ProcessVideoRequest(
+                videoUrl = video.sourceUrl,
+                platform = account.platform
+            )
+            
+            Log.d("DownloadWorker", "Đang gửi link lên Server: ${video.sourceUrl}")
+            val response = api.processVideo(request)
+            
+            if (response.isSuccessful && response.body()?.success == true) {
+                // 3. Server xử lý thành công, cập nhật trạng thái để thanh tiến trình nhảy sang bước tiếp theo
+                Log.d("DownloadWorker", "Server đã nhận video và đang xử lý")
+                db.sourceVideoDao().updateStatus(videoId, VideoStatus.PROCESSING_VIDEO.name)
+                Result.success()
+            } else {
+                throw Exception("Lỗi từ Server: ${response.message()}")
             }
 
-            val existing = db.processedVideoDao().findBySourceId(videoId)
-            val pv = (existing ?: ProcessedVideo(sourceVideoId = videoId)).copy(
-                driveOriginalFileId = driveFileId,
-                originalPath = outFile.absolutePath,
-                audioMode = AudioMode.ORIGINAL.name,
-                status = if (driveFileId != null) VideoStatus.UPLOADED_TO_DRIVE.name else VideoStatus.PROCESSING_VIDEO.name
-            )
-            db.processedVideoDao().insert(pv)
-            db.sourceVideoDao().updateStatus(videoId, VideoStatus.UPLOADED_TO_DRIVE.name)
-
-            ProcessWorker.enqueue(applicationContext, videoId)
-            Result.success()
         } catch (e: Exception) {
+            Log.e("DownloadWorker", "Lỗi gọi API Server: ${e.message}")
             db.sourceVideoDao().updateStatusError(videoId, VideoStatus.FAILED.name, e.message)
+            
+            // Cơ chế thử lại: Nếu chưa quá 5 lần thì báo WorkManager thử lại
             val retry = video.retryCount + 1
             if (retry < 5) {
                 db.sourceVideoDao().updateStatus(videoId, VideoStatus.RETRY_PENDING.name)
                 Result.retry()
-            } else Result.failure()
+            } else {
+                Result.failure()
+            }
         }
     }
 }
