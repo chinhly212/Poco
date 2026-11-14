@@ -1,3 +1,4 @@
+
 package com.contentautomation.domain.source
 
 /**
@@ -7,63 +8,76 @@ package com.contentautomation.domain.source
  */
 class KuaishouAdapter : WebScrapingAdapter() {
 
-    override suspend fun getLatestVideos(accountIdentifier: String): List<SourceVideoItem> {
+    override suspend fun getLatestVideos(
+        accountIdentifier: String
+    ): List<SourceVideoItem> {
         return try {
-            val url = "https://www.kuaishou.com/graphql"
-            // GraphQL công khai cần POST; minh hoạ GET fallback
-            val body = httpGet("https://www.kuaishou.com/profile/$accountIdentifier")
+            val body = httpGet(
+                "https://www.kuaishou.com/profile/$accountIdentifier"
+            )
             parseFromHtml(body)
         } catch (e: Exception) {
-            throw SourceUnavailableException("Kuaishou scan failed: ${e.message}")
+            throw SourceUnavailableException(
+                "Kuaishou scan failed: ${e.message}"
+            )
         }
     }
 
-    override suspend fun getVideoMetadata(videoId: String): SourceVideoItem? =
-        runCatching { getLatestVideos(videoId).firstOrNull() }.getOrNull()
+    override suspend fun getVideoMetadata(
+        videoId: String
+    ): SourceVideoItem? =
+        runCatching {
+            getLatestVideos(videoId).firstOrNull()
+        }.getOrNull()
 
     override suspend fun getDownloadUrl(videoId: String): String? = null
 
-    
-private fun parseFromHtml(html: String): List<SourceVideoItem> {
-    val regex = Regex(
-        "window\\.__APOLLO_STATE__\\s*=\\s*(\\{.*?\\});",
-        RegexOption.DOT_MATCHES_ALL
-    )
+    private fun parseFromHtml(
+        html: String
+    ): List<SourceVideoItem> {
 
-    val match = regex.find(html) ?: return emptyList()
+        val regex = Regex(
+            "window\\.__APOLLO_STATE__\\s*=\\s*(\\{.*?\\});",
+            RegexOption.DOT_MATCHES_ALL
+        )
 
-    return runCatching {
-        val root = org.json.JSONObject(match.groupValues[1])
-        val result = mutableListOf<SourceVideoItem>()
+        val match = regex.find(html) ?: return emptyList()
 
-        val keys = root.keys()
+        return runCatching {
+            val root = org.json.JSONObject(match.groupValues[1])
+            val result = mutableListOf<SourceVideoItem>()
 
-        while (keys.hasNext()) {
-            val key = keys.next()
+            val keys = root.keys()
 
-            if (!key.startsWith("VisionVideoDetail")) {
-                continue
-            }
+            while (keys.hasNext()) {
+                val key = keys.next()
 
-            val obj = root.optJSONObject(key) ?: continue
-            val id = obj.optString("photoId")
+                if (!key.startsWith("VisionVideoDetail")) {
+                    continue
+                }
 
-            if (id.isBlank()) {
-                continue
-            }
+                val obj = root.optJSONObject(key) ?: continue
+                val id = obj.optString("photoId")
 
-            result.add(
-                SourceVideoItem(
-                    id = id,
-                    url = "https://www.kuaishou.com/short-video/$id",
-                    title = obj.optString("caption"),
-                    description = obj.optString("caption"),
-                    publishedAt = obj.optLong("timestamp")
-                        .takeIf { it > 0 }
+                if (id.isBlank()) {
+                    continue
+                }
+
+                result.add(
+                    SourceVideoItem(
+                        id = id,
+                        url = "https://www.kuaishou.com/short-video/$id",
+                        title = obj.optString("caption"),
+                        description = obj.optString("caption"),
+                        publishedAt = obj.optLong("timestamp")
+                            .takeIf { it > 0 }
+                    )
                 )
-            )
-        }
+            }
 
-        result.distinctBy { it.id }
-    }.getOrDefault(emptyList())
-}
+            result.distinctBy { it.id }
+
+        }.getOrDefault(emptyList())
+    }
+
+} // Đóng class KuaishouAdapter
