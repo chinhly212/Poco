@@ -50,7 +50,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("androidx.navigation:navigation-compose:2.8.1")
     implementation("androidx.core:core-ktx:1.13.1")
-
+    implementation(platform("io.github.jan-tennert.supabase:bom:3.0.0"))
+implementation(platform("io.github.jan-tennert.supabase:bom:3.0.0"))
+implementation("io.github.jan-tennert.supabase:auth-kt")
+implementation("io.ktor:ktor-client-android:3.0.0")
     // Room
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
