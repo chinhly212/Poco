@@ -1,6 +1,6 @@
 
 package com.contentautomation.domain.source
-
+import com.contentautomation.domain.source.SourceUnavailableException
 /**
  * Kuaishou adapter đọc JSON từ endpoint công khai / profile.
  * Nếu endpoint không khả dụng, ném SourceUnavailableException để worker
