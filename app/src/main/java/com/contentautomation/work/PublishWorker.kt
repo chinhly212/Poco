@@ -2,6 +2,7 @@ package com.contentautomation.work
 
 import android.content.Context
 import androidx.work.*
+import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.TikTokPost
 import com.contentautomation.data.db.entity.VideoStatus
 import kotlinx.coroutines.Dispatchers
@@ -10,7 +11,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-class PublishWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, params) {
+class PublishWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
 
     companion object {
         const val KEY_PROCESSED_ID = "processedId"
@@ -35,19 +36,22 @@ class PublishWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, pa
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        val app = applicationContext as ContentAutomationApp
         val processedId = inputData.getString(KEY_PROCESSED_ID) ?: return@withContext Result.failure()
         val privacy = inputData.getString(KEY_PRIVACY) ?: "SELF_ONLY"
         val title = inputData.getString(KEY_TITLE) ?: ""
 
-        val pv = db.processedVideoDao().findById(processedId) ?: return@withContext Result.failure()
+        val pv = app.database.processedVideoDao().findById(processedId) ?: return@withContext Result.failure()
         val path = pv.processedPath ?: return@withContext Result.failure()
+        
         val file = File(path)
         if (!file.exists()) return@withContext Result.failure()
 
-        val video = db.sourceVideoDao().findById(pv.sourceVideoId) ?: return@withContext Result.failure()
+        val video = app.database.sourceVideoDao().findById(pv.sourceVideoId) ?: return@withContext Result.failure()
 
         try {
-            db.sourceVideoDao().updateStatus(video.id, VideoStatus.PUBLISHING.name)
+            app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.PUBLISHING.name)
+            
             val caption = buildString {
                 append(pv.descriptionVi?.trim().orEmpty())
                 if (pv.hashtags.isNotEmpty()) {
@@ -64,14 +68,14 @@ class PublishWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, pa
                 privacyLevel = privacy,
                 status = "PROCESSING_UPLOAD"
             )
-            db.tiktokPostDao().insert(post)
+            app.database.tiktokPostDao().insert(post)
 
             app.tiktokClient.uploadFile(init.uploadUrl, file, init.publishId)
 
-            // Polling status tối đa 30 lần × 10s
             var finalStatus = "PROCESSING_UPLOAD"
             var postId: String? = null
             var failReason: String? = null
+            
             for (i in 0 until 30) {
                 delay(10_000L)
                 val st = app.tiktokClient.fetchStatus(init.publishId)
@@ -86,17 +90,17 @@ class PublishWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, pa
                 errorMessage = failReason,
                 publishedAt = if (finalStatus == "PUBLISH_COMPLETE") System.currentTimeMillis() else null
             )
-            db.tiktokPostDao().insert(updated)
+            app.database.tiktokPostDao().insert(updated)
 
             if (finalStatus == "PUBLISH_COMPLETE") {
-                db.sourceVideoDao().updateStatus(video.id, VideoStatus.PUBLISHED.name)
+                app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.PUBLISHED.name)
                 Result.success()
             } else {
-                db.sourceVideoDao().updateStatusError(video.id, VideoStatus.FAILED.name, failReason)
+                app.database.sourceVideoDao().updateStatusError(video.id, VideoStatus.FAILED.name, failReason)
                 Result.retry()
             }
         } catch (e: Exception) {
-            db.sourceVideoDao().updateStatusError(video.id, VideoStatus.FAILED.name, e.message)
+            app.database.sourceVideoDao().updateStatusError(video.id, VideoStatus.FAILED.name, e.message)
             Result.retry()
         }
     }
