@@ -1,6 +1,6 @@
 
 package com.contentautomation.domain.source
-
+import com.contentautomation.domain.source.SourceUnavailableException
 class DouyinAdapter : WebScrapingAdapter() {
 
     override suspend fun getLatestVideos(
