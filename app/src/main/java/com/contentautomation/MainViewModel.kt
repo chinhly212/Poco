@@ -10,7 +10,6 @@ import com.contentautomation.data.db.entity.*
 import com.contentautomation.data.prefs.AppPreferences
 import com.contentautomation.ui.models.*
 import com.contentautomation.work.DownloadWorker
-import com.contentautomation.work.ProcessWorker
 import com.contentautomation.work.PublishWorker
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -47,7 +46,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- TIẾN TRÌNH 13 BƯỚC THẬT TỪ DATABASE ---
     val pipelineState: StateFlow<PipelineState> = db.sourceVideoDao().observeRecent(5).map { videos ->
-        // Tìm video đang chạy (không phải NEW, FAILED, PUBLISHED)
         val active = videos.firstOrNull { 
             it.status != VideoStatus.NEW.name && it.status != VideoStatus.FAILED.name && it.status != VideoStatus.PUBLISHED.name 
         }
@@ -82,9 +80,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StorageInfo(0f, 0f))
 
 
-    // --- CÁC HÀM XỬ LÝ CŨ (GIỮ NGUYÊN) ---
+    // --- CÁC HÀM XỬ LÝ (ĐÃ BỔ SUNG ĐẦY ĐỦ) ---
     val accounts = db.sourceAccountDao().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Bổ sung lại để sửa lỗi PendingVideosScreen
+    val readyVideos = db.processedVideoDao().observeByStatus(VideoStatus.READY_TO_PUBLISH.name)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Bổ sung lại hàm cập nhật mô tả
+    fun updateProcessedDescription(processed: ProcessedVideo, description: String, hashtags: List<String>) {
+        viewModelScope.launch {
+            db.processedVideoDao().update(processed.copy(descriptionVi = description, hashtags = hashtags))
+        }
+    }
 
     fun addAccount(platform: String, name: String, identifier: String) {
         viewModelScope.launch {
@@ -97,7 +106,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun downloadNow(video: SourceVideo) = DownloadWorker.enqueue(application, video.id)
-    fun processNow(video: SourceVideo) = ProcessWorker.enqueue(application, video.id)
+    
+    // Đã xóa hàm processNow vì đã chuyển xử lý sang Server
+
     fun publishNow(processed: ProcessedVideo, privacy: String, title: String) = PublishWorker.enqueue(application, processed.id, privacy, title)
 
     suspend fun getSourceVideo(id: String) = db.sourceVideoDao().findById(id)
