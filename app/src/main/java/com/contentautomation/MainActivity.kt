@@ -36,12 +36,20 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme {
-                Surface {
-                    val vm: MainViewModel = viewModel()
-                    AppNavHost(vm)
-                }
+    MaterialTheme {
+        Surface(Modifier.fillMaxSize()) {
+            val app = applicationContext as ContentAutomationApp
+            // Kiểm tra xem đã đăng nhập Supabase chưa
+            var isLoggedIn by remember { mutableStateOf(app.supabase.auth.currentSessionOrNull() != null) }
+
+            if (!isLoggedIn) {
+                com.contentautomation.ui.auth.AuthRoot(
+                    onLoginSuccess = { isLoggedIn = true }
+                )
+            } else {
+                val vm: com.contentautomation.ui.MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                com.contentautomation.ui.AppNavHost(vm)
             }
         }
     }
-}
+        }
