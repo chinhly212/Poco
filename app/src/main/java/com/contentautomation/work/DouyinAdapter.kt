@@ -12,7 +12,7 @@ class DouyinAdapter : WebScrapingAdapter() {
             )
             parseFromHtml(html)
         } catch (e: Exception) {
-            throw KuaishouAdapter.SourceUnavailableException(
+            throw SourceUnavailableException(
                 "Douyin scan failed: ${e.message}"
             )
         }
