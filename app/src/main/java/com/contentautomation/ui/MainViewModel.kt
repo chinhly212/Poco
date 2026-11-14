@@ -11,61 +11,140 @@ import com.contentautomation.data.prefs.AppPreferences
 import com.contentautomation.ui.models.*
 import com.contentautomation.work.DownloadWorker
 import com.contentautomation.work.PublishWorker
+import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 import java.text.SimpleDateFormat
 import java.util.*
 
+// Định nghĩa cấu trúc dữ liệu Supabase trả về
+@Serializable
+data class SystemStatus(val id: Int = 1, val is_running: Boolean = false)
+
+@Serializable
+data class VideoQueue(
+    val id: String,
+    val platform: String,
+    val video_url: String,
+    val status: String,
+    val current_step: Int,
+    val step_name: String,
+    val error_message: String? = null
+)
+
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val application = app as ContentAutomationApp
-    private val db = application.database
     private val prefs = application.prefs
+    private val supabase = application.supabase
 
-    // --- TRẠNG THÁI HỆ THỐNG ---
-    val isSystemRunning = prefs.foregroundEnabled
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    // --- TRẠNG THÁI HỆ THỐNG TỪ SUPABASE ---
+    private val _isSystemRunning = MutableStateFlow(false)
+    val isSystemRunning = _isSystemRunning.asStateFlow()
 
-    fun setSystemRunning(isRunning: Boolean) {
-        viewModelScope.launch { prefs.set(AppPreferences.KEY_FOREGROUND_ENABLED, isRunning) }
+    init {
+        // Tự động đồng bộ trạng thái nút nguồn từ Supabase mỗi 3 giây
+        viewModelScope.launch {
+            while (true) {
+                try {
+                    val status = supabase.from("system_status").select().decodeSingleOrNull<SystemStatus>()
+                    if (status != null) {
+                        _isSystemRunning.value = status.is_running
+                    }
+                } catch (e: Exception) {
+                    // Bỏ qua lỗi mạng, thử lại sau
+                }
+                delay(3000)
+            }
+        }
     }
 
-    // --- LỖI THẬT TỪ DATABASE ---
-    val uiErrors: StateFlow<List<AppError>> = db.sourceVideoDao().observeByStatus(VideoStatus.FAILED.name)
-        .map { videos ->
-            videos.map { video ->
-                AppError(
-                    id = video.id,
-                    kind = if (video.lastError?.contains("mạng", ignoreCase = true) == true) ErrorKind.NetworkLost else ErrorKind.VideoUnavailable,
-                    title = "Lỗi xử lý video",
-                    message = video.lastError ?: "Không thể lấy link video",
-                    time = SimpleDateFormat("HH:mm dd/MM", Locale.getDefault()).format(Date(video.discoveredAt)),
-                    actionLabel = "Thử lại"
-                )
+    fun setSystemRunning(isRunning: Boolean) {
+        _isSystemRunning.value = isRunning // Cập nhật UI ngay lập tức
+        viewModelScope.launch {
+            try {
+                // Ghi trạng thái lên Supabase
+                supabase.from("system_status").update({
+                    set("is_running", isRunning)
+                }) {
+                    filter { eq("id", 1) }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ViewModel", "Lỗi cập nhật trạng thái: ${e.message}")
             }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
+    }
 
-    // --- TIẾN TRÌNH 13 BƯỚC THẬT TỪ DATABASE ---
-    val pipelineState: StateFlow<PipelineState> = db.sourceVideoDao().observeRecent(5).map { videos ->
-        val active = videos.firstOrNull { 
-            it.status != VideoStatus.NEW.name && it.status != VideoStatus.FAILED.name && it.status != VideoStatus.PUBLISHED.name 
-        }
-        
-        if (active == null) {
-            PipelineState.Idle
-        } else {
-            val stepIndex = when (active.status) {
-                VideoStatus.FETCHING_METADATA.name -> 1
-                VideoStatus.DOWNLOADING.name -> 2
-                VideoStatus.UPLOADED_TO_DRIVE.name -> 3
-                VideoStatus.PROCESSING_VIDEO.name -> 5
-                VideoStatus.TRANSLATING.name -> 6
-                VideoStatus.READY_TO_PUBLISH.name -> 7
-                VideoStatus.PUBLISHING.name -> 8
-                else -> 0
+    // --- TIẾN TRÌNH 13 BƯỚC TỪ SUPABASE ---
+    private val _pipelineState = MutableStateFlow<PipelineState>(PipelineState.Idle)
+    val pipelineState = _pipelineState.asStateFlow()
+
+    init {
+        // Liên tục hỏi Supabase xem có video nào đang chạy không
+        viewModelScope.launch {
+            while (true) {
+                try {
+                    // Lấy video mới nhất đang ở trạng thái PENDING hoặc PROCESSING
+                    val list = supabase.from("video_queue")
+                        .select {
+                            filter {
+                                isIn("status", listOf("PENDING", "PROCESSING"))
+                            }
+                            order("created_at", Order.DESCENDING)
+                            limit(1)
+                        }.decodeList<VideoQueue>()
+
+                    if (list.isEmpty()) {
+                        _pipelineState.value = PipelineState.Idle
+                    } else {
+                        val video = list.first()
+                        // Map current_step (1-13) sang stepIndex (0-12) cho giao diện
+                        _pipelineState.value = PipelineState.Running(
+                            stepIndex = (video.current_step - 1).coerceIn(0, 12),
+                            retry = 0
+                        )
+                    }
+                } catch (e: Exception) {
+                     // Bỏ qua lỗi mạng
+                }
+                delay(3000) // Cập nhật mỗi 3 giây
             }
-            PipelineState.Running(stepIndex = stepIndex, retry = active.retryCount)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PipelineState.Idle)
+    }
+
+    // --- LỖI TỪ SUPABASE ---
+    private val _uiErrors = MutableStateFlow<List<AppError>>(emptyList())
+    val uiErrors = _uiErrors.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            while (true) {
+                try {
+                    val list = supabase.from("video_queue")
+                        .select {
+                            filter { eq("status", "FAILED") }
+                            order("created_at", Order.DESCENDING)
+                            limit(5)
+                        }.decodeList<VideoQueue>()
+
+                    _uiErrors.value = list.map { video ->
+                        AppError(
+                            id = video.id,
+                            kind = ErrorKind.VideoUnavailable,
+                            title = "Lỗi xử lý video",
+                            message = video.error_message ?: "Không rõ nguyên nhân",
+                            time = "Gần đây",
+                            actionLabel = "Thử lại"
+                        )
+                    }
+                } catch (e: Exception) {}
+                delay(5000)
+            }
+        }
+    }
 
     // --- DUNG LƯỢNG BỘ NHỚ THẬT ---
     val phoneStorage: StateFlow<StorageInfo> = flow {
@@ -79,49 +158,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         ))
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StorageInfo(0f, 0f))
 
-
-    // --- CÁC HÀM XỬ LÝ ---
-    val accounts = db.sourceAccountDao().observeAll()
+    // --- CÁC HÀM XỬ LÝ CŨ ---
+    val accounts = application.database.sourceAccountDao().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val readyVideos = db.processedVideoDao().observeByStatus(VideoStatus.READY_TO_PUBLISH.name)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    fun updateProcessedDescription(processed: ProcessedVideo, description: String, hashtags: List<String>) {
-        viewModelScope.launch {
-            db.processedVideoDao().update(processed.copy(descriptionVi = description, hashtags = hashtags))
-        }
-    }
 
     fun addAccount(platform: String, name: String, identifier: String) {
         viewModelScope.launch {
-            db.sourceAccountDao().insert(SourceAccount(platform = platform, accountName = name, accountIdentifier = identifier))
+            application.database.sourceAccountDao().insert(SourceAccount(platform = platform, accountName = name, accountIdentifier = identifier))
         }
-    }
-
-    fun deleteAccount(account: SourceAccount) {
-        viewModelScope.launch { db.sourceAccountDao().delete(account) }
     }
 
     fun downloadNow(video: SourceVideo) = DownloadWorker.enqueue(application, video.id)
-    
-    // Hàm này được gọi từ giao diện để đăng bài
     fun publishNow(processed: ProcessedVideo, privacy: String, title: String) = PublishWorker.enqueue(application, processed.id, privacy, title)
-
-    suspend fun getSourceVideo(id: String) = db.sourceVideoDao().findById(id)
-    suspend fun getProcessedVideo(id: String) = db.processedVideoDao().findById(id)
-
-    fun saveSetting(key: String, value: String) {
-        viewModelScope.launch {
-            when (key) {
-                "scan_interval" -> value.toIntOrNull()?.let { prefs.set(AppPreferences.KEY_SCAN_INTERVAL, it) }
-                "max_retry" -> value.toIntOrNull()?.let { prefs.set(AppPreferences.KEY_MAX_RETRY, it) }
-                "default_hashtag" -> prefs.set(AppPreferences.KEY_DEFAULT_HASHTAG, value)
-                "translation_api_key" -> prefs.set(AppPreferences.KEY_TRANSLATION_API_KEY, value)
-                "drive_folder_id" -> prefs.set(AppPreferences.KEY_DRIVE_FOLDER_ID, value)
-                "tiktok_client_key" -> prefs.set(AppPreferences.KEY_TIKTOK_CLIENT_KEY, value)
-                "tiktok_client_secret" -> prefs.set(AppPreferences.KEY_TIKTOK_CLIENT_SECRET, value)
-            }
-        }
-    }
 }
