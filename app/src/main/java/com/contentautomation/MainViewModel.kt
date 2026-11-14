@@ -1,5 +1,6 @@
 package com.contentautomation.ui
 
+import com.contentautomation.data.prefs.AppPreferences
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
