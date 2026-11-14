@@ -9,33 +9,13 @@ android {
     namespace = "com.contentautomation"
     compileSdk = 34
 
-    // CẤU HÌNH CHỮ KÝ CỐ ĐỊNH ĐỂ KHÔNG BỊ XUNG ĐỘT KHI CÀI ĐÈ
-    signingConfigs {
-        create("release") {
-            storeFile = file("keystore.jks") // File bạn đã upload lên thư mục app/
-            storePassword = "123456"
-            keyAlias = "poco-key"
-            keyPassword = "123456"
-        }
-    }
-
     defaultConfig {
         applicationId = "com.contentautomation"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3 // Đã tăng lên 3
-        versionName = "1.2.0" // Đã tăng lên 1.2.0
+        versionCode = 3
+        versionName = "1.2.0"
         multiDexEnabled = true
-    }
-
-    buildTypes {
-        getByName("debug") {
-            signingConfig = signingConfigs.getByName("release")
-        }
-        getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = false
-        }
     }
 
     buildFeatures { compose = true }
@@ -71,7 +51,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.1")
     implementation("androidx.core:core-ktx:1.13.1")
 
-    // Supabase SDK (Đã xóa dòng bị lặp)
+    // Supabase SDK
     implementation(platform("io.github.jan-tennert.supabase:bom:3.0.0"))
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.ktor:ktor-client-android:3.0.0")
@@ -94,23 +74,21 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.code.gson:gson:2.11.0")
 
-    // FFmpegKit (Bản fork cộng đồng được bảo trì, tải từ Maven Central)
+    // FFmpegKit (Bản fork cộng đồng được bảo trì)
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.7")
 
-    // Google Drive (service account + REST)
+    // Google Drive
     implementation("com.google.auth:google-auth-library-oauth2-http:1.20.0")
     implementation("com.google.apis:google-api-services-drive:v3-rev20240509-2.0.0")
     implementation("com.google.http-client:google-http-client-gson:1.43.3")
 
-    // Secure prefs
+    // Secure prefs & DataStore
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
-
-    // DataStore
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
     // Coil
     implementation("io.coil-kt:coil-compose:2.7.0")
 
-    // Thư viện tạo hiệu ứng Kính mờ (Glassmorphism) cho giao diện mới
+    // Haze (Glassmorphism)
     implementation("dev.chrisbanes.haze:haze:1.2.2")
 }
