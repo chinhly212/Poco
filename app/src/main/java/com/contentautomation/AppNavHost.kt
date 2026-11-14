@@ -1,24 +1,27 @@
 package com.contentautomation.ui
 
-import com.contentautomation.ui.screens.*
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.compose.*
 
 @Composable
 fun AppNavHost(vm: MainViewModel) {
     val nav = rememberNavController()
+    
     val tabs = listOf(
-    Triple("home", "Trang chủ", Icons.Default.Home),
-    Triple("system", "Hệ thống", Icons.Default.Settings),
-    Triple("storage", "Lưu trữ", Icons.Default.Folder),
-    Triple("settings", "Cài đặt", Icons.Default.Settings)
-)
+        Triple("home", "Trang chủ", Icons.Default.Home),
+        Triple("system", "Hệ thống", Icons.Default.Build),
+        Triple("storage", "Lưu trữ", Icons.Default.Folder),
+        Triple("settings", "Cài đặt", Icons.Default.Settings)
+    )
+    
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -27,7 +30,13 @@ fun AppNavHost(vm: MainViewModel) {
                 tabs.forEach { (r, label, icon) ->
                     NavigationBarItem(
                         selected = route == r,
-                        onClick = { nav.navigate(r) { popUpTo(nav.graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true } },
+                        onClick = { 
+                            nav.navigate(r) { 
+                                popUpTo(nav.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            } 
+                        },
                         icon = { Icon(icon, contentDescription = label) },
                         label = { Text(label) }
                     )
@@ -35,12 +44,11 @@ fun AppNavHost(vm: MainViewModel) {
             }
         }
     ) { pad ->
-        NavHost(nav, startDestination = "dashboard", modifier = Modifier.padding(pad)) {
-            composable("dashboard") { DashboardScreen(vm) }
-            composable("new") { NewVideosScreen(vm) }
-            composable("pending") { PendingVideosScreen(vm) }
-            composable("history") { HistoryScreen(vm) }
-            composable("settings") { SettingsScreen(vm) }
+        NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
+            composable("home") { com.contentautomation.ui.screens.HomeScreen(vm) }
+            composable("system") { com.contentautomation.ui.screens.SystemScreen(vm) }
+            composable("storage") { com.contentautomation.ui.screens.StorageScreen(vm) }
+            composable("settings") { com.contentautomation.ui.screens.SettingsScreen(vm) }
         }
     }
 }
