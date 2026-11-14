@@ -69,8 +69,8 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.code.gson:gson:2.11.0")
 
-    // FFmpegKit (Sử dụng bản chính thức từ Maven Central, không dùng Jitpack nữa)
-    implementation("com.arthenica:ffmpeg-kit-full:6.0-2")
+    // FFmpegKit (Bản fork cộng đồng được bảo trì, tải từ Maven Central)
+    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.7")
 
     // Google Drive (service account + REST)
     implementation("com.google.auth:google-auth-library-oauth2-http:1.20.0")
