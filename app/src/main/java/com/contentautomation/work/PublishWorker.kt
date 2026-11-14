@@ -2,7 +2,6 @@ package com.contentautomation.work
 
 import android.content.Context
 import androidx.work.*
-import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.TikTokPost
 import com.contentautomation.data.db.entity.VideoStatus
 import kotlinx.coroutines.Dispatchers
@@ -11,7 +10,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-class PublishWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+class PublishWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, params) {
 
     companion object {
         const val KEY_PROCESSED_ID = "processedId"
@@ -36,21 +35,20 @@ class PublishWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val app = applicationContext as ContentAutomationApp
         val processedId = inputData.getString(KEY_PROCESSED_ID) ?: return@withContext Result.failure()
         val privacy = inputData.getString(KEY_PRIVACY) ?: "SELF_ONLY"
         val title = inputData.getString(KEY_TITLE) ?: ""
 
-        val pv = app.database.processedVideoDao().findById(processedId) ?: return@withContext Result.failure()
+        val pv = db.processedVideoDao().findById(processedId) ?: return@withContext Result.failure()
         val path = pv.processedPath ?: return@withContext Result.failure()
         
         val file = File(path)
         if (!file.exists()) return@withContext Result.failure()
 
-        val video = app.database.sourceVideoDao().findById(pv.sourceVideoId) ?: return@withContext Result.failure()
+        val video = db.sourceVideoDao().findById(pv.sourceVideoId) ?: return@withContext Result.failure()
 
         try {
-            app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.PUBLISHING.name)
+            db.sourceVideoDao().updateStatus(video.id, VideoStatus.PUBLISHING.name)
             
             val caption = buildString {
                 append(pv.descriptionVi?.trim().orEmpty())
@@ -68,7 +66,7 @@ class PublishWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
                 privacyLevel = privacy,
                 status = "PROCESSING_UPLOAD"
             )
-            app.database.tiktokPostDao().insert(post)
+            db.tiktokPostDao().insert(post)
 
             app.tiktokClient.uploadFile(init.uploadUrl, file, init.publishId)
 
@@ -90,17 +88,17 @@ class PublishWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
                 errorMessage = failReason,
                 publishedAt = if (finalStatus == "PUBLISH_COMPLETE") System.currentTimeMillis() else null
             )
-            app.database.tiktokPostDao().insert(updated)
+            db.tiktokPostDao().insert(updated)
 
             if (finalStatus == "PUBLISH_COMPLETE") {
-                app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.PUBLISHED.name)
+                db.sourceVideoDao().updateStatus(video.id, VideoStatus.PUBLISHED.name)
                 Result.success()
             } else {
-                app.database.sourceVideoDao().updateStatusError(video.id, VideoStatus.FAILED.name, failReason)
+                db.sourceVideoDao().updateStatusError(video.id, VideoStatus.FAILED.name, failReason)
                 Result.retry()
             }
         } catch (e: Exception) {
-            app.database.sourceVideoDao().updateStatusError(video.id, VideoStatus.FAILED.name, e.message)
+            db.sourceVideoDao().updateStatusError(video.id, VideoStatus.FAILED.name, e.message)
             Result.retry()
         }
     }
