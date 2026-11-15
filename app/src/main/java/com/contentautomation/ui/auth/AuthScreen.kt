@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.contentautomation.ContentAutomationApp
 import com.contentautomation.ui.components.*
+import dev.chrisbanes.haze.HazeState
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import kotlinx.coroutines.launch
@@ -26,6 +27,9 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
     val app = context.applicationContext as ContentAutomationApp
     val scope = rememberCoroutineScope()
 
+    // FIX: Khởi tạo HazeState cho màn hình đăng nhập
+    val hazeState = remember { HazeState() }
+
     var isLoginMode by remember { mutableStateOf(true) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -33,172 +37,212 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
     var successMsg by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize()) {
-        // 1. Nền Kính mờ
-        GlassBackground(Modifier.fillMaxSize())
+    // FIX: Cung cấp LocalHazeState trước khi sử dụng GlassCard
+    CompositionLocalProvider(LocalHazeState provides hazeState) {
 
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(24.dp)
-                .systemBarsPadding()
-                .imePadding(), // Giúp bàn phím không che mất ô nhập liệu
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // 2. Thẻ kính chứa Form
-            GlassCard(Modifier.fillMaxWidth().widthIn(max = 400.dp)) {
-                Column(
-                    Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+        Box(Modifier.fillMaxSize()) {
+
+            // 1. Nền kính mờ
+            GlassBackground(Modifier.fillMaxSize())
+
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(24.dp)
+                    .systemBarsPadding()
+                    .imePadding(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+
+                // 2. Thẻ kính chứa Form
+                GlassCard(
+                    Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 400.dp)
                 ) {
-                    // Tiêu đề
-                    GText(
-                        text = if (isLoginMode) "Đăng Nhập" else "Đăng Ký",
-                        size = 28.sp,
-                        weight = FontWeight.Bold,
-                        color = GlassColors.Ink
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    GText(
-                        text = if (isLoginMode) "Chào mừng trở lại hệ thống" else "Tạo tài khoản quản trị mới",
-                        size = 13.sp,
-                        color = GlassColors.InkSoft
-                    )
-                    Spacer(Modifier.height(24.dp))
-
-                    // Ô nhập Email
-                    OutlinedTextField(
-                        value = email, 
-                        onValueChange = { email = it },
-                        label = { Text("Địa chỉ Gmail") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = GlassColors.Ink,
-                            unfocusedTextColor = GlassColors.Ink,
-                            focusedBorderColor = GlassColors.Blue,
-                            unfocusedBorderColor = GlassColors.InkSoft,
-                            focusedLabelColor = GlassColors.Blue
-                        )
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    
-                    // Ô nhập Mật khẩu
-                    OutlinedTextField(
-                        value = password, 
-                        onValueChange = { password = it },
-                        label = { Text("Mật khẩu") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = GlassColors.Ink,
-                            unfocusedTextColor = GlassColors.Ink,
-                            focusedBorderColor = GlassColors.Blue,
-                            unfocusedBorderColor = GlassColors.InkSoft,
-                            focusedLabelColor = GlassColors.Blue
-                        )
-                    )
-
-                    // Hiển thị thông báo lỗi (nếu có)
-                    AnimatedVisibility(visible = errorMsg != null) {
-                        Text(
-                            text = errorMsg ?: "",
-                            color = GlassColors.Red,
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(top = 12.dp)
-                        )
-                    }
-
-                    // Hiển thị thông báo thành công (nếu có)
-                    AnimatedVisibility(visible = successMsg != null) {
-                        Text(
-                            text = successMsg ?: "",
-                            color = GlassColors.Green,
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(top = 12.dp)
-                        )
-                    }
-
-                    Spacer(Modifier.height(24.dp))
-                    
-                    // Nút bấm Đăng nhập / Đăng ký
-                    Button(
-                        onClick = {
-                            if (email.isBlank() || password.isBlank()) {
-                                errorMsg = "Vui lòng nhập đầy đủ Email và Mật khẩu"
-                                successMsg = null
-                                return@Button
-                            }
-                            
-                            isLoading = true
-                            errorMsg = null
-                            successMsg = null
-                            
-                            scope.launch {
-                                try {
-                                    if (isLoginMode) {
-                                        // XỬ LÝ ĐĂNG NHẬP
-                                        app.supabase.auth.signInWith(Email) {
-                                            this.email = email.trim()
-                                            this.password = password
-                                        }
-                                        onLoginSuccess()
-                                    } else {
-                                        // XỬ LÝ ĐĂNG KÝ
-                                        app.supabase.auth.signUpWith(Email) {
-                                            this.email = email.trim()
-                                            this.password = password
-                                        }
-                                        
-                                        // Kiểm tra xem Supabase có trả về session ngay không
-                                        // (Nếu bật Confirm Email, session sẽ bị null)
-                                        if (app.supabase.auth.currentSessionOrNull() == null) {
-                                            successMsg = "Đăng ký thành công! Vui lòng kiểm tra Gmail để xác nhận."
-                                            isLoginMode = true // Tự động chuyển về form đăng nhập
-                                        } else {
-                                            onLoginSuccess()
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    errorMsg = e.message ?: "Đã có lỗi xảy ra, vui lòng thử lại."
-                                } finally {
-                                    isLoading = false
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        enabled = !isLoading,
-                        shape = MaterialTheme.shapes.medium,
-                        colors = ButtonDefaults.buttonColors(containerColor = GlassColors.Blue)
+                    Column(
+                        Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                        } else {
+
+                        GText(
+                            text = if (isLoginMode) "Đăng Nhập" else "Đăng Ký",
+                            size = 28.sp,
+                            weight = FontWeight.Bold,
+                            color = GlassColors.Ink
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        GText(
+                            text = if (isLoginMode)
+                                "Chào mừng trở lại hệ thống"
+                            else
+                                "Tạo tài khoản quản trị mới",
+                            size = 13.sp,
+                            color = GlassColors.InkSoft
+                        )
+
+                        Spacer(Modifier.height(24.dp))
+
+                        // Ô nhập Email
+                        OutlinedTextField(
+                            value = email,
+                            onValueChange = { email = it },
+                            label = { Text("Địa chỉ Gmail") },
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Email
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = GlassColors.Ink,
+                                unfocusedTextColor = GlassColors.Ink,
+                                focusedBorderColor = GlassColors.Blue,
+                                unfocusedBorderColor = GlassColors.InkSoft,
+                                focusedLabelColor = GlassColors.Blue
+                            )
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // Ô nhập Mật khẩu
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text("Mật khẩu") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Password
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = GlassColors.Ink,
+                                unfocusedTextColor = GlassColors.Ink,
+                                focusedBorderColor = GlassColors.Blue,
+                                unfocusedBorderColor = GlassColors.InkSoft,
+                                focusedLabelColor = GlassColors.Blue
+                            )
+                        )
+
+                        // Thông báo lỗi
+                        AnimatedVisibility(visible = errorMsg != null) {
                             Text(
-                                text = if (isLoginMode) "Đăng Nhập" else "Tạo Tài Khoản", 
-                                fontSize = 16.sp, 
-                                fontWeight = FontWeight.Bold
+                                text = errorMsg ?: "",
+                                color = GlassColors.Red,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(top = 12.dp)
                             )
                         }
-                    }
 
-                    // Nút chuyển đổi giữa Đăng nhập / Đăng ký
-                    TextButton(
-                        onClick = { 
-                            isLoginMode = !isLoginMode
-                            errorMsg = null
-                            successMsg = null
-                        },
-                        enabled = !isLoading
-                    ) {
-                        Text(
-                            text = if (isLoginMode) "Chưa có tài khoản? Đăng ký ngay" else "Đã có tài khoản? Đăng nhập",
-                            color = GlassColors.Blue,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        // Thông báo thành công
+                        AnimatedVisibility(visible = successMsg != null) {
+                            Text(
+                                text = successMsg ?: "",
+                                color = GlassColors.Green,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(top = 12.dp)
+                            )
+                        }
+
+                        Spacer(Modifier.height(24.dp))
+
+                        // Nút Đăng nhập / Đăng ký
+                        Button(
+                            onClick = {
+                                if (email.isBlank() || password.isBlank()) {
+                                    errorMsg = "Vui lòng nhập đầy đủ Email và Mật khẩu"
+                                    successMsg = null
+                                    return@Button
+                                }
+
+                                isLoading = true
+                                errorMsg = null
+                                successMsg = null
+
+                                scope.launch {
+                                    try {
+                                        if (isLoginMode) {
+                                            // ĐĂNG NHẬP
+                                            app.supabase.auth.signInWith(Email) {
+                                                this.email = email.trim()
+                                                this.password = password
+                                            }
+
+                                            onLoginSuccess()
+
+                                        } else {
+                                            // ĐĂNG KÝ
+                                            app.supabase.auth.signUpWith(Email) {
+                                                this.email = email.trim()
+                                                this.password = password
+                                            }
+
+                                            if (
+                                                app.supabase.auth.currentSessionOrNull() == null
+                                            ) {
+                                                successMsg =
+                                                    "Đăng ký thành công! Vui lòng kiểm tra Gmail để xác nhận."
+
+                                                isLoginMode = true
+                                            } else {
+                                                onLoginSuccess()
+                                            }
+                                        }
+
+                                    } catch (e: Exception) {
+                                        errorMsg = e.message
+                                            ?: "Đã có lỗi xảy ra, vui lòng thử lại."
+                                    } finally {
+                                        isLoading = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                            enabled = !isLoading,
+                            shape = MaterialTheme.shapes.medium,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = GlassColors.Blue
+                            )
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            } else {
+                                Text(
+                                    text = if (isLoginMode)
+                                        "Đăng Nhập"
+                                    else
+                                        "Tạo Tài Khoản",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        // Chuyển đổi Đăng nhập / Đăng ký
+                        TextButton(
+                            onClick = {
+                                isLoginMode = !isLoginMode
+                                errorMsg = null
+                                successMsg = null
+                            },
+                            enabled = !isLoading
+                        ) {
+                            Text(
+                                text = if (isLoginMode)
+                                    "Chưa có tài khoản? Đăng ký ngay"
+                                else
+                                    "Đã có tài khoản? Đăng nhập",
+                                color = GlassColors.Blue,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
