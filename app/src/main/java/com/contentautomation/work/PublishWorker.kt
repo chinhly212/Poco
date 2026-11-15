@@ -25,12 +25,9 @@ class PublishWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, pa
                     KEY_TITLE to title
                 ))
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 60, TimeUnit.SECONDS)
-                .setConstraints(Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
-            WorkManager.getInstance(context)
-                .beginUniqueWork("publish-$processedId", ExistingWorkPolicy.REPLACE, req)
-                .enqueue()
+            WorkManager.getInstance(context).beginUniqueWork("publish-$processedId", ExistingWorkPolicy.REPLACE, req).enqueue()
         }
     }
 
@@ -41,7 +38,6 @@ class PublishWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, pa
 
         val pv = db.processedVideoDao().findById(processedId) ?: return@withContext Result.failure()
         val path = pv.processedPath ?: return@withContext Result.failure()
-        
         val file = File(path)
         if (!file.exists()) return@withContext Result.failure()
 
@@ -67,7 +63,6 @@ class PublishWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, pa
                 status = "PROCESSING_UPLOAD"
             )
             db.tiktokPostDao().insert(post)
-
             app.tiktokClient.uploadFile(init.uploadUrl, file, init.publishId)
 
             var finalStatus = "PROCESSING_UPLOAD"
