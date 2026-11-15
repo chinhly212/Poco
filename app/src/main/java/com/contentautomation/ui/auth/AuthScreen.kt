@@ -1,3 +1,4 @@
+
 package com.contentautomation.ui.auth
 
 import androidx.compose.animation.AnimatedVisibility
@@ -16,22 +17,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.contentautomation.ContentAutomationApp
 import com.contentautomation.ui.components.*
+import com.google.firebase.auth.FirebaseAuth
 import dev.chrisbanes.haze.HazeState
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.auth.providers.builtin.Email
-import kotlinx.coroutines.launch
 
-private const val SUPABASE_ACCOUNT_DOMAIN =
-    "lkiigrddlancxisbczln.supabase.co"
+private const val ACCOUNT_DOMAIN = "poco-account.com"
 
 private fun accountIdToAuthEmail(accountId: String): String =
-    "${accountId.lowercase()}@$SUPABASE_ACCOUNT_DOMAIN"
+    "${accountId.lowercase()}@$ACCOUNT_DOMAIN"
 
 @Composable
 fun AuthRoot(onLoginSuccess: () -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext as ContentAutomationApp
-    val scope = rememberCoroutineScope()
+    val auth: FirebaseAuth = app.firebaseAuth
     val hazeState = remember { HazeState() }
 
     var isLoginMode by remember { mutableStateOf(true) }
@@ -168,15 +166,19 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
                                     return@Button
                                 }
 
-                                if (password.isBlank()) {
-                                    errorMsg = "Vui lòng nhập mật khẩu."
+                                if (password.length < 8) {
+                                    errorMsg =
+                                        "Mật khẩu phải có ít nhất 8 ký tự."
                                     successMsg = null
                                     return@Button
                                 }
 
-                                if (!isLoginMode && password.length < 8) {
+                                if (!isLoginMode &&
+                                    (!password.any { it.isLowerCase() } ||
+                                     !password.any { it.isUpperCase() })
+                                ) {
                                     errorMsg =
-                                        "Mật khẩu đăng ký phải có ít nhất 8 ký tự."
+                                        "Mật khẩu đăng ký cần có chữ thường và chữ in hoa."
                                     successMsg = null
                                     return@Button
                                 }
@@ -185,38 +187,46 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
                                 errorMsg = null
                                 successMsg = null
 
-                                scope.launch {
-                                    try {
-                                        val authEmail =
-                                            accountIdToAuthEmail(normalizedId)
+                                val authEmail =
+                                    accountIdToAuthEmail(normalizedId)
 
-                                        if (isLoginMode) {
-                                            app.supabase.auth.signInWith(Email) {
-                                                this.email = authEmail
-                                                this.password = password
-                                            }
-                                            onLoginSuccess()
-                                        } else {
-                                            app.supabase.auth.signUpWith(Email) {
-                                                this.email = authEmail
-                                                this.password = password
-                                            }
+                                val task = if (isLoginMode) {
+                                    auth.signInWithEmailAndPassword(
+                                        authEmail,
+                                        password
+                                    )
+                                } else {
+                                    auth.createUserWithEmailAndPassword(
+                                        authEmail,
+                                        password
+                                    )
+                                }
 
-                                            if (
-                                                app.supabase.auth
-                                                    .currentSessionOrNull() == null
-                                            ) {
-                                                errorMsg =
-                                                    "Supabase vẫn yêu cầu xác minh email. Hãy tắt Confirm email trong Authentication → Providers → Email rồi thử lại."
-                                            } else {
-                                                onLoginSuccess()
-                                            }
+                                task.addOnCompleteListener { result ->
+                                    isLoading = false
+
+                                    if (result.isSuccessful) {
+                                        onLoginSuccess()
+                                    } else {
+                                        errorMsg = when {
+                                            result.exception?.message
+                                                ?.contains(
+                                                    "already in use",
+                                                    ignoreCase = true
+                                                ) == true ->
+                                                "ID tài khoản này đã được sử dụng."
+
+                                            result.exception?.message
+                                                ?.contains(
+                                                    "no user record",
+                                                    ignoreCase = true
+                                                ) == true ->
+                                                "Không tìm thấy tài khoản."
+
+                                            else ->
+                                                result.exception?.localizedMessage
+                                                    ?: "Xác thực thất bại. Vui lòng thử lại."
                                         }
-                                    } catch (e: Exception) {
-                                        errorMsg = e.message
-                                            ?: "Không thể xác thực tài khoản. Vui lòng thử lại."
-                                    } finally {
-                                        isLoading = false
                                     }
                                 }
                             },
