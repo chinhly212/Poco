@@ -3,7 +3,6 @@ package com.contentautomation.work
 import android.content.Context
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.SourceVideo
 import com.contentautomation.data.db.entity.VideoStatus
 import com.contentautomation.domain.source.SourceAdapterFactory
@@ -19,7 +18,6 @@ class ScanWorker(ctx: Context, params: WorkerParameters) : BaseWorker(ctx, param
                 val adapter = SourceAdapterFactory.create(account.platform)
                 val items = adapter.getLatestVideos(account.accountIdentifier)
                 
-                // Đã sửa lỗi vòng lặp bằng forEach
                 items.forEach { item ->
                     if (db.sourceVideoDao().exists(account.id, item.id) == 0) {
                         val newVideo = SourceVideo(
