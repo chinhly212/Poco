@@ -1,9 +1,11 @@
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("org.jetbrains.kotlin.plugin.serialization") // <--- THÊM DÒNG NÀY
+    id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -14,17 +16,24 @@ android {
         applicationId = "com.contentautomation"
         minSdk = 26
         targetSdk = 34
-        versionCode = 7 // Tăng lên 4 để cài đè
+        versionCode = 7
         versionName = "1.3.0"
         multiDexEnabled = true
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
     packaging {
         resources.excludes += setOf(
             "META-INF/DEPENDENCIES",
@@ -41,30 +50,33 @@ android {
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.09.02")
     implementation(composeBom)
+
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
+
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("androidx.navigation:navigation-compose:2.8.1")
     implementation("androidx.core:core-ktx:1.13.1")
 
-    // Supabase SDK (Đã thêm Postgrest và Serialization)
-    implementation(platform("io.github.jan-tennert.supabase:bom:3.0.0"))
-    implementation("io.github.jan-tennert.supabase:auth-kt")
-    implementation("io.github.jan-tennert.supabase:postgrest-kt") // <--- Đọc ghi DB
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3") // <--- Chuyển đổi JSON
-    implementation("io.ktor:ktor-client-android:3.0.0")
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+
+    // Kotlin Serialization
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
     // Room
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // WorkManager + Foreground
+    // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // Coroutines
@@ -77,7 +89,7 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.code.gson:gson:2.11.0")
 
-    // FFmpegKit (Bản fork cộng đồng được bảo trì)
+    // FFmpegKit
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.7")
 
     // Google Drive
@@ -92,6 +104,6 @@ dependencies {
     // Coil
     implementation("io.coil-kt:coil-compose:2.7.0")
 
-    // Haze (Glassmorphism)
+    // Haze
     implementation("dev.chrisbanes.haze:haze:1.2.2")
 }
