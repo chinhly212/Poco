@@ -21,28 +21,28 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import kotlinx.coroutines.launch
 
+private const val SUPABASE_ACCOUNT_DOMAIN =
+    "lkiigrddlancxisbczln.supabase.co"
+
+private fun accountIdToAuthEmail(accountId: String): String =
+    "${accountId.lowercase()}@$SUPABASE_ACCOUNT_DOMAIN"
+
 @Composable
 fun AuthRoot(onLoginSuccess: () -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext as ContentAutomationApp
     val scope = rememberCoroutineScope()
-
-    // FIX: Khởi tạo HazeState cho màn hình đăng nhập
     val hazeState = remember { HazeState() }
 
     var isLoginMode by remember { mutableStateOf(true) }
-    var email by remember { mutableStateOf("") }
+    var accountId by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var successMsg by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
-    // FIX: Cung cấp LocalHazeState trước khi sử dụng GlassCard
     CompositionLocalProvider(LocalHazeState provides hazeState) {
-
         Box(Modifier.fillMaxSize()) {
-
-            // 1. Nền kính mờ
             GlassBackground(Modifier.fillMaxSize())
 
             Column(
@@ -54,8 +54,6 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
-                // 2. Thẻ kính chứa Form
                 GlassCard(
                     Modifier
                         .fillMaxWidth()
@@ -65,7 +63,6 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
                         Modifier.padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-
                         GText(
                             text = if (isLoginMode) "Đăng Nhập" else "Đăng Ký",
                             size = 28.sp,
@@ -79,20 +76,31 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
                             text = if (isLoginMode)
                                 "Chào mừng trở lại hệ thống"
                             else
-                                "Tạo tài khoản quản trị mới",
+                                "Tạo tài khoản Poco mới",
                             size = 13.sp,
                             color = GlassColors.InkSoft
                         )
 
                         Spacer(Modifier.height(24.dp))
 
-                        // Ô nhập Email
                         OutlinedTextField(
-                            value = email,
-                            onValueChange = { email = it },
-                            label = { Text("Địa chỉ Gmail") },
+                            value = accountId,
+                            onValueChange = { value ->
+                                accountId = value.lowercase()
+                                    .filter {
+                                        it in 'a'..'z' ||
+                                        it in '0'..'9' ||
+                                        it == '_'
+                                    }
+                                    .take(24)
+                            },
+                            label = { Text("ID tài khoản") },
+                            supportingText = {
+                                Text("3–24 ký tự: chữ thường, số hoặc dấu _")
+                            },
+                            singleLine = true,
                             keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Email
+                                keyboardType = KeyboardType.Ascii
                             ),
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -106,12 +114,13 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
 
                         Spacer(Modifier.height(16.dp))
 
-                        // Ô nhập Mật khẩu
                         OutlinedTextField(
                             value = password,
                             onValueChange = { password = it },
                             label = { Text("Mật khẩu") },
-                            visualTransformation = PasswordVisualTransformation(),
+                            visualTransformation =
+                                PasswordVisualTransformation(),
+                            singleLine = true,
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Password
                             ),
@@ -125,8 +134,7 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
                             )
                         )
 
-                        // Thông báo lỗi
-                        AnimatedVisibility(visible = errorMsg != null) {
+                        AnimatedVisibility(errorMsg != null) {
                             Text(
                                 text = errorMsg ?: "",
                                 color = GlassColors.Red,
@@ -135,8 +143,7 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
                             )
                         }
 
-                        // Thông báo thành công
-                        AnimatedVisibility(visible = successMsg != null) {
+                        AnimatedVisibility(successMsg != null) {
                             Text(
                                 text = successMsg ?: "",
                                 color = GlassColors.Green,
@@ -147,11 +154,29 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
 
                         Spacer(Modifier.height(24.dp))
 
-                        // Nút Đăng nhập / Đăng ký
                         Button(
                             onClick = {
-                                if (email.isBlank() || password.isBlank()) {
-                                    errorMsg = "Vui lòng nhập đầy đủ Email và Mật khẩu"
+                                val normalizedId =
+                                    accountId.trim().lowercase()
+
+                                if (!normalizedId.matches(
+                                    Regex("^[a-z0-9_]{3,24}$")
+                                )) {
+                                    errorMsg =
+                                        "ID phải có 3–24 ký tự, chỉ gồm chữ thường, số và dấu _."
+                                    successMsg = null
+                                    return@Button
+                                }
+
+                                if (password.isBlank()) {
+                                    errorMsg = "Vui lòng nhập mật khẩu."
+                                    successMsg = null
+                                    return@Button
+                                }
+
+                                if (!isLoginMode && password.length < 8) {
+                                    errorMsg =
+                                        "Mật khẩu đăng ký phải có ít nhất 8 ký tự."
                                     successMsg = null
                                     return@Button
                                 }
@@ -162,37 +187,34 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
 
                                 scope.launch {
                                     try {
+                                        val authEmail =
+                                            accountIdToAuthEmail(normalizedId)
+
                                         if (isLoginMode) {
-                                            // ĐĂNG NHẬP
                                             app.supabase.auth.signInWith(Email) {
-                                                this.email = email.trim()
+                                                this.email = authEmail
                                                 this.password = password
                                             }
-
                                             onLoginSuccess()
-
                                         } else {
-                                            // ĐĂNG KÝ
                                             app.supabase.auth.signUpWith(Email) {
-                                                this.email = email.trim()
+                                                this.email = authEmail
                                                 this.password = password
                                             }
 
                                             if (
-                                                app.supabase.auth.currentSessionOrNull() == null
+                                                app.supabase.auth
+                                                    .currentSessionOrNull() == null
                                             ) {
-                                                successMsg =
-                                                    "Đăng ký thành công! Vui lòng kiểm tra Gmail để xác nhận."
-
-                                                isLoginMode = true
+                                                errorMsg =
+                                                    "Supabase vẫn yêu cầu xác minh email. Hãy tắt Confirm email trong Authentication → Providers → Email rồi thử lại."
                                             } else {
                                                 onLoginSuccess()
                                             }
                                         }
-
                                     } catch (e: Exception) {
                                         errorMsg = e.message
-                                            ?: "Đã có lỗi xảy ra, vui lòng thử lại."
+                                            ?: "Không thể xác thực tài khoản. Vui lòng thử lại."
                                     } finally {
                                         isLoading = false
                                     }
@@ -224,7 +246,6 @@ fun AuthRoot(onLoginSuccess: () -> Unit) {
                             }
                         }
 
-                        // Chuyển đổi Đăng nhập / Đăng ký
                         TextButton(
                             onClick = {
                                 isLoginMode = !isLoginMode
