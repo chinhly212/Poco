@@ -1,76 +1,73 @@
-
 package com.contentautomation
 
 import android.app.Application
-import androidx.work.Configuration
-import com.contentautomation.data.db.AppDatabase
-import com.contentautomation.data.prefs.AppPreferences
-import com.contentautomation.domain.tiktok.TikTokClient
-import com.contentautomation.domain.translate.TranslationService
-import com.contentautomation.work.WorkScheduler
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import android.util.Log
+import com.yausername.ffmpeg.FFmpeg
+import com.yausername.youtubedl_android.YoutubeDL
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
-class ContentAutomationApp : Application(), Configuration.Provider {
+class ContentAutomationApp : Application() {
 
-    val database by lazy {
-        AppDatabase.get(this)
+    private val applicationScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    companion object {
+
+        @Volatile
+        var isEngineInitialized = false
+            private set
+
+        @Volatile
+        var engineInitializationError: String? = null
+            private set
     }
-
-    val prefs by lazy {
-        AppPreferences(this)
-    }
-
-    val translationService by lazy {
-        TranslationService {
-            runBlocking {
-                prefs.translationApiKey.first()
-            }
-        }
-    }
-
-    val tiktokClient by lazy {
-        TikTokClient(
-            prefs,
-            clientKeyProvider = {
-                runBlocking {
-                    prefs.tiktokClientKey.first()
-                }
-            },
-            clientSecretProvider = {
-                runBlocking {
-                    prefs.tiktokClientSecret.first()
-                }
-            }
-        )
-    }
-
-    fun defaultHashtag(): String =
-        runBlocking {
-            prefs.defaultHashtag.first()
-        }
-
-    fun currentScanIntervalSeconds(): Int =
-        runBlocking {
-            prefs.scanIntervalSeconds.first()
-        }
 
     override fun onCreate() {
         super.onCreate()
 
-        try {
-            WorkScheduler.schedulePeriodicScan(this)
-        } catch (e: Exception) {
-            android.util.Log.e(
-                "AppInit",
-                "Lỗi WorkManager: ${e.message}",
-                e
-            )
-        }
+        initMediaEngines()
     }
 
-    override val workManagerConfiguration: Configuration
-        get() = Configuration.Builder()
-            .setMinimumLoggingLevel(android.util.Log.INFO)
-            .build()
+    private fun initMediaEngines() {
+
+        applicationScope.launch(Dispatchers.IO) {
+
+            try {
+
+                Log.d("MuChiEngine", "Đang khởi tạo YoutubeDL...")
+
+                YoutubeDL.getInstance()
+                    .init(this@ContentAutomationApp)
+
+                Log.d("MuChiEngine", "YoutubeDL khởi tạo thành công")
+
+                Log.d("MuChiEngine", "Đang khởi tạo FFmpeg...")
+
+                FFmpeg.getInstance()
+                    .init(this@ContentAutomationApp)
+
+                isEngineInitialized = true
+                engineInitializationError = null
+
+                Log.d(
+                    "MuChiEngine",
+                    "Khởi tạo YoutubeDL và FFmpeg thành công"
+                )
+
+            } catch (e: Exception) {
+
+                isEngineInitialized = false
+                engineInitializationError = e.message
+
+                Log.e(
+                    "MuChiEngine",
+                    "Khởi tạo Media Engine thất bại",
+                    e
+                )
+            }
+        }
+    }
 }
