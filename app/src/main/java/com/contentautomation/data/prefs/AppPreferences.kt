@@ -2,13 +2,13 @@ package com.contentautomation.data.prefs
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.provider.Settings
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import java.security.SecureRandom
 
 private val Context.dataStore by preferencesDataStore("app_prefs")
 
@@ -28,65 +28,56 @@ class AppPreferences(private val context: Context) {
         )
     }
 
-    // ID tài khoản MuChi
-    private val identityPrefs = context.getSharedPreferences(
-        "much_identity",
-        Context.MODE_PRIVATE
-    )
-
     companion object {
-        private const val KEY_ACCOUNT_ID = "account_id"
-
-        private val random = SecureRandom()
-
-        fun generateAccountId(): String {
-            val chars = "0123456789ABCDEF"
-            return buildString {
-                repeat(7) {
-                    append(chars[random.nextInt(16)])
-                }
-            }.let { "MC-$it" }
-        }
-
         val KEY_TIKTOK_ACCESS = stringPreferencesKey("tiktok_access")
         val KEY_TIKTOK_REFRESH = stringPreferencesKey("tiktok_refresh")
         val KEY_TIKTOK_EXPIRES = longPreferencesKey("tiktok_expires")
         val KEY_TIKTOK_OPEN_ID = stringPreferencesKey("tiktok_open_id")
+
         val KEY_SCAN_INTERVAL = intPreferencesKey("scan_interval")
         val KEY_MAX_RETRY = intPreferencesKey("max_retry")
         val KEY_DEFAULT_HASHTAG = stringPreferencesKey("default_hashtag")
-        val KEY_TRANSLATION_API_KEY = stringPreferencesKey("translation_api_key")
-        val KEY_DRIVE_FOLDER_ID = stringPreferencesKey("drive_folder_id")
-        val KEY_TIKTOK_CLIENT_KEY = stringPreferencesKey("tiktok_client_key")
-        val KEY_TIKTOK_CLIENT_SECRET = stringPreferencesKey("tiktok_client_secret")
-        val KEY_FOREGROUND_ENABLED = booleanPreferencesKey("foreground_enabled")
+
+        val KEY_TRANSLATION_API_KEY =
+            stringPreferencesKey("translation_api_key")
+
+        val KEY_DRIVE_FOLDER_ID =
+            stringPreferencesKey("drive_folder_id")
+
+        val KEY_TIKTOK_CLIENT_KEY =
+            stringPreferencesKey("tiktok_client_key")
+
+        val KEY_TIKTOK_CLIENT_SECRET =
+            stringPreferencesKey("tiktok_client_secret")
+
+        val KEY_FOREGROUND_ENABLED =
+            booleanPreferencesKey("foreground_enabled")
     }
 
-    // Tự tạo ID nếu chưa có, giữ nguyên ID cũ
+    // ID nhận diện thiết bị MuChi bằng Android ID
     val accountId: String
         get() {
-            synchronized(identityPrefs) {
-                val existing = identityPrefs.getString(KEY_ACCOUNT_ID, null)
+            val androidId = Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ANDROID_ID
+            )
 
-                if (existing != null) {
-                    return existing
-                }
-
-                val newId = generateAccountId()
-
-                identityPrefs.edit()
-                    .putString(KEY_ACCOUNT_ID, newId)
-                    .apply()
-
-                return newId
+            return if (!androidId.isNullOrBlank()) {
+                "MC-${androidId.uppercase()}"
+            } else {
+                "MC-UNKNOWN"
             }
         }
 
     val scanIntervalSeconds: Flow<Int> =
-        context.dataStore.data.map { it[KEY_SCAN_INTERVAL] ?: 600 }
+        context.dataStore.data.map {
+            it[KEY_SCAN_INTERVAL] ?: 600
+        }
 
     val maxRetry: Flow<Int> =
-        context.dataStore.data.map { it[KEY_MAX_RETRY] ?: 5 }
+        context.dataStore.data.map {
+            it[KEY_MAX_RETRY] ?: 5
+        }
 
     val defaultHashtag: Flow<String> =
         context.dataStore.data.map {
@@ -124,7 +115,7 @@ class AppPreferences(private val context: Context) {
         }
     }
 
-    // Secure TikTok token access
+    // TikTok token access
     fun getAccessToken(): String? =
         prefs.getString("tiktok_access", null)
 
