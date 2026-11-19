@@ -71,7 +71,12 @@ class PipelineWorker(
 
                 // Hiện tại chỉ thực thi công đoạn DOWNLOAD
                 if (job.stage != PipelineStage.DOWNLOAD) {
-                    return@withContext Result.success()
+    android.util.Log.i(
+        "MuChiPipeline",
+        "Job ${job.id} đang chờ công đoạn ${job.stage}"
+    )
+
+    return@withContext Result.success()
                 }
 
                 dao.update(
