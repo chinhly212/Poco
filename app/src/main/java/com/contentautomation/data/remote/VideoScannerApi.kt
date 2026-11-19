@@ -1,4 +1,3 @@
-
 package com.contentautomation.data.remote
 
 import android.content.Context
@@ -30,21 +29,16 @@ class VideoScannerApi(context: Context) {
         .build()
 
     /**
-     * Đọc danh sách video từ JSON API.
+     * Đọc toàn bộ danh sách video từ JSON API (không giới hạn số lượng).
      * API phải trả về entries, videos, items hoặc data.
      */
     suspend fun fetchChannelVideos(
-        apiUrl: String,
-        limit: Int = 5
+        apiUrl: String
     ): Result<List<ScannedVideoItem>> = withContext(Dispatchers.IO) {
 
         try {
             require(apiUrl.startsWith("https://")) {
                 "API phải sử dụng HTTPS"
-            }
-
-            require(limit in 1..100) {
-                "Limit phải từ 1 đến 100"
             }
 
             val request = Request.Builder()
@@ -76,7 +70,8 @@ class VideoScannerApi(context: Context) {
 
                 val result = mutableListOf<ScannedVideoItem>()
 
-                for (i in 0 until minOf(entries.length(), limit)) {
+                // Duyệt toàn bộ entries, không giới hạn
+                for (i in 0 until entries.length()) {
 
                     val item = entries.optJSONObject(i)
                         ?: continue
