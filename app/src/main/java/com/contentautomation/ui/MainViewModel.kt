@@ -42,6 +42,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         MutableStateFlow<PipelineState>(PipelineState.Idle)
 
     val pipelineState = _pipelineState.asStateFlow()
+    // ======================================
+// PIPELINE JOBS - DATABASE THỰC
+// ======================================
+
+val pipelineJobs =
+    application.database
+        .pipelineJobDao()
+        .observeAll()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     // ======================================
     // ERROR LIST
