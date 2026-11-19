@@ -4,8 +4,11 @@ import android.content.Context
 import androidx.work.*
 import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.*
+import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.ReturnCode
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -16,9 +19,11 @@ class PipelineWorker(
 ) : CoroutineWorker(ctx, params) {
 
     companion object {
+
         const val KEY_JOB_ID = "pipeline_job_id"
 
         fun enqueue(context: Context, jobId: String) {
+
             val request =
                 OneTimeWorkRequestBuilder<PipelineWorker>()
                     .setInputData(
@@ -26,7 +31,9 @@ class PipelineWorker(
                     )
                     .setConstraints(
                         Constraints.Builder()
-                            .setRequiredNetworkType(NetworkType.CONNECTED)
+                            .setRequiredNetworkType(
+                                NetworkType.CONNECTED
+                            )
                             .build()
                     )
                     .build()
@@ -61,104 +68,231 @@ class PipelineWorker(
                 .findById(job.sourceVideoId)
                 ?: return@withContext Result.failure()
 
+            val workDir = File(
+                applicationContext.filesDir,
+                "MuChi/${video.id}"
+            )
+
+            workDir.mkdirs()
+
             try {
 
+                // Kiểm tra engine
                 if (!ContentAutomationApp.isEngineInitialized) {
                     throw IllegalStateException(
-                        "Bộ tải video chưa khởi tạo"
+                        ContentAutomationApp.engineInitializationError
+                            ?: "Media engine chưa khởi tạo"
                     )
                 }
 
-                // Hiện tại chỉ thực thi công đoạn DOWNLOAD
-                if (job.stage != PipelineStage.DOWNLOAD) {
-    android.util.Log.i(
-        "MuChiPipeline",
-        "Job ${job.id} đang chờ công đoạn ${job.stage}"
-    )
+                // Công đoạn chưa triển khai:
+                // Không giả lập thành công
+                if (job.stage == PipelineStage.SPEECH_TO_TEXT) {
 
-    return@withContext Result.success()
-                }
-
-                dao.update(
-    job.copy(
-        stage = PipelineStage.ANALYZE,
-        status = PipelineStatus.PENDING,
-        error = null,
-        updatedAt = System.currentTimeMillis()
-    )
-)
-
-db.sourceVideoDao().updateStatus(
-    video.id,
-    VideoStatus.PROCESSING_VIDEO.name
-)
-                db.sourceVideoDao().updateStatus(
-                    video.id,
-                    VideoStatus.DOWNLOADING.name
-                )
-
-                val workDir = File(
-                    applicationContext.filesDir,
-                    "MuChi/${video.id}"
-                )
-
-                if (!workDir.exists()) {
-                    workDir.mkdirs()
-                }
-
-                val outputTemplate =
-                    File(workDir, "source.%(ext)s").absolutePath
-
-                val request =
-                    YoutubeDLRequest(video.sourceUrl).apply {
-
-                        addOption("--no-playlist")
-                        addOption("-o", outputTemplate)
-                        addOption("-f", "best")
-                    }
-
-                YoutubeDL.getInstance().execute(request)
-
-                val downloaded = workDir.listFiles()
-                    ?.filter {
-                        it.isFile &&
-                        it.name.startsWith("source.")
-                    }
-                    ?.maxByOrNull { it.lastModified() }
-
-                if (downloaded == null ||
-                    downloaded.length() <= 0
-                ) {
-                    throw IllegalStateException(
-                        "Không tìm thấy video tải xuống"
+                    dao.update(
+                        job.copy(
+                            status = PipelineStatus.PAUSED,
+                            error = "Chờ kết nối API nhận diện giọng nói",
+                            updatedAt = System.currentTimeMillis()
+                        )
                     )
+
+                    return@withContext Result.success()
                 }
 
-                // Chuyển sang bước kế tiếp,
-                // chưa giả lập hoàn thành toàn Pipeline
+                // Đánh dấu đang chạy
                 dao.update(
                     job.copy(
-                        stage = PipelineStage.ANALYZE,
-                        status = PipelineStatus.PENDING,
+                        status = PipelineStatus.RUNNING,
                         error = null,
                         updatedAt = System.currentTimeMillis()
                     )
                 )
 
-                db.sourceVideoDao().updateStatus(
-                    video.id,
-                    VideoStatus.PROCESSING_VIDEO.name
-                )
+                when (job.stage) {
+
+                    // ======================
+                    // 1. TẢI VIDEO
+                    // ======================
+
+                    PipelineStage.DOWNLOAD -> {
+
+                        db.sourceVideoDao().updateStatus(
+                            video.id,
+                            VideoStatus.DOWNLOADING.name
+                        )
+
+                        val outputTemplate =
+                            File(
+                                workDir,
+                                "source.%(ext)s"
+                            ).absolutePath
+
+                        val request =
+                            YoutubeDLRequest(video.sourceUrl).apply {
+
+                                addOption("--no-playlist")
+                                addOption("-o", outputTemplate)
+                                addOption("-f", "best")
+                            }
+
+                        YoutubeDL.getInstance()
+                            .execute(request)
+
+                        val downloaded =
+                            workDir.listFiles()
+                                ?.filter {
+                                    it.isFile &&
+                                    it.name.startsWith("source.") &&
+                                    !it.name.endsWith(".part")
+                                }
+                                ?.maxByOrNull {
+                                    it.lastModified()
+                                }
+
+                        if (downloaded == null ||
+                            downloaded.length() == 0L
+                        ) {
+                            throw IllegalStateException(
+                                "Tải video thất bại: không tìm thấy file"
+                            )
+                        }
+
+                        // Lưu file video đã tải
+                        dao.update(
+                            job.copy(
+                                stage = PipelineStage.ANALYZE,
+                                status = PipelineStatus.PENDING,
+                                retries = 0,
+                                error = null,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+
+                        db.sourceVideoDao().updateStatus(
+                            video.id,
+                            VideoStatus.PROCESSING_VIDEO.name
+                        )
+
+                        // Chạy tiếp công đoạn
+                        enqueue(
+                            applicationContext,
+                            job.id
+                        )
+                    }
+
+                    // ======================
+                    // 2. TÁCH ÂM THANH
+                    // ======================
+
+                    PipelineStage.ANALYZE -> {
+
+                        val source =
+                            workDir.listFiles()
+                                ?.filter {
+                                    it.isFile &&
+                                    it.name.startsWith("source.") &&
+                                    !it.name.endsWith(".part")
+                                }
+                                ?.maxByOrNull {
+                                    it.lastModified()
+                                }
+                                ?: throw IllegalStateException(
+                                    "Không tìm thấy video nguồn"
+                                )
+
+                        val audioFile =
+                            File(workDir, "audio.wav")
+
+                        if (audioFile.exists()) {
+                            audioFile.delete()
+                        }
+
+                        val command = """
+                            -y
+                            -i "${source.absolutePath}"
+                            -vn
+                            -ac 1
+                            -ar 16000
+                            -c:a pcm_s16le
+                            "${audioFile.absolutePath}"
+                        """.trimIndent()
+
+                        val session =
+                            FFmpegKit.execute(command)
+
+                        val returnCode =
+                            session.returnCode
+
+                        if (!ReturnCode.isSuccess(returnCode)) {
+
+                            throw IllegalStateException(
+                                session.failStackTrace
+                                    ?: session.output
+                                    ?: "FFmpeg tách âm thanh thất bại"
+                            )
+                        }
+
+                        // Kiểm tra audio thật
+                        if (!audioFile.exists() ||
+                            audioFile.length() <= 0L
+                        ) {
+                            throw IllegalStateException(
+                                "Không tạo được audio.wav"
+                            )
+                        }
+
+                        // Cập nhật công đoạn
+                        dao.update(
+                            job.copy(
+                                stage = PipelineStage.SPEECH_TO_TEXT,
+                                status = PipelineStatus.PAUSED,
+                                retries = 0,
+                                error = "Đã tách âm thanh. Chờ API nhận diện giọng nói.",
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+
+                        // Không tự chạy bước STT
+                        // khi API chưa được cấu hình
+                    }
+
+                    else -> {
+
+                        dao.update(
+                            job.copy(
+                                status = PipelineStatus.PAUSED,
+                                error = "Công đoạn ${job.stage} chưa được triển khai",
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
 
                 Result.success()
 
-            } catch (e: Exception) {
-
-                val retryCount = job.retries + 1
+            } catch (e: CancellationException) {
 
                 dao.update(
                     job.copy(
-                        status = if (retryCount >= 3)
+                        status = PipelineStatus.PENDING,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+
+                throw e
+
+            } catch (e: Exception) {
+
+                val retryCount =
+                    job.retries + 1
+
+                val failedPermanently =
+                    retryCount >= 3
+
+                dao.update(
+                    job.copy(
+                        status = if (failedPermanently)
                             PipelineStatus.FAILED
                         else
                             PipelineStatus.PENDING,
@@ -173,14 +307,17 @@ db.sourceVideoDao().updateStatus(
 
                 db.sourceVideoDao().updateStatusError(
                     video.id,
-                    VideoStatus.FAILED.name,
+                    if (failedPermanently)
+                        VideoStatus.FAILED.name
+                    else
+                        VideoStatus.RETRY_PENDING.name,
                     e.message
                 )
 
-                if (retryCount < 3) {
-                    Result.retry()
-                } else {
+                if (failedPermanently) {
                     Result.failure()
+                } else {
+                    Result.retry()
                 }
             }
         }
