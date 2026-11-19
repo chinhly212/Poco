@@ -3,20 +3,29 @@ package com.contentautomation.ui
 import android.app.Application
 import android.os.Environment
 import android.os.StatFs
+import android.util.Log
+
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+
 import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.*
 import com.contentautomation.ui.models.*
 import com.contentautomation.work.DownloadWorker
 import com.contentautomation.work.PublishWorker
+
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.*
 import io.github.jan.supabase.postgrest.query.filter.*
+
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+
+// ==========================================
+// DATA MODELS
+// ==========================================
 
 @Serializable
 data class SystemStatus(
@@ -35,18 +44,25 @@ data class VideoQueue(
     val error_message: String? = null
 )
 
+// ==========================================
+// MAIN VIEW MODEL
+// ==========================================
+
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val application = app as ContentAutomationApp
     private val prefs = application.prefs
     private val supabase = application.supabase
 
-    // ==============================
+    // ======================================
     // SYSTEM STATUS
-    // ==============================
+    // ======================================
 
-    private val _isSystemRunning = MutableStateFlow(false)
-    val isSystemRunning = _isSystemRunning.asStateFlow()
+    private val _isSystemRunning =
+        MutableStateFlow(false)
+
+    val isSystemRunning =
+        _isSystemRunning.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -57,11 +73,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         .select()
                         .decodeSingleOrNull<SystemStatus>()
 
-                    if (status != null) {
-                        _isSystemRunning.value = status.is_running
-                    }
+                    _isSystemRunning.value =
+                        status?.is_running ?: false
+
                 } catch (e: Exception) {
-                    android.util.Log.e(
+                    Log.e(
                         "Supabase",
                         "Lỗi lấy trạng thái hệ thống",
                         e
@@ -74,21 +90,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setSystemRunning(isRunning: Boolean) {
+
         _isSystemRunning.value = isRunning
 
         viewModelScope.launch {
             try {
-                supabase.from("system_status").update(
-                    {
-                        set("is_running", isRunning)
+                supabase
+                    .from("system_status")
+                    .update(
+                        {
+                            set("is_running", isRunning)
+                        }
+                    ) {
+                        filter {
+                            eq("id", 1)
+                        }
                     }
-                ) {
-                    filter {
-                        eq("id", 1)
-                    }
-                }
+
             } catch (e: Exception) {
-                android.util.Log.e(
+                Log.e(
                     "ViewModel",
                     "Lỗi cập nhật trạng thái",
                     e
@@ -97,52 +117,67 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ==============================
+    // ======================================
     // VIDEO PIPELINE
-    // ==============================
+    // ======================================
 
     private val _pipelineState =
-        MutableStateFlow<PipelineState>(PipelineState.Idle)
+        MutableStateFlow<PipelineState>(
+            PipelineState.Idle
+        )
 
-    val pipelineState = _pipelineState.asStateFlow()
+    val pipelineState =
+        _pipelineState.asStateFlow()
 
     init {
         viewModelScope.launch {
             while (true) {
                 try {
-                    val videos = supabase
-                        .from("video_queue")
-                        .select {
-                            filter {
-                                isIn(
-                                    "status",
-                                    listOf("PENDING", "PROCESSING")
+                    val videos: List<VideoQueue> =
+                        supabase
+                            .from("video_queue")
+                            .select {
+                                filter {
+                                    isIn(
+                                        "status",
+                                        listOf(
+                                            "PENDING",
+                                            "PROCESSING"
+                                        )
+                                    )
+                                }
+
+                                order(
+                                    column = "created_at",
+                                    order = Order.DESCENDING
                                 )
+
+                                limit(count = 1)
                             }
-
-                            order(
-                                column = "created_at",
-                                order = Order.DESCENDING
-                            )
-
-                            limit(count = 1)
-                        }
-                        .decodeList<VideoQueue>()
+                            .decodeList<VideoQueue>()
 
                     if (videos.isEmpty()) {
-                        _pipelineState.value = PipelineState.Idle
-                    } else {
-                        val video = videos.first()
 
-                        _pipelineState.value = PipelineState.Running(
-                            stepIndex = (video.current_step - 1)
-                                .coerceIn(0, 12),
-                            retry = 0
-                        )
+                        _pipelineState.value =
+                            PipelineState.Idle
+
+                    } else {
+
+                        val video: VideoQueue =
+                            videos.first()
+
+                        _pipelineState.value =
+                            PipelineState.Running(
+                                stepIndex = (
+                                    video.current_step - 1
+                                ).coerceIn(0, 12),
+
+                                retry = 0
+                            )
                     }
 
                 } catch (e: Exception) {
-                    android.util.Log.e(
+                    Log.e(
                         "Supabase",
                         "Lỗi lấy tiến trình video",
                         e
@@ -154,44 +189,54 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ==============================
+    // ======================================
     // ERROR LIST
-    // ==============================
+    // ======================================
 
     private val _uiErrors =
-        MutableStateFlow<List<AppError>>(emptyList())
+        MutableStateFlow<List<AppError>>(
+            emptyList()
+        )
 
-    val uiErrors = _uiErrors.asStateFlow()
+    val uiErrors =
+        _uiErrors.asStateFlow()
 
     init {
         viewModelScope.launch {
             while (true) {
                 try {
-                    val failedVideos = supabase
-                        .from("video_queue")
-                        .select {
-                            filter {
-                                eq("status", "FAILED")
+                    val failedVideos: List<VideoQueue> =
+                        supabase
+                            .from("video_queue")
+                            .select {
+                                filter {
+                                    eq("status", "FAILED")
+                                }
+
+                                order(
+                                    column = "created_at",
+                                    order = Order.DESCENDING
+                                )
+
+                                limit(count = 5)
                             }
-
-                            order(
-                                column = "created_at",
-                                order = Order.DESCENDING
-                            )
-
-                            limit(count = 5)
-                        }
-                        .decodeList<VideoQueue>()
+                            .decodeList<VideoQueue>()
 
                     val errors: List<AppError> =
-                        failedVideos.map { video ->
+                        failedVideos.map { video: VideoQueue ->
+
                             AppError(
                                 id = video.id,
+
                                 kind = ErrorKind.VideoUnavailable,
+
                                 title = "Lỗi xử lý video",
+
                                 message = video.error_message
                                     ?: "Không rõ nguyên nhân",
+
                                 time = "Gần đây",
+
                                 actionLabel = "Thử lại"
                             )
                         }
@@ -199,7 +244,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _uiErrors.value = errors
 
                 } catch (e: Exception) {
-                    android.util.Log.e(
+                    Log.e(
                         "Supabase",
                         "Lỗi lấy danh sách lỗi video",
                         e
@@ -211,49 +256,65 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ==============================
+    // ======================================
     // PHONE STORAGE
-    // ==============================
+    // ======================================
 
-    val phoneStorage: StateFlow<StorageInfo> = flow {
+    val phoneStorage: StateFlow<StorageInfo> =
+        flow {
 
-        val stat = StatFs(
-            Environment.getDataDirectory().path
-        )
-
-        val total =
-            stat.blockCountLong * stat.blockSizeLong
-
-        val available =
-            stat.availableBlocksLong * stat.blockSizeLong
-
-        val used = total - available
-
-        emit(
-            StorageInfo(
-                usedGb = used / (1024f * 1024f * 1024f),
-                totalGb = total / (1024f * 1024f * 1024f)
+            val stat = StatFs(
+                Environment.getDataDirectory().path
             )
+
+            val total =
+                stat.blockCountLong *
+                    stat.blockSizeLong
+
+            val available =
+                stat.availableBlocksLong *
+                    stat.blockSizeLong
+
+            val used =
+                total - available
+
+            emit(
+                StorageInfo(
+                    usedGb = used /
+                        (1024f * 1024f * 1024f),
+
+                    totalGb = total /
+                        (1024f * 1024f * 1024f)
+                )
+            )
+
+        }.stateIn(
+            scope = viewModelScope,
+
+            started = SharingStarted.WhileSubscribed(
+                5000
+            ),
+
+            initialValue = StorageInfo(0f, 0f)
         )
 
-    }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        StorageInfo(0f, 0f)
-    )
-
-    // ==============================
+    // ======================================
     // SOURCE ACCOUNTS
-    // ==============================
+    // ======================================
 
-    val accounts = application.database
-        .sourceAccountDao()
-        .observeAll()
-        .stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5000),
-            emptyList()
-        )
+    val accounts =
+        application.database
+            .sourceAccountDao()
+            .observeAll()
+            .stateIn(
+                scope = viewModelScope,
+
+                started = SharingStarted.WhileSubscribed(
+                    5000
+                ),
+
+                initialValue = emptyList()
+            )
 
     fun addAccount(
         platform: String,
@@ -261,24 +322,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         identifier: String
     ) {
         viewModelScope.launch {
-            application.database
-                .sourceAccountDao()
-                .insert(
-                    SourceAccount(
-                        platform = platform,
-                        accountName = name,
-                        accountIdentifier = identifier
+            try {
+                application.database
+                    .sourceAccountDao()
+                    .insert(
+                        SourceAccount(
+                            platform = platform,
+                            accountName = name,
+                            accountIdentifier = identifier
+                        )
                     )
+
+            } catch (e: Exception) {
+                Log.e(
+                    "MainViewModel",
+                    "Lỗi thêm tài khoản nguồn",
+                    e
                 )
+            }
         }
     }
 
-    // ==============================
+    // ======================================
     // VIDEO ACTIONS
-    // ==============================
+    // ======================================
 
     fun downloadNow(video: SourceVideo) {
-        DownloadWorker.enqueue(application, video.id)
+        DownloadWorker.enqueue(
+            application,
+            video.id
+        )
     }
 
     fun publishNow(
