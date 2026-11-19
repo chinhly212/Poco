@@ -1,3 +1,4 @@
+
 package com.contentautomation.ui
 
 import androidx.compose.foundation.layout.Box
@@ -24,24 +25,30 @@ fun AppNavHost(vm: MainViewModel) {
     // Thu thập dữ liệu thật từ ViewModel
     val isSystemRunning by vm.isSystemRunning.collectAsStateWithLifecycle()
     val uiErrors by vm.uiErrors.collectAsStateWithLifecycle()
-    val pipelineState by vm.pipelineState.collectAsStateWithLifecycle()
+    val pipelineJobs by vm.pipelineJobs.collectAsStateWithLifecycle()
 
     CompositionLocalProvider(LocalHazeState provides hazeState) {
         Box(Modifier.fillMaxSize()) {
-            // Nền Kính mờ cho toàn bộ App
+
+            // Nền kính mờ
             GlassBackground(Modifier.fillMaxSize())
 
             Scaffold(
                 containerColor = Color.Transparent,
                 bottomBar = {
-                    // Thanh điều hướng nổi dạng kính
-                    Box(Modifier.navigationBarsPadding().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                    Box(
+                        Modifier
+                            .navigationBarsPadding()
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
+                    ) {
                         GlassBottomBar(
                             selected = currentTab,
-                            onSelect = { 
+                            onSelect = {
                                 currentTab = it
-                                nav.navigate(it.name) { 
-                                    popUpTo(nav.graph.startDestinationId) { saveState = true }
+                                nav.navigate(it.name) {
+                                    popUpTo(nav.graph.startDestinationId) {
+                                        saveState = true
+                                    }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -50,38 +57,43 @@ fun AppNavHost(vm: MainViewModel) {
                     }
                 }
             ) { padding ->
+
                 NavHost(
                     navController = nav,
                     startDestination = Tab.Home.name,
                     modifier = Modifier.padding(padding)
                 ) {
-                    // Màn hình Trang chủ
+
+                    // Trang chủ
                     composable(Tab.Home.name) {
                         HomeScreen(
                             systemOn = isSystemRunning,
                             errors = uiErrors,
-                            onToggleSystem = { vm.setSystemRunning(!isSystemRunning) },
-                            onErrorAction = { error ->
-                                // Nút "Thử lại" trên thẻ lỗi
-                                // (Có thể xử lý logic tải lại video ở đây nếu cần)
+                            onToggleSystem = {
+                                vm.setSystemRunning(!isSystemRunning)
                             },
-                            onClearErrors = { /* Xoá lỗi nếu cần */ }
+                            onErrorAction = { error ->
+                                // Xử lý thử lại sẽ được triển khai riêng
+                            },
+                            onClearErrors = {
+                                // Xử lý xóa lỗi sẽ được triển khai riêng
+                            }
                         )
                     }
-                    
-                    // Màn hình Hệ thống (Tiến trình 13 bước)
-                    composable(Tab.System.name) { 
-                        SystemScreen(vm, pipelineState) 
+
+                    // Hệ thống - danh sách Pipeline Jobs từ Room
+                    composable(Tab.System.name) {
+                        SystemScreen(vm, pipelineJobs)
                     }
-                    
-                    // Màn hình Lưu trữ
-                    composable(Tab.Storage.name) { 
-                        StorageScreen(vm) 
+
+                    // Lưu trữ
+                    composable(Tab.Storage.name) {
+                        StorageScreen(vm)
                     }
-                    
-                    // Màn hình Cài đặt
-                    composable(Tab.Settings.name) { 
-                        SettingsScreen(vm) 
+
+                    // Cài đặt
+                    composable(Tab.Settings.name) {
+                        SettingsScreen(vm)
                     }
                 }
             }
