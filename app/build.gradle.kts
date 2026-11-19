@@ -1,11 +1,9 @@
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
-    id("com.google.gms.google-services")
 }
 
 android {
@@ -48,7 +46,9 @@ android {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.09.02")
+    val composeBom =
+        platform("androidx.compose:compose-bom:2024.09.02")
+
     implementation(composeBom)
 
     implementation("androidx.compose.ui:ui")
@@ -63,15 +63,10 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.1")
     implementation("androidx.core:core-ktx:1.13.1")
 
-    // Firebase
-    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
-    implementation("com.google.firebase:firebase-auth")
-    implementation("com.google.firebase:firebase-firestore")
-
     // Kotlin Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
-    // Room
+    // Room Database
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
@@ -97,7 +92,7 @@ dependencies {
     implementation("com.google.apis:google-api-services-drive:v3-rev20240509-2.0.0")
     implementation("com.google.http-client:google-http-client-gson:1.43.3")
 
-    // Secure prefs & DataStore
+    // Secure Preferences & DataStore
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
