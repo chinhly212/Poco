@@ -80,13 +80,18 @@ class PipelineWorker(
                 }
 
                 dao.update(
-                    job.copy(
-                        status = PipelineStatus.RUNNING,
-                        error = null,
-                        updatedAt = System.currentTimeMillis()
-                    )
-                )
+    job.copy(
+        stage = PipelineStage.ANALYZE,
+        status = PipelineStatus.PENDING,
+        error = null,
+        updatedAt = System.currentTimeMillis()
+    )
+)
 
+db.sourceVideoDao().updateStatus(
+    video.id,
+    VideoStatus.PROCESSING_VIDEO.name
+)
                 db.sourceVideoDao().updateStatus(
                     video.id,
                     VideoStatus.DOWNLOADING.name
