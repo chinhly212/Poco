@@ -1,3 +1,4 @@
+
 package com.contentautomation.work
 
 import android.content.Context
@@ -27,9 +28,7 @@ class ScanWorker(
         var failed = 0
 
         for (account in accounts) {
-
             try {
-
                 val adapter =
                     SourceAdapterFactory.create(account.platform)
 
@@ -39,8 +38,6 @@ class ScanWorker(
                 scanned++
 
                 for (item in items) {
-
-                    // Chống video trùng
                     if (db.sourceVideoDao().exists(
                             account.id,
                             item.id
@@ -59,12 +56,15 @@ class ScanWorker(
                         status = VideoStatus.NEW.name
                     )
 
-                    // Lưu video nguồn
-                    db.sourceVideoDao().insert(video)
+                    // Chỉ tiếp tục nếu video thực sự được lưu.
+                    val insertedId = db.sourceVideoDao().insert(video)
+
+                    if (insertedId == -1L) {
+                        continue
+                    }
 
                     discovered++
 
-                    // Tạo công việc Pipeline
                     val pipelineJob = PipelineJob(
                         id = video.id,
                         sourceVideoId = video.id,
@@ -74,7 +74,6 @@ class ScanWorker(
 
                     db.pipelineJobDao().insert(pipelineJob)
 
-                    // Đưa vào hệ thống thực thi
                     PipelineWorker.enqueue(
                         applicationContext,
                         pipelineJob.id
@@ -83,14 +82,12 @@ class ScanWorker(
                     queued++
                 }
 
-                // Cập nhật thời gian quét
                 db.sourceAccountDao().updateLastScan(
                     account.id,
                     System.currentTimeMillis()
                 )
 
             } catch (e: Exception) {
-
                 failed++
 
                 android.util.Log.e(
