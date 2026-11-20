@@ -1,4 +1,3 @@
-
 package com.contentautomation.work
 
 import android.content.Context
@@ -11,6 +10,7 @@ import com.contentautomation.data.db.entity.PipelineStatus
 import com.contentautomation.data.db.entity.SourceVideo
 import com.contentautomation.data.db.entity.VideoStatus
 import com.contentautomation.domain.source.SourceAdapterFactory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -19,110 +19,119 @@ class ScanWorker(
     params: WorkerParameters
 ) : BaseWorker(ctx, params) {
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val accounts = db.sourceAccountDao().getEnabled()
+    override suspend fun doWork(): Result =
+        withContext(Dispatchers.IO) {
 
-        var scanned = 0
-        var discovered = 0
-        var queued = 0
-        var failed = 0
+            val accounts = db.sourceAccountDao().getEnabled()
 
-        for (account in accounts) {
-            try {
-                val adapter =
-                    SourceAdapterFactory.create(account.platform)
+            var scanned = 0
+            var discovered = 0
+            var queued = 0
+            var failed = 0
 
-                val items =
-                    adapter.getLatestVideos(account.accountIdentifier)
+            for (account in accounts) {
+                try {
+                    val adapter =
+                        SourceAdapterFactory.create(account.platform)
 
-                scanned++
-
-                for (item in items) {
-                    if (db.sourceVideoDao().exists(
-                            account.id,
-                            item.id
-                        ) != 0
-                    ) {
-                        continue
-                    }
-
-                    val video = SourceVideo(
-                        sourceAccountId = account.id,
-                        externalVideoId = item.id,
-                        sourceUrl = item.url,
-                        title = item.title,
-                        descriptionZh = item.description,
-                        publishedAt = item.publishedAt,
-                        status = VideoStatus.NEW.name
-                    )
-
-                    val insertedId =
-                        db.sourceVideoDao().insert(video)
-
-                    if (insertedId == -1L) {
-                        continue
-                    }
-
-                    discovered++
-
-                    val pipelineJob = PipelineJob(
-                        id = video.id,
-                        sourceVideoId = video.id,
-                        stage = PipelineStage.DOWNLOAD,
-                        status = PipelineStatus.PENDING
-                    )
-
-                    val jobInserted =
-                        db.pipelineJobDao().insert(pipelineJob)
-
-                    if (jobInserted == -1L) {
-                        Log.w(
-                            "MuChiScan",
-                            "Pipeline job đã tồn tại: ${video.id}"
+                    val items =
+                        adapter.getLatestVideos(
+                            account.accountIdentifier
                         )
-                        continue
+
+                    scanned++
+
+                    for (item in items) {
+                        if (db.sourceVideoDao().exists(
+                                account.id,
+                                item.id
+                            ) != 0
+                        ) {
+                            continue
+                        }
+
+                        val video = SourceVideo(
+                            sourceAccountId = account.id,
+                            externalVideoId = item.id,
+                            sourceUrl = item.url,
+                            title = item.title,
+                            descriptionZh = item.description,
+                            publishedAt = item.publishedAt,
+                            status = VideoStatus.NEW.name
+                        )
+
+                        val insertedId =
+                            db.sourceVideoDao().insert(video)
+
+                        if (insertedId == -1L) {
+                            continue
+                        }
+
+                        discovered++
+
+                        val pipelineJob = PipelineJob(
+                            id = video.id,
+                            sourceVideoId = video.id,
+                            stage = PipelineStage.DOWNLOAD,
+                            status = PipelineStatus.PENDING
+                        )
+
+                        val jobInserted =
+                            db.pipelineJobDao().insert(pipelineJob)
+
+                        if (jobInserted == -1L) {
+                            Log.w(
+                                "MuChiScan",
+                                "Pipeline job đã tồn tại: ${video.id}"
+                            )
+                            continue
+                        }
+
+                        PipelineWorker.enqueue(
+                            applicationContext,
+                            pipelineJob.id
+                        )
+
+                        queued++
                     }
 
-                    PipelineWorker.enqueue(
-                        applicationContext,
-                        pipelineJob.id
+                    db.sourceAccountDao().updateLastScan(
+                        account.id,
+                        System.currentTimeMillis()
                     )
 
-                    queued++
-                }
+                } catch (e: CancellationException) {
+                    throw e
 
-                db.sourceAccountDao().updateLastScan(
-                    account.id,
-                    System.currentTimeMillis()
+                } catch (e: Exception) {
+                    failed++
+
+                    Log.e(
+                        "MuChiScan",
+                        "Lỗi quét tài khoản ${account.accountName}",
+                        e
+                    )
+                }
+            }
+
+            if (failed > 0) {
+                Log.w(
+                    "MuChiScan",
+                    "Có $failed tài khoản quét thất bại. " +
+                        "Yêu cầu WorkManager thử lại."
                 )
 
-            } catch (e: Exception) {
-                failed++
+                Result.retry()
 
-                Log.e(
-                    "MuChiScan",
-                    "Lỗi quét tài khoản ${account.accountName}",
-                    e
+            } else {
+                Result.success(
+                    workDataOf(
+                        "scanned_accounts" to scanned,
+                        "discovered_videos" to discovered,
+                        "queued_jobs" to queued,
+                        "failed_accounts" to failed
+                    )
                 )
             }
         }
-
-        if (failed > 0) {
-            Log.w(
-                "MuChiScan",
-                "Có $failed tài khoản quét thất bại. Yêu cầu WorkManager thử lại."
-            )
-
-            Result.retry()
-        } else {
-            Result.success(
-                workDataOf(
-                    "scanned_accounts" to scanned,
-                    "discovered_videos" to discovered,
-                    "queued_jobs" to queued,
-                    "failed_accounts" to failed
-                )
-            )
-        }
-    }
 }
