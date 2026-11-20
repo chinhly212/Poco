@@ -1,4 +1,3 @@
-
 package com.contentautomation.ui
 
 import android.app.Application
@@ -25,11 +24,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val application = app as ContentAutomationApp
 
+    // SYSTEM STATUS
+
     private val _isSystemRunning = MutableStateFlow(false)
     val isSystemRunning = _isSystemRunning.asStateFlow()
 
+    // PIPELINE STATE
+
     private val _pipelineState =
         MutableStateFlow<PipelineState>(PipelineState.Idle)
+
     val pipelineState = _pipelineState.asStateFlow()
 
     val pipelineJobs =
@@ -41,7 +45,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 emptyList()
             )
 
-    private val _uiErrors = MutableStateFlow<List<AppError>>(emptyList())
+    // ERROR MANAGEMENT
+
+    private val _uiErrors =
+        MutableStateFlow<List<AppError>>(emptyList())
+
     val uiErrors = _uiErrors.asStateFlow()
 
     private fun recordError(
@@ -71,6 +79,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _uiErrors.value = emptyList()
     }
 
+    // INITIALIZATION
+
     init {
         viewModelScope.launch {
             try {
@@ -82,6 +92,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 _isSystemRunning.value = savedState
+
             } catch (e: Exception) {
                 Log.e(
                     "MainViewModel",
@@ -107,6 +118,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // SYSTEM CONTROL
+
     fun setSystemRunning(isRunning: Boolean) {
         viewModelScope.launch {
             val previousState = _isSystemRunning.value
@@ -117,9 +130,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         AppPreferences.KEY_FOREGROUND_ENABLED,
                         true
                     )
+
                     AutomationForegroundService.start(application)
+
                 } else {
                     AutomationForegroundService.stop(application)
+
                     application.prefs.set(
                         AppPreferences.KEY_FOREGROUND_ENABLED,
                         false
@@ -127,6 +143,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 _isSystemRunning.value = isRunning
+
             } catch (e: Exception) {
                 Log.e(
                     "MainViewModel",
@@ -159,23 +176,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // PHONE STORAGE
+
     val phoneStorage: StateFlow<StorageInfo> =
         flow {
             try {
-                val stat = StatFs(Environment.getDataDirectory().path)
-                val total = stat.blockCountLong * stat.blockSizeLong
+                val stat = StatFs(
+                    Environment.getDataDirectory().path
+                )
+
+                val total =
+                    stat.blockCountLong * stat.blockSizeLong
+
                 val available =
                     stat.availableBlocksLong * stat.blockSizeLong
+
                 val used = total - available
 
                 emit(
                     StorageInfo(
-                        usedGb = used / (1024f * 1024f * 1024f),
-                        totalGb = total / (1024f * 1024f * 1024f)
+                        usedGb = used /
+                            (1024f * 1024f * 1024f),
+                        totalGb = total /
+                            (1024f * 1024f * 1024f)
                     )
                 )
+
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Lỗi đọc bộ nhớ điện thoại", e)
+                Log.e(
+                    "MainViewModel",
+                    "Lỗi đọc bộ nhớ điện thoại",
+                    e
+                )
+
                 emit(StorageInfo(0f, 0f))
             }
         }.stateIn(
@@ -183,6 +216,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             SharingStarted.WhileSubscribed(5000),
             StorageInfo(0f, 0f)
         )
+
+    // SOURCE ACCOUNTS
 
     val accounts =
         application.database.sourceAccountDao()
@@ -207,8 +242,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         accountIdentifier = identifier.trim()
                     )
                 )
+
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Lỗi thêm tài khoản nguồn", e)
+                Log.e(
+                    "MainViewModel",
+                    "Lỗi thêm tài khoản nguồn",
+                    e
+                )
+
                 recordError(
                     ErrorKind.VideoUnavailable,
                     "Không thể thêm tài khoản",
@@ -219,11 +260,60 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // RETRY FAILED DOWNLOADS
+
+    fun retryFailedDownloads() {
+        viewModelScope.launch {
+            try {
+                val dao = application.database.sourceVideoDao()
+
+                val failedVideos = dao.findByStatuses(
+                    listOf(
+                        VideoStatus.FAILED.name,
+                        VideoStatus.RETRY_PENDING.name
+                    )
+                )
+
+                failedVideos.forEach { video ->
+                    DownloadWorker.enqueue(
+                        application,
+                        video.id
+                    )
+                }
+
+            } catch (e: Exception) {
+                Log.e(
+                    "MainViewModel",
+                    "Không thể thử lại video thất bại",
+                    e
+                )
+
+                recordError(
+                    ErrorKind.VideoUnavailable,
+                    "Thử tải lại thất bại",
+                    e.message ?: "Không thể đưa video vào hàng đợi.",
+                    "Thử lại"
+                )
+            }
+        }
+    }
+
+    // VIDEO DOWNLOAD
+
     fun downloadNow(video: SourceVideo) {
         try {
-            DownloadWorker.enqueue(application, video.id)
+            DownloadWorker.enqueue(
+                application,
+                video.id
+            )
+
         } catch (e: Exception) {
-            Log.e("MainViewModel", "Lỗi khởi chạy tải video", e)
+            Log.e(
+                "MainViewModel",
+                "Lỗi khởi chạy tải video",
+                e
+            )
+
             recordError(
                 ErrorKind.VideoUnavailable,
                 "Không thể tải video",
@@ -232,6 +322,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
     }
+
+    // TIKTOK PUBLISH
 
     fun publishNow(
         processed: ProcessedVideo,
@@ -245,8 +337,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 privacy,
                 title
             )
+
         } catch (e: Exception) {
-            Log.e("MainViewModel", "Lỗi khởi chạy đăng video", e)
+            Log.e(
+                "MainViewModel",
+                "Lỗi khởi chạy đăng video",
+                e
+            )
+
             recordError(
                 ErrorKind.NetworkLost,
                 "Không thể đăng video",
