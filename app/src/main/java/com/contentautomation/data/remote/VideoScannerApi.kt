@@ -1,7 +1,7 @@
-
 package com.contentautomation.data.remote
 
 import android.content.Context
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -29,15 +29,10 @@ class VideoScannerApi(context: Context) {
         .followRedirects(true)
         .build()
 
-    /**
-     * Đọc danh sách video từ JSON API.
-     * API phải trả về entries, videos, items hoặc data.
-     */
     suspend fun fetchChannelVideos(
         apiUrl: String,
         limit: Int = 5
     ): Result<List<ScannedVideoItem>> = withContext(Dispatchers.IO) {
-
         try {
             require(apiUrl.startsWith("https://")) {
                 "API phải sử dụng HTTPS"
@@ -53,7 +48,6 @@ class VideoScannerApi(context: Context) {
                 .build()
 
             client.newCall(request).execute().use { response ->
-
                 if (!response.isSuccessful) {
                     throw IOException(
                         "HTTP ${response.code}: Không thể lấy danh sách video"
@@ -68,41 +62,26 @@ class VideoScannerApi(context: Context) {
                 val entries = json.optJSONArray("entries")
                     ?: json.optJSONArray("videos")
                     ?: json.optJSONArray("items")
-                    ?: json.optJSONObject("data")
-                        ?.optJSONArray("videos")
-                    ?: json.optJSONObject("data")
-                        ?.optJSONArray("items")
+                    ?: json.optJSONObject("data")?.optJSONArray("videos")
+                    ?: json.optJSONObject("data")?.optJSONArray("items")
                     ?: JSONArray()
 
                 val result = mutableListOf<ScannedVideoItem>()
 
                 for (i in 0 until minOf(entries.length(), limit)) {
-
-                    val item = entries.optJSONObject(i)
-                        ?: continue
+                    val item = entries.optJSONObject(i) ?: continue
 
                     val id = item.optString("id")
-                        .ifBlank {
-                            item.optString("video_id")
-                        }
+                        .ifBlank { item.optString("video_id") }
 
                     val url = item.optString("webpage_url")
-                        .ifBlank {
-                            item.optString("url")
-                        }
-                        .ifBlank {
-                            item.optString("link")
-                        }
+                        .ifBlank { item.optString("url") }
+                        .ifBlank { item.optString("link") }
 
                     val title = item.optString("title")
-                        .ifBlank {
-                            "Video_$id"
-                        }
+                        .ifBlank { "Video_$id" }
 
-                    if (
-                        id.isNotBlank() &&
-                        url.startsWith("https://")
-                    ) {
+                    if (id.isNotBlank() && url.startsWith("https://")) {
                         result.add(
                             ScannedVideoItem(
                                 videoId = id,
@@ -115,16 +94,13 @@ class VideoScannerApi(context: Context) {
 
                 Result.success(result)
             }
-
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    /**
-     * Tải video từ URL tải trực tiếp hợp lệ.
-     * Chỉ sử dụng nguồn video được cấp quyền.
-     */
     suspend fun downloadVideo(
         videoId: String,
         videoUrl: String
@@ -133,7 +109,6 @@ class VideoScannerApi(context: Context) {
         var temporaryFile: File? = null
 
         try {
-
             require(videoId.isNotBlank()) {
                 "Video ID không hợp lệ"
             }
@@ -169,18 +144,19 @@ class VideoScannerApi(context: Context) {
                 .build()
 
             client.newCall(request).execute().use { response ->
-
                 if (!response.isSuccessful) {
                     throw IOException(
                         "HTTP ${response.code}: Tải video thất bại"
                     )
                 }
 
-                val contentType = response.header("Content-Type")
-                    .orEmpty()
+                val contentType = response.header("Content-Type").orEmpty()
 
-                if (contentType.contains("text/html", ignoreCase = true)) {
-                    throw IOException("URL trả về trang HTML, không phải video")
+                if (
+                    contentType.contains("text/html", ignoreCase = true) ||
+                    contentType.contains("application/json", ignoreCase = true)
+                ) {
+                    throw IOException("URL không trả về dữ liệu video")
                 }
 
                 val body = response.body
@@ -200,23 +176,28 @@ class VideoScannerApi(context: Context) {
                 throw IOException("File video rỗng hoặc không hợp lệ")
             }
 
-            if (targetFile.exists()) {
-                targetFile.delete()
+            if (targetFile.exists() && !targetFile.delete()) {
+                throw IOException("Không thể thay thế file video cũ")
             }
 
             if (!temporaryFile.renameTo(targetFile)) {
                 temporaryFile.copyTo(targetFile, overwrite = true)
-                temporaryFile.delete()
+                if (!temporaryFile.delete()) {
+                    temporaryFile.deleteOnExit()
+                }
             }
 
             Result.success(targetFile)
 
-        } catch (e: Exception) {
-
+        } catch (e: CancellationException) {
             temporaryFile?.let {
                 if (it.exists()) it.delete()
             }
-
+            throw e
+        } catch (e: Exception) {
+            temporaryFile?.let {
+                if (it.exists()) it.delete()
+            }
             Result.failure(e)
         }
     }
