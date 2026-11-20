@@ -1,4 +1,3 @@
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -173,4 +172,13 @@ dependencies {
     // ==============================
 
     implementation("dev.chrisbanes.haze:haze:1.2.2")
+
+    // ==============================
+    // Media3 Transformer (Video Compression)
+    // ==============================
+
+    val media3Version = "1.4.1"
+    implementation("androidx.media3:media3-transformer:$media3Version")
+    implementation("androidx.media3:media3-effect:$media3Version")
+    implementation("androidx.media3:media3-common:$media3Version")
 }
