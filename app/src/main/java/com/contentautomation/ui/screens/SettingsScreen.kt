@@ -1,3 +1,4 @@
+
 package com.contentautomation.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -16,40 +17,103 @@ fun SettingsScreen(vm: MainViewModel) {
     var name by remember { mutableStateOf("") }
     var identifier by remember { mutableStateOf("") }
 
-    ScreenColumn(title = "Cài đặt", subtitle = "Quản lý tài khoản nguồn") {
-        
+    val accounts by vm.accounts.collectAsState()
+
+    val normalizedName = name.trim()
+    val normalizedIdentifier = identifier.trim()
+
+    val isDuplicate = accounts.any {
+        it.platform.equals(platform, ignoreCase = true) &&
+            it.accountIdentifier.trim().equals(
+                normalizedIdentifier,
+                ignoreCase = true
+            )
+    }
+
+    val isValid = normalizedName.isNotEmpty() &&
+        normalizedIdentifier.isNotEmpty() &&
+        !isDuplicate
+
+    ScreenColumn(
+        title = "Cài đặt",
+        subtitle = "Quản lý tài khoản nguồn"
+    ) {
         GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                GText("Thêm kênh nguồn mới", 16.sp, weight = FontWeight.SemiBold)
-                
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = platform == "KUAISHOU", onClick = { platform = "KUAISHOU" }, label = { Text("Kuaishou") })
-                    FilterChip(selected = platform == "DOUYIN", onClick = { platform = "DOUYIN" }, label = { Text("Douyin") })
+            Column(
+                Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                GText(
+                    "Thêm kênh nguồn mới",
+                    16.sp,
+                    weight = FontWeight.SemiBold
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = platform == "KUAISHOU",
+                        onClick = { platform = "KUAISHOU" },
+                        label = { Text("Kuaishou") }
+                    )
+
+                    FilterChip(
+                        selected = platform == "DOUYIN",
+                        onClick = { platform = "DOUYIN" },
+                        label = { Text("Douyin") }
+                    )
                 }
 
                 OutlinedTextField(
-                    value = name, onValueChange = { name = it },
+                    value = name,
+                    onValueChange = { name = it },
                     label = { Text("Tên hiển thị") },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = GlassColors.Ink, unfocusedTextColor = GlassColors.Ink)
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = GlassColors.Ink,
+                        unfocusedTextColor = GlassColors.Ink
+                    )
                 )
+
                 OutlinedTextField(
-                    value = identifier, onValueChange = { identifier = it },
+                    value = identifier,
+                    onValueChange = { identifier = it },
                     label = { Text("ID tài khoản (VD: 3xabc...)") },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = GlassColors.Ink, unfocusedTextColor = GlassColors.Ink)
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = GlassColors.Ink,
+                        unfocusedTextColor = GlassColors.Ink
+                    )
                 )
-                
+
+                if (isDuplicate) {
+                    Text(
+                        text = "Tài khoản này đã được thêm trước đó.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                }
+
                 Button(
                     onClick = {
-                        if (name.isNotBlank() && identifier.isNotBlank()) {
-                            vm.addAccount(platform, name, identifier)
+                        if (isValid) {
+                            vm.addAccount(
+                                platform,
+                                normalizedName,
+                                normalizedIdentifier
+                            )
                             name = ""
                             identifier = ""
                         }
                     },
+                    enabled = isValid,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = GlassColors.Blue)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = GlassColors.Blue
+                    )
                 ) {
                     Text("Thêm tài khoản")
                 }
