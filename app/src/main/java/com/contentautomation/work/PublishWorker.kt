@@ -21,38 +21,40 @@ class PublishWorker(
         const val KEY_PRIVACY = "privacy"
         const val KEY_TITLE = "title"
 
+        private const val STATUS_COMPLETE = "PUBLISH_COMPLETE"
+        private const val STATUS_FAILED = "FAILED"
+
         fun enqueue(
             context: Context,
             processedId: String,
             privacy: String,
             title: String
         ) {
-            val req =
-                OneTimeWorkRequestBuilder<PublishWorker>()
-                    .setInputData(
-                        workDataOf(
-                            KEY_PROCESSED_ID to processedId,
-                            KEY_PRIVACY to privacy,
-                            KEY_TITLE to title
-                        )
+            val request = OneTimeWorkRequestBuilder<PublishWorker>()
+                .setInputData(
+                    workDataOf(
+                        KEY_PROCESSED_ID to processedId,
+                        KEY_PRIVACY to privacy,
+                        KEY_TITLE to title
                     )
-                    .setBackoffCriteria(
-                        BackoffPolicy.EXPONENTIAL,
-                        60,
-                        TimeUnit.SECONDS
-                    )
-                    .setConstraints(
-                        Constraints.Builder()
-                            .setRequiredNetworkType(NetworkType.CONNECTED)
-                            .build()
-                    )
-                    .build()
+                )
+                .setBackoffCriteria(
+                    BackoffPolicy.EXPONENTIAL,
+                    60,
+                    TimeUnit.SECONDS
+                )
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
+                )
+                .build()
 
             WorkManager.getInstance(context)
                 .beginUniqueWork(
                     "publish-$processedId",
                     ExistingWorkPolicy.KEEP,
-                    req
+                    request
                 )
                 .enqueue()
         }
@@ -75,10 +77,10 @@ class PublishWorker(
                 .findById(processedId)
                 ?: return@withContext Result.failure()
 
-            val path = pv.processedPath
-                ?: return@withContext Result.failure()
-
-            val file = File(path)
+            val file = File(
+                pv.processedPath
+                    ?: return@withContext Result.failure()
+            )
 
             if (!file.exists() || file.length() <= 0L) {
                 return@withContext Result.failure()
@@ -88,93 +90,156 @@ class PublishWorker(
                 .findById(pv.sourceVideoId)
                 ?: return@withContext Result.failure()
 
+            val postDao = db.tiktokPostDao()
+
             try {
                 db.sourceVideoDao().updateStatus(
                     video.id,
                     VideoStatus.PUBLISHING.name
                 )
 
-                val caption = buildString {
-                    append(pv.descriptionVi?.trim().orEmpty())
+                var post = postDao.findLatestByProcessedVideoId(
+                    processedId
+                )
 
-                    if (pv.hashtags.isNotEmpty()) {
-                        append("\n\n")
-                        append(pv.hashtags.joinToString(" "))
+                // Nếu đã có publish_id thì tuyệt đối không tạo bài mới.
+                if (post != null) {
+                    val existingPublishId = post.publishId
+                        ?: throw IllegalStateException(
+                            "Bài đăng cũ không có publish_id. Dừng để tránh đăng trùng."
+                        )
+
+                    if (post.status == STATUS_COMPLETE) {
+                        db.sourceVideoDao().updateStatus(
+                            video.id,
+                            VideoStatus.PUBLISHED.name
+                        )
+                        return@withContext Result.success()
                     }
-                }.ifBlank {
-                    title
-                }.take(2200)
 
-                val init = app.tiktokClient.initializePost(
-                    caption,
-                    privacy,
-                    file.length()
-                )
+                    if (post.status == STATUS_FAILED) {
+                        db.sourceVideoDao().updateStatusError(
+                            video.id,
+                            VideoStatus.FAILED.name,
+                            post.errorMessage
+                        )
+                        return@withContext Result.failure()
+                    }
 
-                val post = TikTokPost(
-                    processedVideoId = processedId,
-                    tiktokAccountId =
-                        app.prefs.getOpenId() ?: "default",
-                    publishId = init.publishId,
-                    privacyLevel = privacy,
-                    status = "PROCESSING_UPLOAD"
-                )
+                    // Tiếp tục kiểm tra bài đăng cũ trên TikTok.
+                    val remoteStatus =
+                        app.tiktokClient.fetchStatus(existingPublishId)
 
-                db.tiktokPostDao().insert(post)
+                    post = post.copy(
+                        status = remoteStatus.status,
+                        errorMessage = remoteStatus.failReason,
+                        publishedAt =
+                            if (remoteStatus.status == STATUS_COMPLETE) {
+                                System.currentTimeMillis()
+                            } else {
+                                post.publishedAt
+                            }
+                    )
 
-                app.tiktokClient.uploadFile(
-                    init.uploadUrl,
-                    file,
-                    init.publishId
-                )
+                    postDao.update(post)
 
-                var finalStatus = "PROCESSING_UPLOAD"
-                var postId: String? = null
-                var failReason: String? = null
+                } else {
+                    val caption = buildString {
+                        append(pv.descriptionVi?.trim().orEmpty())
 
+                        if (pv.hashtags.isNotEmpty()) {
+                            append("\n\n")
+                            append(pv.hashtags.joinToString(" "))
+                        }
+                    }.ifBlank {
+                        title
+                    }.take(2200)
+
+                    val init = app.tiktokClient.initializePost(
+                        caption,
+                        privacy,
+                        file.length()
+                    )
+
+                    post = TikTokPost(
+                        processedVideoId = processedId,
+                        tiktokAccountId =
+                            app.prefs.getOpenId() ?: "default",
+                        publishId = init.publishId,
+                        privacyLevel = privacy,
+                        status = "PROCESSING_UPLOAD"
+                    )
+
+                    // Lưu publish_id trước khi tải video lên.
+                    postDao.insert(post)
+
+                    app.tiktokClient.uploadFile(
+                        init.uploadUrl,
+                        file,
+                        init.publishId
+                    )
+                }
+
+                var finalStatus = post.status
+                var failReason = post.errorMessage
+
+                // Theo dõi đúng publish_id đã lưu.
                 for (i in 0 until 30) {
-                    delay(10_000L)
-
-                    val status =
-                        app.tiktokClient.fetchStatus(init.publishId)
-
-                    finalStatus = status.status
-                    postId = status.postId
-                    failReason = status.failReason
-
                     if (
-                        finalStatus == "PUBLISH_COMPLETE" ||
-                        finalStatus == "FAILED"
+                        finalStatus == STATUS_COMPLETE ||
+                        finalStatus == STATUS_FAILED
                     ) {
                         break
                     }
-                }
 
-                db.tiktokPostDao().insert(
-                    post.copy(
+                    delay(10_000L)
+
+                    val status = app.tiktokClient.fetchStatus(
+                        post.publishId
+                            ?: throw IllegalStateException(
+                                "Thiếu publish_id"
+                            )
+                    )
+
+                    finalStatus = status.status
+                    failReason = status.failReason
+
+                    post = post.copy(
                         status = finalStatus,
                         errorMessage = failReason,
                         publishedAt =
-                            if (finalStatus == "PUBLISH_COMPLETE") {
+                            if (finalStatus == STATUS_COMPLETE) {
                                 System.currentTimeMillis()
                             } else {
                                 null
                             }
                     )
-                )
 
-                if (finalStatus == "PUBLISH_COMPLETE") {
+                    postDao.update(post)
+                }
+
+                if (finalStatus == STATUS_COMPLETE) {
                     db.sourceVideoDao().updateStatus(
                         video.id,
                         VideoStatus.PUBLISHED.name
                     )
 
                     Result.success()
+
+                } else if (finalStatus == STATUS_FAILED) {
+                    db.sourceVideoDao().updateStatusError(
+                        video.id,
+                        VideoStatus.FAILED.name,
+                        failReason
+                    )
+
+                    Result.failure()
+
                 } else {
                     db.sourceVideoDao().updateStatusError(
                         video.id,
                         VideoStatus.RETRY_PENDING.name,
-                        failReason
+                        "TikTok vẫn đang xử lý bài đăng"
                     )
 
                     Result.retry()
