@@ -17,7 +17,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,12 +34,10 @@ import com.contentautomation.data.prefs.UserIdentity
 import com.contentautomation.ui.components.BottomItem
 import com.contentautomation.ui.components.GlassBackground
 import com.contentautomation.ui.components.GlassBottomBar
-import com.contentautomation.ui.components.LocalHazeState
 import com.contentautomation.ui.models.ErrorKind
 import com.contentautomation.ui.screens.HomeScreen
 import com.contentautomation.ui.screens.SettingsScreen
 import com.contentautomation.ui.screens.SystemScreen
-import dev.chrisbanes.haze.HazeState
 
 private object MuChiRoutes {
     const val HOME = "home"
@@ -53,7 +50,6 @@ fun AppNavHost(vm: MainViewModel) {
 
     val context = LocalContext.current
     val navController = rememberNavController()
-    val hazeState = remember { HazeState() }
 
     val isSystemRunning by
         vm.isSystemRunning.collectAsStateWithLifecycle()
@@ -111,140 +107,128 @@ fun AppNavHost(vm: MainViewModel) {
         }
     }
 
-    CompositionLocalProvider(
-        LocalHazeState provides hazeState
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
-        Box(
+        GlassBackground(
             modifier = Modifier.fillMaxSize()
-        ) {
-            GlassBackground(
-                modifier = Modifier.fillMaxSize()
-            )
+        ) {}
 
-            Scaffold(
-                containerColor = Color.Transparent,
+        Scaffold(
+            containerColor = Color.Transparent,
 
-                bottomBar = {
-                    GlassBottomBar(
-                        items = listOf(
-                            BottomItem(
-                                label = "Trang chủ",
-                                icon = Icons.Rounded.Home
-                            ),
-                            BottomItem(
-                                label = "AI",
-                                icon = Icons.Rounded.AutoAwesome
-                            ),
-                            BottomItem(
-                                label = "Cài đặt",
-                                icon = Icons.Rounded.Settings
-                            )
+            bottomBar = {
+                GlassBottomBar(
+                    items = listOf(
+                        BottomItem(
+                            label = "Trang chủ",
+                            icon = Icons.Rounded.Home
                         ),
+                        BottomItem(
+                            label = "AI",
+                            icon = Icons.Rounded.AutoAwesome
+                        ),
+                        BottomItem(
+                            label = "Cài đặt",
+                            icon = Icons.Rounded.Settings
+                        )
+                    ),
 
-                        selectedIndex = selectedIndex,
+                    selectedIndex = selectedIndex,
 
-                        onSelect = { index ->
-                            when (index) {
-                                0 -> navigateTo(MuChiRoutes.HOME)
-                                1 -> navigateTo(MuChiRoutes.AI)
-                                2 -> navigateTo(MuChiRoutes.SETTINGS)
+                    onSelect = { index ->
+                        when (index) {
+                            0 -> navigateTo(MuChiRoutes.HOME)
+                            1 -> navigateTo(MuChiRoutes.AI)
+                            2 -> navigateTo(MuChiRoutes.SETTINGS)
+                        }
+                    }
+                )
+            }
+        ) { innerPadding ->
+
+            NavHost(
+                navController = navController,
+                startDestination = MuChiRoutes.HOME,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+
+                composable(MuChiRoutes.HOME) {
+
+                    HomeScreen(
+                        systemOn = isSystemRunning,
+                        errors = uiErrors,
+
+                        onToggleSystem = {
+                            vm.setSystemRunning(
+                                !isSystemRunning
+                            )
+                        },
+
+                        onErrorAction = { error ->
+                            when (error.kind) {
+
+                                ErrorKind.VideoUnavailable -> {
+                                    vm.retryFailedDownloads()
+                                }
+
+                                ErrorKind.NetworkLost -> {
+                                    vm.setSystemRunning(true)
+                                }
+
+                                ErrorKind.StorageAlmostFull -> {
+                                    navigateTo(
+                                        MuChiRoutes.SETTINGS
+                                    )
+                                }
                             }
+                        },
+
+                        onClearErrors = {
+                            vm.clearErrors()
                         }
                     )
                 }
-            ) { innerPadding ->
 
-                NavHost(
-                    navController = navController,
-                    startDestination = MuChiRoutes.HOME,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                ) {
+                composable(MuChiRoutes.AI) {
 
-                    // TAB 1: TRANG CHỦ
+                    SystemScreen(
+                        vm = vm,
+                        jobs = pipelineJobs
+                    )
+                }
 
-                    composable(MuChiRoutes.HOME) {
+                composable(MuChiRoutes.SETTINGS) {
 
-                        HomeScreen(
-                            systemOn = isSystemRunning,
-                            errors = uiErrors,
+                    SettingsScreen(
+                        deviceId = deviceId,
+                        accounts = accounts,
+                        appVersion = appVersion,
 
-                            onToggleSystem = {
-                                vm.setSystemRunning(
-                                    !isSystemRunning
+                        onCopyId = {
+                            val clipboard =
+                                context.getSystemService(
+                                    Context.CLIPBOARD_SERVICE
+                                ) as ClipboardManager
+
+                            clipboard.setPrimaryClip(
+                                ClipData.newPlainText(
+                                    "MuChi ID",
+                                    deviceId
                                 )
-                            },
+                            )
+                        },
 
-                            onErrorAction = { error ->
-                                when (error.kind) {
-
-                                    ErrorKind.VideoUnavailable -> {
-                                        vm.retryFailedDownloads()
-                                    }
-
-                                    ErrorKind.NetworkLost -> {
-                                        vm.setSystemRunning(true)
-                                    }
-
-                                    ErrorKind.StorageAlmostFull -> {
-                                        navigateTo(
-                                            MuChiRoutes.SETTINGS
-                                        )
-                                    }
-                                }
-                            },
-
-                            onClearErrors = {
-                                vm.clearErrors()
-                            }
-                        )
-                    }
-
-                    // TAB 2: AI
-
-                    composable(MuChiRoutes.AI) {
-
-                        SystemScreen(
-                            vm = vm,
-                            jobs = pipelineJobs
-                        )
-                    }
-
-                    // TAB 3: CÀI ĐẶT
-
-                    composable(MuChiRoutes.SETTINGS) {
-
-                        SettingsScreen(
-                            deviceId = deviceId,
-                            accounts = accounts,
-                            appVersion = appVersion,
-
-                            onCopyId = {
-                                val clipboard =
-                                    context.getSystemService(
-                                        Context.CLIPBOARD_SERVICE
-                                    ) as ClipboardManager
-
-                                clipboard.setPrimaryClip(
-                                    ClipData.newPlainText(
-                                        "MuChi ID",
-                                        deviceId
-                                    )
-                                )
-                            },
-
-                            onAddAccount = {
-                                showAddAccountDialog = true
-                            }
-                        )
-                    }
+                        onAddAccount = {
+                            showAddAccountDialog = true
+                        }
+                    )
                 }
             }
         }
     }
-
-    // HỘP THOẠI THÊM NGUỒN
 
     if (showAddAccountDialog) {
 
