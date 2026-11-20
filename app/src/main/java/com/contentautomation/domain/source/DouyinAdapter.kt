@@ -1,3 +1,4 @@
+
 package com.contentautomation.domain.source
 
 class DouyinAdapter : WebScrapingAdapter() {
@@ -52,57 +53,62 @@ class DouyinAdapter : WebScrapingAdapter() {
         )
 
         val match = regex.find(html)
-            ?: return emptyList()
-
-        return runCatching {
-            val json = org.json.JSONObject(
-                match.groupValues[1]
+            ?: throw SourceUnavailableException(
+                "Douyin không tìm thấy dữ liệu _ROUTER_DATA. Có thể cấu trúc trang đã thay đổi hoặc nền tảng chặn truy cập."
             )
 
-            val result = mutableListOf<SourceVideoItem>()
+        val json = try {
+            org.json.JSONObject(match.groupValues[1])
+        } catch (e: Exception) {
+            throw SourceUnavailableException(
+                "Douyin trả về dữ liệu JSON không hợp lệ: ${e.message}"
+            )
+        }
 
-            fun walk(any: Any?) {
-                when (any) {
-                    is org.json.JSONObject -> {
-                        val id = any.optString("aweme_id")
-                            .ifBlank {
-                                any.optString("awemeId")
-                            }
+        val result = mutableListOf<SourceVideoItem>()
 
-                        if (id.isNotBlank()) {
-                            result.add(
-                                SourceVideoItem(
-                                    id = id,
-                                    url = "https://www.douyin.com/video/$id",
-                                    title = any.optString("desc"),
-                                    description = any.optString("desc"),
-                                    publishedAt = any.optLong(
-                                        "create_time"
-                                    ).takeIf { it > 0 }
-                                        ?.times(1000)
-                                )
+        fun walk(any: Any?) {
+            when (any) {
+                is org.json.JSONObject -> {
+                    val id = any.optString("aweme_id")
+                        .ifBlank {
+                            any.optString("awemeId")
+                        }
+
+                    if (id.isNotBlank() && id != "null") {
+                        result.add(
+                            SourceVideoItem(
+                                id = id,
+                                url = "https://www.douyin.com/video/$id",
+                                title = any.optString("desc")
+                                    .takeIf { it.isNotBlank() },
+                                description = any.optString("desc")
+                                    .takeIf { it.isNotBlank() },
+                                publishedAt = any.optLong(
+                                    "create_time"
+                                ).takeIf { it > 0 }
+                                    ?.times(1000)
                             )
-                        }
-
-                        val keys = any.keys()
-
-                        while (keys.hasNext()) {
-                            walk(any.opt(keys.next()))
-                        }
+                        )
                     }
 
-                    is org.json.JSONArray -> {
-                        for (i in 0 until any.length()) {
-                            walk(any.opt(i))
-                        }
+                    val keys = any.keys()
+
+                    while (keys.hasNext()) {
+                        walk(any.opt(keys.next()))
+                    }
+                }
+
+                is org.json.JSONArray -> {
+                    for (i in 0 until any.length()) {
+                        walk(any.opt(i))
                     }
                 }
             }
+        }
 
-            walk(json)
+        walk(json)
 
-            result.distinctBy { it.id }
-
-        }.getOrDefault(emptyList())
+        return result.distinctBy { it.id }
     }
 }
