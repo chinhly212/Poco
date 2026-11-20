@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.*
 import com.contentautomation.ui.components.*
+import com.contentautomation.ui.models.ErrorKind
 import com.contentautomation.ui.screens.*
 import dev.chrisbanes.haze.HazeState
 
@@ -22,15 +23,12 @@ fun AppNavHost(vm: MainViewModel) {
     val hazeState = remember { HazeState() }
     var currentTab by remember { mutableStateOf(Tab.Home) }
 
-    // Thu thập dữ liệu thật từ ViewModel
     val isSystemRunning by vm.isSystemRunning.collectAsStateWithLifecycle()
     val uiErrors by vm.uiErrors.collectAsStateWithLifecycle()
     val pipelineJobs by vm.pipelineJobs.collectAsStateWithLifecycle()
 
     CompositionLocalProvider(LocalHazeState provides hazeState) {
         Box(Modifier.fillMaxSize()) {
-
-            // Nền kính mờ
             GlassBackground(Modifier.fillMaxSize())
 
             Scaffold(
@@ -57,14 +55,11 @@ fun AppNavHost(vm: MainViewModel) {
                     }
                 }
             ) { padding ->
-
                 NavHost(
                     navController = nav,
                     startDestination = Tab.Home.name,
                     modifier = Modifier.padding(padding)
                 ) {
-
-                    // Trang chủ
                     composable(Tab.Home.name) {
                         HomeScreen(
                             systemOn = isSystemRunning,
@@ -73,25 +68,37 @@ fun AppNavHost(vm: MainViewModel) {
                                 vm.setSystemRunning(!isSystemRunning)
                             },
                             onErrorAction = { error ->
-                                // Xử lý thử lại sẽ được triển khai riêng
+                                when (error.kind) {
+                                    ErrorKind.VideoUnavailable -> {
+                                        vm.retryFailedDownloads()
+                                    }
+
+                                    ErrorKind.NetworkLost -> {
+                                        vm.setSystemRunning(true)
+                                    }
+
+                                    ErrorKind.StorageAlmostFull -> {
+                                        nav.navigate(Tab.Storage.name) {
+                                            launchSingleTop = true
+                                        }
+                                        currentTab = Tab.Storage
+                                    }
+                                }
                             },
                             onClearErrors = {
-                                // Xử lý xóa lỗi sẽ được triển khai riêng
+                                vm.clearErrors()
                             }
                         )
                     }
 
-                    // Hệ thống - danh sách Pipeline Jobs từ Room
                     composable(Tab.System.name) {
                         SystemScreen(vm, pipelineJobs)
                     }
 
-                    // Lưu trữ
                     composable(Tab.Storage.name) {
                         StorageScreen(vm)
                     }
 
-                    // Cài đặt
                     composable(Tab.Settings.name) {
                         SettingsScreen(vm)
                     }
