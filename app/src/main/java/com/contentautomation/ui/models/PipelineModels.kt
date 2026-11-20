@@ -1,45 +1,122 @@
+
 package com.contentautomation.ui.models
 
 const val RETRY_DELAY_SECONDS = 15
 const val MAX_RETRIES = 5
 
-enum class ErrorKind { VideoUnavailable, StorageAlmostFull, NetworkLost }
+enum class ErrorKind {
+    VideoUnavailable,
+    StorageAlmostFull,
+    NetworkLost
+}
 
 data class AppError(
-    val id: String, // Đã đổi thành String để khớp với ID Database
+    val id: String,
     val kind: ErrorKind,
     val title: String,
     val message: String,
     val time: String,
-    val actionLabel: String,
+    val actionLabel: String
 )
 
-data class StepDef(val pending: String, val running: String, val done: String)
+data class StepDef(
+    val pending: String,
+    val running: String,
+    val done: String
+)
 
+/**
+ * Quy trình xử lý video của Mu Chi.
+ *
+ * 1. Lấy video nguồn.
+ * 2. Tải video không logo, không âm thanh.
+ * 3. Tách âm thanh từ video gốc.
+ * 4. Ghép nhạc lấy từ kho TikTok.
+ * 5. Gửi MP3 sang Gemini để nhận diện lời bài hát.
+ * 6. Căn chỉnh lời và ghép lời vào video.
+ * 7. Tự động lưu video hoàn tất vào điện thoại.
+ */
 object PipelineSteps {
+
+    const val GET_VIDEO = 0
+    const val DOWNLOAD_VIDEO = 1
+    const val EXTRACT_AUDIO = 2
+    const val MERGE_TIKTOK_MUSIC = 3
+    const val GEMINI_LYRICS = 4
+    const val MERGE_LYRICS = 5
+    const val SAVE_TO_PHONE = 6
+
+    const val TOTAL_STEPS = 7
+
+    const val OUTPUT_DIRECTORY = "Movies/Mu Chi"
+
     val all = listOf(
-        StepDef("Phát hiện video mới từ kênh nguồn", "Phát hiện video mới từ kênh nguồn", "Phát hiện video mới từ kênh nguồn"),
-        StepDef("Copy link video", "Đang copy link video", "Đã copy link video"),
-        StepDef("Tải video không logo", "Đang chuyển sang tải video không logo", "Tải video không logo thành công"),
-        StepDef("Chuyển hướng sang TikTok", "Đang chuyển hướng sang TikTok", "Đã chuyển hướng sang TikTok"),
-        StepDef("Tìm nhạc phù hợp theo chủ đề", "Đang tìm kiếm nhạc phù hợp theo chủ đề", "Đã tìm thấy nhạc phù hợp"),
-        StepDef("Ghép nhạc vào video", "Đang ghép nhạc vào video", "Ghép nhạc vào video thành công"),
-        StepDef("Tạo mô tả video & viết #", "Đang tạo mô tả video & viết #", "Đã tạo mô tả & hashtag"),
-        StepDef("Kiểm tra toàn bộ video", "Đang kiểm tra toàn bộ video", "Không có lỗi"),
-        StepDef("Đăng lên TikTok", "Đang đăng lên TikTok", "Đăng thành công!"),
-        StepDef("Chuyển hướng đến Google Drive", "Đang chuyển hướng đến Google Drive", "Đã chuyển hướng đến Google Drive"),
-        StepDef("Sao lưu video lên Google Drive", "Đang sao lưu video", "Đã sao lưu video"),
-        StepDef("Sao lưu thành công", "Đang xác nhận sao lưu", "Sao lưu thành công"),
-        StepDef("Hoàn tất", "Đang hoàn tất", "Hoàn tất"),
+
+        StepDef(
+            pending = "Lấy video nguồn",
+            running = "Đang lấy video nguồn",
+            done = "Đã lấy video nguồn"
+        ),
+
+        StepDef(
+            pending = "Tải video không logo, không âm thanh",
+            running = "Đang tải video không logo, không âm thanh",
+            done = "Đã tải video không logo, không âm thanh"
+        ),
+
+        StepDef(
+            pending = "Tách âm thanh video gốc",
+            running = "Đang tách âm thanh video gốc",
+            done = "Đã tách âm thanh video gốc"
+        ),
+
+        StepDef(
+            pending = "Ghép nhạc từ kho TikTok",
+            running = "Đang ghép nhạc từ kho TikTok",
+            done = "Đã ghép nhạc vào video"
+        ),
+
+        StepDef(
+            pending = "Gửi MP3 sang Gemini nhận diện lời bài hát",
+            running = "Đang gửi MP3 sang Gemini API",
+            done = "Gemini đã nhận diện lời bài hát"
+        ),
+
+        StepDef(
+            pending = "Căn chỉnh và ghép lời bài hát vào video",
+            running = "Đang căn chỉnh và ghép lời bài hát",
+            done = "Đã ghép lời bài hát vào video"
+        ),
+
+        StepDef(
+            pending = "Lưu video hoàn tất vào điện thoại",
+            running = "Đang lưu video vào Movies/Mu Chi",
+            done = "Đã lưu video vào điện thoại"
+        )
     )
 }
 
 sealed interface PipelineState {
+
     data object Idle : PipelineState
-    data class Running(val stepIndex: Int, val retry: Int = 0) : PipelineState
+
+    data class Running(
+        val stepIndex: Int,
+        val retry: Int = 0
+    ) : PipelineState
 }
 
-data class StorageInfo(val usedGb: Float, val totalGb: Float) {
-    val freeGb: Float get() = totalGb - usedGb
-    val fraction: Float get() = if (totalGb > 0) (usedGb / totalGb).coerceIn(0f, 1f) else 0f
+data class StorageInfo(
+    val usedGb: Float,
+    val totalGb: Float
+) {
+    val freeGb: Float
+        get() = (totalGb - usedGb).coerceAtLeast(0f)
+
+    val fraction: Float
+        get() = if (totalGb > 0f) {
+            (usedGb / totalGb).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
 }
