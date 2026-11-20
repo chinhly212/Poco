@@ -1,8 +1,6 @@
 package com.contentautomation.ui.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,11 +14,15 @@ import com.contentautomation.data.db.entity.PipelineStatus
 import com.contentautomation.ui.MainViewModel
 import com.contentautomation.ui.components.*
 
+private const val MAX_VISIBLE_JOBS = 100
+
 @Composable
 fun SystemScreen(
     vm: MainViewModel,
     jobs: List<PipelineJob>
 ) {
+    val visibleJobs = jobs.take(MAX_VISIBLE_JOBS)
+
     ScreenColumn(
         title = "Hệ thống",
         subtitle = "Tiến trình xử lý video thực tế"
@@ -57,9 +59,17 @@ fun SystemScreen(
                 weight = FontWeight.SemiBold
             )
 
+            if (jobs.size > MAX_VISIBLE_JOBS) {
+                GText(
+                    "Đang hiển thị 100 công việc mới nhất.",
+                    12.sp,
+                    color = GlassColors.InkSoft
+                )
+            }
+
             Spacer(Modifier.height(8.dp))
 
-            jobs.forEach { job ->
+            visibleJobs.forEach { job ->
                 PipelineJobCard(job)
                 Spacer(Modifier.height(8.dp))
             }
@@ -69,7 +79,6 @@ fun SystemScreen(
 
 @Composable
 private fun PipelineJobCard(job: PipelineJob) {
-
     val statusColor = when (job.status) {
         PipelineStatus.RUNNING -> GlassColors.Blue
         PipelineStatus.DONE -> GlassColors.Green
@@ -80,7 +89,6 @@ private fun PipelineJobCard(job: PipelineJob) {
 
     GlassCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
-
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -130,8 +138,8 @@ private fun PipelineJobCard(job: PipelineJob) {
     }
 }
 
-private fun stageName(stage: PipelineStage): String {
-    return when (stage) {
+private fun stageName(stage: PipelineStage): String =
+    when (stage) {
         PipelineStage.DOWNLOAD -> "Tải video"
         PipelineStage.ANALYZE -> "Phân tích video"
         PipelineStage.SPEECH_TO_TEXT -> "Nhận dạng giọng nói"
@@ -143,14 +151,13 @@ private fun stageName(stage: PipelineStage): String {
         PipelineStage.UPLOAD -> "Tải lên"
         PipelineStage.VERIFY -> "Kiểm tra kết quả"
     }
-}
 
-private fun statusName(status: PipelineStatus): String {
-    return when (status) {
+private fun statusName(status: PipelineStatus): String =
+    when (status) {
         PipelineStatus.PENDING -> "Đang chờ"
         PipelineStatus.RUNNING -> "Đang chạy"
         PipelineStatus.DONE -> "Hoàn thành"
         PipelineStatus.FAILED -> "Thất bại"
         PipelineStatus.PAUSED -> "Tạm dừng"
     }
-}
+    
