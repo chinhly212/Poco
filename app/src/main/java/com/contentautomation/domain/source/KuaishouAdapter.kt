@@ -10,10 +10,10 @@ class KuaishouAdapter : WebScrapingAdapter() {
             val html = httpGet(
                 "https://www.kuaishou.com/profile/$accountIdentifier"
             )
-
             parseFromHtml(html)
-
         } catch (e: Exception) {
+            if (e is SourceUnavailableException) throw e
+
             throw SourceUnavailableException(
                 "Kuaishou scan failed: ${e.message}"
             )
@@ -34,6 +34,8 @@ class KuaishouAdapter : WebScrapingAdapter() {
                 .firstOrNull { it.id == videoId }
 
         } catch (e: Exception) {
+            if (e is SourceUnavailableException) throw e
+
             throw SourceUnavailableException(
                 "Kuaishou metadata failed: ${e.message}"
             )
@@ -54,46 +56,47 @@ class KuaishouAdapter : WebScrapingAdapter() {
         )
 
         val match = regex.find(html)
-            ?: return emptyList()
-
-        return runCatching {
-            val root = org.json.JSONObject(
-                match.groupValues[1]
+            ?: throw SourceUnavailableException(
+                "Kuaishou không tìm thấy __APOLLO_STATE__. Cấu trúc trang có thể đã thay đổi hoặc truy cập bị chặn."
             )
 
-            val result = mutableListOf<SourceVideoItem>()
-            val keys = root.keys()
+        val root = try {
+            org.json.JSONObject(match.groupValues[1])
+        } catch (e: Exception) {
+            throw SourceUnavailableException(
+                "Kuaishou trả về JSON không hợp lệ: ${e.message}"
+            )
+        }
 
-            while (keys.hasNext()) {
-                val key = keys.next()
+        val result = mutableListOf<SourceVideoItem>()
+        val keys = root.keys()
 
-                if (!key.startsWith("VisionVideoDetail")) {
-                    continue
-                }
+        while (keys.hasNext()) {
+            val key = keys.next()
 
-                val obj = root.optJSONObject(key)
-                    ?: continue
-
-                val id = obj.optString("photoId")
-
-                if (id.isBlank()) {
-                    continue
-                }
-
-                result.add(
-                    SourceVideoItem(
-                        id = id,
-                        url = "https://www.kuaishou.com/short-video/$id",
-                        title = obj.optString("caption"),
-                        description = obj.optString("caption"),
-                        publishedAt = obj.optLong("timestamp")
-                            .takeIf { it > 0 }
-                    )
-                )
+            if (!key.startsWith("VisionVideoDetail")) {
+                continue
             }
 
-            result.distinctBy { it.id }
+            val obj = root.optJSONObject(key) ?: continue
+            val id = obj.optString("photoId")
 
-        }.getOrDefault(emptyList())
+            if (id.isBlank() || id == "null") continue
+
+            result.add(
+                SourceVideoItem(
+                    id = id,
+                    url = "https://www.kuaishou.com/short-video/$id",
+                    title = obj.optString("caption")
+                        .takeIf { it.isNotBlank() },
+                    description = obj.optString("caption")
+                        .takeIf { it.isNotBlank() },
+                    publishedAt = obj.optLong("timestamp")
+                        .takeIf { it > 0 }
+                )
+            )
+        }
+
+        return result.distinctBy { it.id }
     }
 }
