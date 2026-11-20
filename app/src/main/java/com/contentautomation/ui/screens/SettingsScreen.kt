@@ -1,20 +1,31 @@
+
 package com.contentautomation.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.contentautomation.data.prefs.UserIdentity
 import com.contentautomation.ui.MainViewModel
 import com.contentautomation.ui.components.*
 
 @Composable
 fun SettingsScreen(vm: MainViewModel) {
+    val context = LocalContext.current
+
+    // Lấy lại ID cũ hoặc tạo ID mới khi chạy lần đầu.
+    val userId = remember {
+        UserIdentity.getOrCreate(context)
+    }
+
     var platform by remember { mutableStateOf("KUAISHOU") }
     var name by remember { mutableStateOf("") }
     var identifier by remember { mutableStateOf("") }
@@ -41,6 +52,58 @@ fun SettingsScreen(vm: MainViewModel) {
         title = "Cài đặt",
         subtitle = "Quản lý tài khoản và cấu hình ứng dụng"
     ) {
+
+        // USER ACCOUNT INFORMATION
+        GlassCard(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier.padding(17.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                GText(
+                    "THÔNG TIN TÀI KHOẢN",
+                    11.sp,
+                    color = GlassColors.InkSoft,
+                    weight = FontWeight.Bold
+                )
+
+                GText(
+                    "ID người dùng",
+                    13.sp,
+                    weight = FontWeight.SemiBold
+                )
+
+                GText(
+                    userId,
+                    16.sp,
+                    color = GlassColors.Blue,
+                    weight = FontWeight.Bold
+                )
+
+                GlassButton(
+                    text = "Sao chép ID người dùng",
+                    onClick = {
+                        val clipboard = context.getSystemService(
+                            Context.CLIPBOARD_SERVICE
+                        ) as ClipboardManager
+
+                        clipboard.setPrimaryClip(
+                            ClipData.newPlainText(
+                                "Poco User ID",
+                                userId
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                GText(
+                    "ID được tạo từ Android ID của thiết bị.",
+                    11.sp,
+                    color = GlassColors.InkSoft
+                )
+            }
+        }
+
         // ACCOUNT SUMMARY
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(17.dp)) {
@@ -105,16 +168,12 @@ fun SettingsScreen(vm: MainViewModel) {
             }
         }
 
-        Spacer(Modifier.height(18.dp))
-
         // ADD ACCOUNT
         GText(
             "Thêm tài khoản mới",
             17.sp,
             weight = FontWeight.SemiBold
         )
-
-        Spacer(Modifier.height(9.dp))
 
         GlassCard(Modifier.fillMaxWidth()) {
             Column(
@@ -191,6 +250,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                 normalizedName,
                                 normalizedIdentifier
                             )
+
                             name = ""
                             identifier = ""
                         }
@@ -212,8 +272,6 @@ fun SettingsScreen(vm: MainViewModel) {
             }
         }
 
-        Spacer(Modifier.height(20.dp))
-
         // SAVED ACCOUNTS
         Row(
             Modifier.fillMaxWidth(),
@@ -232,8 +290,6 @@ fun SettingsScreen(vm: MainViewModel) {
                 color = GlassColors.InkSoft
             )
         }
-
-        Spacer(Modifier.height(9.dp))
 
         if (accounts.isEmpty()) {
             GlassCard(Modifier.fillMaxWidth()) {
@@ -306,8 +362,6 @@ fun SettingsScreen(vm: MainViewModel) {
                 Spacer(Modifier.height(8.dp))
             }
         }
-
-        Spacer(Modifier.height(12.dp))
 
         // APP INFORMATION
         GlassCard(Modifier.fillMaxWidth()) {
