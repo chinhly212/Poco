@@ -1,223 +1,75 @@
 package com.contentautomation.ui.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.contentautomation.ui.MainViewModel
 import com.contentautomation.ui.components.*
+import com.contentautomation.ui.models.StorageInfo
 import java.util.Locale
 
+private const val WARN_FRACTION = 0.9f
+private const val WARN_FREE_GB = 10f
+
+private fun gb(v: Float) = String.format(Locale.getDefault(), "%.1f GB", v)
+
+/**
+ * driveStatus: chuỗi trạng thái Google Drive lấy từ nơi bạn đang quản lý (ví dụ "Chưa kết nối").
+ * onDriveClick: hành động của nút ở khu vực Google Drive.
+ */
 @Composable
-fun StorageScreen(vm: MainViewModel) {
-    val storage by vm.phoneStorage.collectAsState()
+fun StorageScreen(
+    storage: StorageInfo,
+    driveStatus: String,
+    onDriveClick: () -> Unit
+) {
+    val low = storage.totalGb > 0f &&
+        (storage.fraction >= WARN_FRACTION || storage.freeGb < WARN_FREE_GB)
 
-    val used = storage.usedGb.coerceAtLeast(0f)
-    val total = storage.totalGb.coerceAtLeast(0f)
-    val free = storage.freeGb.coerceAtLeast(0f)
-    val fraction = storage.fraction.coerceIn(0f, 1f)
-
-    val usedText = String.format(Locale.US, "%.1f", used)
-    val totalText = String.format(Locale.US, "%.1f", total)
-    val freeText = String.format(Locale.US, "%.1f", free)
-    val percent = (fraction * 100).toInt()
-
-    val progressColor = when {
-        fraction >= 0.9f -> GlassColors.Red
-        fraction >= 0.75f -> GlassColors.Amber
-        else -> GlassColors.Blue
-    }
-
-    ScreenColumn(
-        title = "Lưu trữ",
-        subtitle = "Theo dõi dung lượng thiết bị"
-    ) {
-        // STORAGE OVERVIEW
-        GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(18.dp)) {
-                GText(
-                    "BỘ NHỚ ĐIỆN THOẠI",
-                    11.sp,
-                    color = GlassColors.InkSoft,
-                    weight = FontWeight.Bold
-                )
-
-                Spacer(Modifier.height(16.dp))
-
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.Bottom
-                ) {
-                    Column {
-                        GText(
-                            "$usedText GB",
-                            29.sp,
-                            color = GlassColors.Ink,
-                            weight = FontWeight.Bold
-                        )
-                        GText(
-                            "Dung lượng đã sử dụng",
-                            11.sp,
-                            color = GlassColors.InkSoft
-                        )
-                    }
-
-                    GText(
-                        "$percent%",
-                        20.sp,
-                        color = progressColor,
-                        weight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                LinearProgressIndicator(
-                    progress = { fraction },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(10.dp),
-                    color = progressColor,
-                    trackColor = GlassColors.InkFaint.copy(alpha = 0.2f)
-                )
-
-                Spacer(Modifier.height(17.dp))
-
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    StorageValue("Đã dùng", "$usedText GB")
-                    StorageValue("Còn trống", "$freeText GB")
-                    StorageValue("Tổng cộng", "$totalText GB")
-                }
-            }
-        }
-
-        Spacer(Modifier.height(18.dp))
-
-        // STORAGE STATUS
-        GText(
-            "Tình trạng bộ nhớ",
-            16.sp,
-            weight = FontWeight.SemiBold
-        )
-
-        Spacer(Modifier.height(9.dp))
-
-        GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(15.dp)) {
-                Row(
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    StatusDot(progressColor)
-
-                    Spacer(Modifier.width(9.dp))
-
-                    GText(
-                        when {
-                            total <= 0f -> "Chưa đọc được thông tin bộ nhớ"
-                            fraction >= 0.9f -> "Bộ nhớ gần đầy"
-                            fraction >= 0.75f -> "Bộ nhớ đang sử dụng nhiều"
-                            else -> "Dung lượng còn đủ"
-                        },
-                        14.sp,
-                        weight = FontWeight.SemiBold
-                    )
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                GText(
-                    when {
-                        total <= 0f ->
-                            "Không lấy được dữ liệu dung lượng thiết bị."
-                        fraction >= 0.9f ->
-                            "Nên giải phóng dung lượng trước khi xử lý video mới."
-                        fraction >= 0.75f ->
-                            "Hãy theo dõi dung lượng khi tải và xuất video."
-                        else ->
-                            "Bộ nhớ thiết bị hiện chưa ở mức cảnh báo."
-                    },
-                    12.sp,
-                    color = GlassColors.InkSoft
-                )
-            }
-        }
-
-        Spacer(Modifier.height(18.dp))
-
-        // GOOGLE DRIVE
-        GText(
-            "Lưu trữ đám mây",
-            16.sp,
-            weight = FontWeight.SemiBold
-        )
-
-        Spacer(Modifier.height(9.dp))
-
+    ScreenColumn {
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                GText(
-                    "Google Drive",
-                    16.sp,
-                    weight = FontWeight.SemiBold
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                Row(
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    StatusDot(GlassColors.Amber)
-
-                    Spacer(Modifier.width(8.dp))
-
-                    GText(
-                        "Chưa kết nối",
-                        12.sp,
-                        color = GlassColors.Amber,
-                        weight = FontWeight.Medium
-                    )
+                GText("ĐÃ SỬ DỤNG", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
+                GText(gb(storage.usedGb), 30.sp, weight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
+                GlassProgressBar(storage.fraction, color = if (low) GlassColors.Amber else GlassColors.Blue)
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) {
+                        GText("Tổng", 12.sp, color = GlassColors.InkSoft)
+                        GText(gb(storage.totalGb), 14.sp, weight = FontWeight.Bold)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        GText("Còn trống", 12.sp, color = GlassColors.InkSoft)
+                        GText(gb(storage.freeGb), 14.sp, weight = FontWeight.Bold, color = GlassColors.Green)
+                    }
                 }
-
-                Spacer(Modifier.height(9.dp))
-
-                GText(
-                    "Ứng dụng chưa kết nối Google Drive API. "
-                        + "Chức năng sao lưu đám mây chưa được kích hoạt.",
-                    12.sp,
-                    color = GlassColors.InkSoft
-                )
             }
         }
-    }
-}
 
-@Composable
-private fun StorageValue(
-    label: String,
-    value: String
-) {
-    Column {
-        GText(
-            value,
-            13.sp,
-            weight = FontWeight.SemiBold
-        )
+        if (low) {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    GText("Cảnh báo bộ nhớ", 14.sp, weight = FontWeight.Bold, color = GlassColors.Amber)
+                    Spacer(Modifier.height(3.dp))
+                    GText("Bộ nhớ sắp đầy, hãy giải phóng dung lượng để tiếp tục lưu video.",
+                        12.sp, color = GlassColors.InkSoft)
+                }
+            }
+        }
 
-        Spacer(Modifier.height(3.dp))
-
-        GText(
-            label,
-            10.sp,
-            color = GlassColors.InkSoft
-        )
+        GlassCard(Modifier.fillMaxWidth()) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    GText("GOOGLE DRIVE", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
+                    GText(driveStatus, 14.sp, weight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 3.dp))
+                }
+                GlassButton("Mở", onClick = onDriveClick)
+            }
+        }
     }
 }
