@@ -14,7 +14,7 @@
         android:name="MuChi"
         android:allowBackup="false"
         android:icon="@drawable/muchi_logo"
-        android:label="MuChi"
+        android:label="@string/app_name"
         android:theme="@style/Theme.Material3.DayNight"
         android:usesCleartextTraffic="false">
 
