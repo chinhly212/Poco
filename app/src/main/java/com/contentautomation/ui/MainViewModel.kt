@@ -12,7 +12,6 @@ import com.contentautomation.data.prefs.AppPreferences
 import com.contentautomation.service.AutomationForegroundService
 import com.contentautomation.ui.models.*
 import com.contentautomation.work.DownloadWorker
-import com.contentautomation.work.PublishWorker
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -27,6 +26,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // SYSTEM STATUS
 
     private val _isSystemRunning = MutableStateFlow(false)
+
     val isSystemRunning = _isSystemRunning.asStateFlow()
 
     // PIPELINE STATE
@@ -318,37 +318,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 ErrorKind.VideoUnavailable,
                 "Không thể tải video",
                 e.message ?: "Không thể đưa video vào hàng đợi.",
-                "Thử lại"
-            )
-        }
-    }
-
-    // TIKTOK PUBLISH
-
-    fun publishNow(
-        processed: ProcessedVideo,
-        privacy: String,
-        title: String
-    ) {
-        try {
-            PublishWorker.enqueue(
-                application,
-                processed.id,
-                privacy,
-                title
-            )
-
-        } catch (e: Exception) {
-            Log.e(
-                "MainViewModel",
-                "Lỗi khởi chạy đăng video",
-                e
-            )
-
-            recordError(
-                ErrorKind.NetworkLost,
-                "Không thể đăng video",
-                e.message ?: "Không thể đưa video vào hàng đợi đăng.",
                 "Thử lại"
             )
         }
