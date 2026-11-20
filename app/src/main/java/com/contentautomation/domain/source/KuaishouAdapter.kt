@@ -1,21 +1,18 @@
 
 package com.contentautomation.domain.source
-import com.contentautomation.domain.source.SourceUnavailableException
-/**
- * Kuaishou adapter đọc JSON từ endpoint công khai / profile.
- * Nếu endpoint không khả dụng, ném SourceUnavailableException để worker
- * đánh dấu RETRY_PENDING (không crash app).
- */
+
 class KuaishouAdapter : WebScrapingAdapter() {
 
     override suspend fun getLatestVideos(
         accountIdentifier: String
     ): List<SourceVideoItem> {
         return try {
-            val body = httpGet(
+            val html = httpGet(
                 "https://www.kuaishou.com/profile/$accountIdentifier"
             )
-            parseFromHtml(body)
+
+            parseFromHtml(html)
+
         } catch (e: Exception) {
             throw SourceUnavailableException(
                 "Kuaishou scan failed: ${e.message}"
@@ -25,12 +22,27 @@ class KuaishouAdapter : WebScrapingAdapter() {
 
     override suspend fun getVideoMetadata(
         videoId: String
-    ): SourceVideoItem? =
-        runCatching {
-            getLatestVideos(videoId).firstOrNull()
-        }.getOrNull()
+    ): SourceVideoItem? {
+        if (videoId.isBlank()) return null
 
-    override suspend fun getDownloadUrl(videoId: String): String? = null
+        return try {
+            val html = httpGet(
+                "https://www.kuaishou.com/short-video/$videoId"
+            )
+
+            parseFromHtml(html)
+                .firstOrNull { it.id == videoId }
+
+        } catch (e: Exception) {
+            throw SourceUnavailableException(
+                "Kuaishou metadata failed: ${e.message}"
+            )
+        }
+    }
+
+    override suspend fun getDownloadUrl(
+        videoId: String
+    ): String? = null
 
     private fun parseFromHtml(
         html: String
@@ -41,12 +53,15 @@ class KuaishouAdapter : WebScrapingAdapter() {
             RegexOption.DOT_MATCHES_ALL
         )
 
-        val match = regex.find(html) ?: return emptyList()
+        val match = regex.find(html)
+            ?: return emptyList()
 
         return runCatching {
-            val root = org.json.JSONObject(match.groupValues[1])
-            val result = mutableListOf<SourceVideoItem>()
+            val root = org.json.JSONObject(
+                match.groupValues[1]
+            )
 
+            val result = mutableListOf<SourceVideoItem>()
             val keys = root.keys()
 
             while (keys.hasNext()) {
@@ -56,7 +71,9 @@ class KuaishouAdapter : WebScrapingAdapter() {
                     continue
                 }
 
-                val obj = root.optJSONObject(key) ?: continue
+                val obj = root.optJSONObject(key)
+                    ?: continue
+
                 val id = obj.optString("photoId")
 
                 if (id.isBlank()) {
@@ -79,5 +96,4 @@ class KuaishouAdapter : WebScrapingAdapter() {
 
         }.getOrDefault(emptyList())
     }
-
-} // Đóng class KuaishouAdapter
+}
