@@ -13,7 +13,7 @@
     <application
         android:name="MuChi"
         android:allowBackup="false"
-        android:icon="@android:drawable/sym_def_app_icon"
+        android:icon="@drawable/muchi_logo"
         android:label="MuChi"
         android:theme="@style/Theme.Material3.DayNight"
         android:usesCleartextTraffic="false">
