@@ -1,4 +1,3 @@
-
 package com.contentautomation.ui
 
 import android.app.Application
@@ -11,6 +10,8 @@ import androidx.lifecycle.viewModelScope
 
 import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.*
+import com.contentautomation.data.prefs.AppPreferences
+import com.contentautomation.service.AutomationForegroundService
 import com.contentautomation.ui.models.*
 import com.contentautomation.work.DownloadWorker
 import com.contentautomation.work.PublishWorker
@@ -30,8 +31,90 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val isSystemRunning = _isSystemRunning.asStateFlow()
 
+    init {
+        viewModelScope.launch {
+            try {
+                val savedState =
+                    application.prefs.foregroundEnabled.first()
+
+                if (savedState) {
+                    AutomationForegroundService.start(application)
+                }
+
+                _isSystemRunning.value = savedState
+
+            } catch (e: Exception) {
+                Log.e(
+                    "MainViewModel",
+                    "Không thể khôi phục trạng thái hệ thống",
+                    e
+                )
+
+                _isSystemRunning.value = false
+
+                try {
+                    application.prefs.set(
+                        AppPreferences.KEY_FOREGROUND_ENABLED,
+                        false
+                    )
+                } catch (saveError: Exception) {
+                    Log.e(
+                        "MainViewModel",
+                        "Không thể lưu trạng thái hệ thống",
+                        saveError
+                    )
+                }
+            }
+        }
+    }
+
     fun setSystemRunning(isRunning: Boolean) {
-        _isSystemRunning.value = isRunning
+        viewModelScope.launch {
+            val previousState = _isSystemRunning.value
+
+            try {
+                if (isRunning) {
+                    application.prefs.set(
+                        AppPreferences.KEY_FOREGROUND_ENABLED,
+                        true
+                    )
+
+                    AutomationForegroundService.start(application)
+
+                } else {
+                    AutomationForegroundService.stop(application)
+
+                    application.prefs.set(
+                        AppPreferences.KEY_FOREGROUND_ENABLED,
+                        false
+                    )
+                }
+
+                _isSystemRunning.value = isRunning
+
+            } catch (e: Exception) {
+                Log.e(
+                    "MainViewModel",
+                    "Không thể thay đổi trạng thái hệ thống",
+                    e
+                )
+
+                _isSystemRunning.value = previousState
+
+                try {
+                    application.prefs.set(
+                        AppPreferences.KEY_FOREGROUND_ENABLED,
+                        previousState
+                    )
+                } catch (saveError: Exception) {
+                    Log.e(
+                        "MainViewModel",
+                        "Không thể khôi phục trạng thái đã lưu",
+                        saveError
+                    )
+                }
+            }
+        }
     }
 
     // ======================================
@@ -42,19 +125,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         MutableStateFlow<PipelineState>(PipelineState.Idle)
 
     val pipelineState = _pipelineState.asStateFlow()
-    // ======================================
-// PIPELINE JOBS - DATABASE THỰC
-// ======================================
 
-val pipelineJobs =
-    application.database
-        .pipelineJobDao()
-        .observeAll()
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+    // ======================================
+    // PIPELINE JOBS - DATABASE THỰC
+    // ======================================
+
+    val pipelineJobs =
+        application.database
+            .pipelineJobDao()
+            .observeAll()
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                initialValue = emptyList()
+            )
 
     // ======================================
     // ERROR LIST
@@ -93,6 +177,7 @@ val pipelineJobs =
                             (1024f * 1024f * 1024f)
                     )
                 )
+
             } catch (e: Exception) {
                 Log.e(
                     "MainViewModel",
@@ -138,6 +223,7 @@ val pipelineJobs =
                             accountIdentifier = identifier
                         )
                     )
+
             } catch (e: Exception) {
                 Log.e(
                     "MainViewModel",
@@ -158,6 +244,7 @@ val pipelineJobs =
                 application,
                 video.id
             )
+
         } catch (e: Exception) {
             Log.e(
                 "MainViewModel",
@@ -179,6 +266,7 @@ val pipelineJobs =
                 privacy,
                 title
             )
+
         } catch (e: Exception) {
             Log.e(
                 "MainViewModel",
