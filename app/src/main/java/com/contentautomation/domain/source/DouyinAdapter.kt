@@ -1,80 +1,112 @@
+package com.contentautomation.domain.source
 
-package com.contentautomation.domain.pipeline
+import kotlinx.coroutines.CancellationException
 
-import com.contentautomation.data.db.AppDatabase
-import com.contentautomation.data.db.entity.*
-import kotlinx.coroutines.flow.Flow
+class DouyinAdapter : WebScrapingAdapter() {
 
-class PipelineController(
-    private val database: AppDatabase
-) {
+    override suspend fun getLatestVideos(
+        accountIdentifier: String
+    ): List<SourceVideoItem> {
+        if (accountIdentifier.isBlank()) {
+            throw SourceUnavailableException("Douyin account ID không được để trống.")
+        }
 
-    private val jobDao = database.pipelineJobDao()
-    private val videoDao = database.sourceVideoDao()
+        return try {
+            val html = httpGet(
+                "https://www.douyin.com/user/$accountIdentifier"
+            )
+            parseVideos(html)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (e is SourceUnavailableException) throw e
 
-    fun observeJobs(): Flow<List<PipelineJob>> {
-        return jobDao.observeAll()
-    }
-
-    suspend fun enqueueVideo(videoId: String) {
-        val video = videoDao.findById(videoId)
-            ?: throw IllegalArgumentException("Không tìm thấy video")
-
-        val job = PipelineJob(
-            id = video.id,
-            sourceVideoId = video.id,
-            stage = PipelineStage.DOWNLOAD,
-            status = PipelineStatus.PENDING
-        )
-
-        val inserted = jobDao.insert(job)
-
-        if (inserted == -1L) {
-            throw IllegalStateException("Video đã có trong Pipeline")
+            throw SourceUnavailableException(
+                "Không thể lấy danh sách video Douyin: ${e.message}",
+                e
+            )
         }
     }
 
-    suspend fun enqueueNewVideos(): Int {
-        val videos = videoDao.findByStatuses(
-            listOf(VideoStatus.NEW.name)
-        )
+    override suspend fun getVideoMetadata(
+        videoId: String
+    ): SourceVideoItem? {
+        if (videoId.isBlank()) return null
 
-        var added = 0
-
-        for (video in videos) {
-            val job = PipelineJob(
-                id = video.id,
-                sourceVideoId = video.id,
-                stage = PipelineStage.DOWNLOAD,
-                status = PipelineStatus.PENDING
+        return try {
+            val html = httpGet(
+                "https://www.douyin.com/video/$videoId"
             )
 
-            if (jobDao.insert(job) != -1L) {
-                added++
-            }
+            parseVideos(html).firstOrNull { it.id == videoId }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (e is SourceUnavailableException) throw e
+
+            throw SourceUnavailableException(
+                "Không thể lấy metadata Douyin: ${e.message}",
+                e
+            )
+        }
+    }
+
+    override suspend fun getDownloadUrl(
+        videoId: String
+    ): String? = null
+
+    private fun parseVideos(html: String): List<SourceVideoItem> {
+        val idRegex = Regex(
+            "\"aweme_id\"\\s*:\\s*\"(\\d+)\""
+        )
+        val descRegex = Regex(
+            "\"desc\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\""
+        )
+        val timeRegex = Regex(
+            "\"create_time\"\\s*:\\s*(\\d+)"
+        )
+
+        val ids = idRegex.findAll(html).toList()
+
+        if (ids.isEmpty()) {
+            throw SourceUnavailableException(
+                "Douyin không trả về danh sách aweme_id hợp lệ. " +
+                    "Trang có thể yêu cầu đăng nhập hoặc đã thay đổi cấu trúc."
+            )
         }
 
-        return added
-    }
+        val result = mutableListOf<SourceVideoItem>()
 
-    suspend fun pause() {
-        jobDao.pauseRunning()
-    }
+        for (match in ids.distinctBy { it.groupValues[1] }) {
+            val id = match.groupValues[1]
+            val start = match.range.first
+            val end = minOf(html.length, start + 12000)
+            val section = html.substring(start, end)
 
-    suspend fun resume() {
-        jobDao.resetRunning()
-        jobDao.resumePaused()
-    }
+            val description = descRegex.find(section)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.replace("\\\"", "\"")
+                ?.replace("\\n", "\n")
+                ?.takeIf { it.isNotBlank() }
 
-    suspend fun nextJob(): PipelineJob? {
-        return jobDao.next()
-    }
+            val publishedAt = timeRegex.find(section)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toLongOrNull()
+                ?.let { if (it > 0) it * 1000L else null }
 
-    suspend fun update(job: PipelineJob) {
-        jobDao.update(
-            job.copy(
-                updatedAt = System.currentTimeMillis()
+            result.add(
+                SourceVideoItem(
+                    id = id,
+                    url = "https://www.douyin.com/video/$id",
+                    title = description,
+                    description = description,
+                    publishedAt = publishedAt
+                )
             )
-        )
+        }
+
+        return result
     }
 }
