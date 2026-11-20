@@ -1,114 +1,80 @@
 
-package com.contentautomation.domain.source
+package com.contentautomation.domain.pipeline
 
-class DouyinAdapter : WebScrapingAdapter() {
+import com.contentautomation.data.db.AppDatabase
+import com.contentautomation.data.db.entity.*
+import kotlinx.coroutines.flow.Flow
 
-    override suspend fun getLatestVideos(
-        accountIdentifier: String
-    ): List<SourceVideoItem> {
-        return try {
-            val html = httpGet(
-                "https://www.douyin.com/user/$accountIdentifier"
-            )
-            parseFromHtml(html)
-        } catch (e: Exception) {
-            throw SourceUnavailableException(
-                "Douyin scan failed: ${e.message}"
-            )
-        }
+class PipelineController(
+    private val database: AppDatabase
+) {
+
+    private val jobDao = database.pipelineJobDao()
+    private val videoDao = database.sourceVideoDao()
+
+    fun observeJobs(): Flow<List<PipelineJob>> {
+        return jobDao.observeAll()
     }
 
-    override suspend fun getVideoMetadata(
-        videoId: String
-    ): SourceVideoItem? {
-        if (videoId.isBlank()) return null
+    suspend fun enqueueVideo(videoId: String) {
+        val video = videoDao.findById(videoId)
+            ?: throw IllegalArgumentException("Không tìm thấy video")
 
-        return try {
-            val html = httpGet(
-                "https://www.douyin.com/video/$videoId"
-            )
-
-            parseFromHtml(html)
-                .firstOrNull { it.id == videoId }
-                ?: parseFromHtml(html).firstOrNull()
-
-        } catch (e: Exception) {
-            throw SourceUnavailableException(
-                "Douyin metadata failed: ${e.message}"
-            )
-        }
-    }
-
-    override suspend fun getDownloadUrl(
-        videoId: String
-    ): String? = null
-
-    private fun parseFromHtml(
-        html: String
-    ): List<SourceVideoItem> {
-
-        val regex = Regex(
-            "_ROUTER_DATA\\s*=\\s*(\\{.*?});",
-            RegexOption.DOT_MATCHES_ALL
+        val job = PipelineJob(
+            id = video.id,
+            sourceVideoId = video.id,
+            stage = PipelineStage.DOWNLOAD,
+            status = PipelineStatus.PENDING
         )
 
-        val match = regex.find(html)
-            ?: throw SourceUnavailableException(
-                "Douyin không tìm thấy dữ liệu _ROUTER_DATA. Có thể cấu trúc trang đã thay đổi hoặc nền tảng chặn truy cập."
-            )
+        val inserted = jobDao.insert(job)
 
-        val json = try {
-            org.json.JSONObject(match.groupValues[1])
-        } catch (e: Exception) {
-            throw SourceUnavailableException(
-                "Douyin trả về dữ liệu JSON không hợp lệ: ${e.message}"
-            )
+        if (inserted == -1L) {
+            throw IllegalStateException("Video đã có trong Pipeline")
         }
+    }
 
-        val result = mutableListOf<SourceVideoItem>()
+    suspend fun enqueueNewVideos(): Int {
+        val videos = videoDao.findByStatuses(
+            listOf(VideoStatus.NEW.name)
+        )
 
-        fun walk(any: Any?) {
-            when (any) {
-                is org.json.JSONObject -> {
-                    val id = any.optString("aweme_id")
-                        .ifBlank {
-                            any.optString("awemeId")
-                        }
+        var added = 0
 
-                    if (id.isNotBlank() && id != "null") {
-                        result.add(
-                            SourceVideoItem(
-                                id = id,
-                                url = "https://www.douyin.com/video/$id",
-                                title = any.optString("desc")
-                                    .takeIf { it.isNotBlank() },
-                                description = any.optString("desc")
-                                    .takeIf { it.isNotBlank() },
-                                publishedAt = any.optLong(
-                                    "create_time"
-                                ).takeIf { it > 0 }
-                                    ?.times(1000)
-                            )
-                        )
-                    }
+        for (video in videos) {
+            val job = PipelineJob(
+                id = video.id,
+                sourceVideoId = video.id,
+                stage = PipelineStage.DOWNLOAD,
+                status = PipelineStatus.PENDING
+            )
 
-                    val keys = any.keys()
-
-                    while (keys.hasNext()) {
-                        walk(any.opt(keys.next()))
-                    }
-                }
-
-                is org.json.JSONArray -> {
-                    for (i in 0 until any.length()) {
-                        walk(any.opt(i))
-                    }
-                }
+            if (jobDao.insert(job) != -1L) {
+                added++
             }
         }
 
-        walk(json)
+        return added
+    }
 
-        return result.distinctBy { it.id }
+    suspend fun pause() {
+        jobDao.pauseRunning()
+    }
+
+    suspend fun resume() {
+        jobDao.resetRunning()
+        jobDao.resumePaused()
+    }
+
+    suspend fun nextJob(): PipelineJob? {
+        return jobDao.next()
+    }
+
+    suspend fun update(job: PipelineJob) {
+        jobDao.update(
+            job.copy(
+                updatedAt = System.currentTimeMillis()
+            )
+        )
     }
 }
