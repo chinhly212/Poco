@@ -47,10 +47,10 @@ object UserIdentity {
                 "%02x".format(it)
             }
 
-            "POCO-${hash.take(20).uppercase()}"
+            "MC-${hash.take(20).uppercase()}"
         } else {
             // Dự phòng nếu Android ID không đọc được.
-            "POCO-${UUID.randomUUID().toString().replace("-", "").take(20).uppercase()}"
+            "MC-${UUID.randomUUID().toString().replace("-", "").take(20).uppercase()}"
         }
 
         // Lưu ID vào bộ nhớ ứng dụng.
