@@ -2,13 +2,14 @@
 package com.contentautomation.work
 
 import android.content.Context
+import android.util.Log
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.contentautomation.data.db.entity.SourceVideo
-import com.contentautomation.data.db.entity.VideoStatus
 import com.contentautomation.data.db.entity.PipelineJob
 import com.contentautomation.data.db.entity.PipelineStage
 import com.contentautomation.data.db.entity.PipelineStatus
+import com.contentautomation.data.db.entity.SourceVideo
+import com.contentautomation.data.db.entity.VideoStatus
 import com.contentautomation.domain.source.SourceAdapterFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,7 +20,6 @@ class ScanWorker(
 ) : BaseWorker(ctx, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-
         val accounts = db.sourceAccountDao().getEnabled()
 
         var scanned = 0
@@ -56,8 +56,8 @@ class ScanWorker(
                         status = VideoStatus.NEW.name
                     )
 
-                    // Chỉ tiếp tục nếu video thực sự được lưu.
-                    val insertedId = db.sourceVideoDao().insert(video)
+                    val insertedId =
+                        db.sourceVideoDao().insert(video)
 
                     if (insertedId == -1L) {
                         continue
@@ -72,7 +72,16 @@ class ScanWorker(
                         status = PipelineStatus.PENDING
                     )
 
-                    db.pipelineJobDao().insert(pipelineJob)
+                    val jobInserted =
+                        db.pipelineJobDao().insert(pipelineJob)
+
+                    if (jobInserted == -1L) {
+                        Log.w(
+                            "MuChiScan",
+                            "Pipeline job đã tồn tại: ${video.id}"
+                        )
+                        continue
+                    }
 
                     PipelineWorker.enqueue(
                         applicationContext,
@@ -90,21 +99,30 @@ class ScanWorker(
             } catch (e: Exception) {
                 failed++
 
-                android.util.Log.e(
+                Log.e(
                     "MuChiScan",
-                    "Lỗi quét ${account.accountName}",
+                    "Lỗi quét tài khoản ${account.accountName}",
                     e
                 )
             }
         }
 
-        Result.success(
-            workDataOf(
-                "scanned_accounts" to scanned,
-                "discovered_videos" to discovered,
-                "queued_jobs" to queued,
-                "failed_accounts" to failed
+        if (failed > 0) {
+            Log.w(
+                "MuChiScan",
+                "Có $failed tài khoản quét thất bại. Yêu cầu WorkManager thử lại."
             )
-        )
+
+            Result.retry()
+        } else {
+            Result.success(
+                workDataOf(
+                    "scanned_accounts" to scanned,
+                    "discovered_videos" to discovered,
+                    "queued_jobs" to queued,
+                    "failed_accounts" to failed
+                )
+            )
+        }
     }
 }
