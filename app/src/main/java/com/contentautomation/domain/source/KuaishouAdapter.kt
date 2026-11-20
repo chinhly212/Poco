@@ -1,6 +1,8 @@
 
 package com.contentautomation.domain.source
 
+import org.json.JSONObject
+
 class KuaishouAdapter : WebScrapingAdapter() {
 
     override suspend fun getLatestVideos(
@@ -15,7 +17,8 @@ class KuaishouAdapter : WebScrapingAdapter() {
             if (e is SourceUnavailableException) throw e
 
             throw SourceUnavailableException(
-                "Kuaishou scan failed: ${e.message}"
+                "Kuaishou scan failed: ${e.message}",
+                e
             )
         }
     }
@@ -37,7 +40,8 @@ class KuaishouAdapter : WebScrapingAdapter() {
             if (e is SourceUnavailableException) throw e
 
             throw SourceUnavailableException(
-                "Kuaishou metadata failed: ${e.message}"
+                "Kuaishou metadata failed: ${e.message}",
+                e
             )
         }
     }
@@ -50,21 +54,19 @@ class KuaishouAdapter : WebScrapingAdapter() {
         html: String
     ): List<SourceVideoItem> {
 
-        val regex = Regex(
-            "window\\.__APOLLO_STATE__\\s*=\\s*(\\{.*?\\});",
-            RegexOption.DOT_MATCHES_ALL
+        val jsonText = extractJsonObject(
+            html,
+            "__APOLLO_STATE__"
+        ) ?: throw SourceUnavailableException(
+            "Kuaishou không tìm thấy dữ liệu __APOLLO_STATE__."
         )
 
-        val match = regex.find(html)
-            ?: throw SourceUnavailableException(
-                "Kuaishou không tìm thấy __APOLLO_STATE__. Cấu trúc trang có thể đã thay đổi hoặc truy cập bị chặn."
-            )
-
         val root = try {
-            org.json.JSONObject(match.groupValues[1])
+            JSONObject(jsonText)
         } catch (e: Exception) {
             throw SourceUnavailableException(
-                "Kuaishou trả về JSON không hợp lệ: ${e.message}"
+                "Kuaishou trả về JSON không hợp lệ: ${e.message}",
+                e
             )
         }
 
@@ -79,24 +81,77 @@ class KuaishouAdapter : WebScrapingAdapter() {
             }
 
             val obj = root.optJSONObject(key) ?: continue
-            val id = obj.optString("photoId")
 
-            if (id.isBlank() || id == "null") continue
+            val id = obj.optString("photoId")
+                .takeIf { it.isNotBlank() && it != "null" }
+                ?: continue
+
+            val caption = obj.optString("caption")
+                .takeIf { it.isNotBlank() && it != "null" }
+
+            val timestamp = obj.optLong("timestamp")
+                .takeIf { it > 0 }
 
             result.add(
                 SourceVideoItem(
                     id = id,
                     url = "https://www.kuaishou.com/short-video/$id",
-                    title = obj.optString("caption")
-                        .takeIf { it.isNotBlank() },
-                    description = obj.optString("caption")
-                        .takeIf { it.isNotBlank() },
-                    publishedAt = obj.optLong("timestamp")
-                        .takeIf { it > 0 }
+                    title = caption,
+                    description = caption,
+                    publishedAt = timestamp
                 )
             )
         }
 
         return result.distinctBy { it.id }
+    }
+
+    private fun extractJsonObject(
+        source: String,
+        marker: String
+    ): String? {
+
+        val markerIndex = source.indexOf(marker)
+        if (markerIndex < 0) return null
+
+        val start = source.indexOf('{', markerIndex)
+        if (start < 0) return null
+
+        var depth = 0
+        var inString = false
+        var escaped = false
+
+        for (i in start until source.length) {
+            val char = source[i]
+
+            if (inString) {
+                if (escaped) {
+                    escaped = false
+                } else {
+                    when (char) {
+                        '\\' -> escaped = true
+                        '"' -> inString = false
+                    }
+                }
+                continue
+            }
+
+            when (char) {
+                '"' -> inString = true
+                '{' -> depth++
+
+                '}' -> {
+                    depth--
+
+                    if (depth == 0) {
+                        return source.substring(start, i + 1)
+                    }
+
+                    if (depth < 0) return null
+                }
+            }
+        }
+
+        return null
     }
 }
