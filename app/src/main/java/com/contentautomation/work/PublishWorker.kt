@@ -1,4 +1,3 @@
-
 package com.contentautomation.work
 
 import android.content.Context
@@ -98,18 +97,19 @@ class PublishWorker(
                     VideoStatus.PUBLISHING.name
                 )
 
-                var post = postDao.findLatestByProcessedVideoId(
-                    processedId
-                )
+                val existingPost =
+                    postDao.findLatestByProcessedVideoId(processedId)
 
-                // Nếu đã có publish_id thì tuyệt đối không tạo bài mới.
-                if (post != null) {
-                    val existingPublishId = post.publishId
-                        ?: throw IllegalStateException(
-                            "Bài đăng cũ không có publish_id. Dừng để tránh đăng trùng."
-                        )
+                val post: TikTokPost
 
-                    if (post.status == STATUS_COMPLETE) {
+                if (existingPost != null) {
+                    val existingPublishId =
+                        existingPost.publishId
+                            ?: throw IllegalStateException(
+                                "Bài đăng cũ không có publish_id. Dừng để tránh đăng trùng."
+                            )
+
+                    if (existingPost.status == STATUS_COMPLETE) {
                         db.sourceVideoDao().updateStatus(
                             video.id,
                             VideoStatus.PUBLISHED.name
@@ -117,27 +117,26 @@ class PublishWorker(
                         return@withContext Result.success()
                     }
 
-                    if (post.status == STATUS_FAILED) {
+                    if (existingPost.status == STATUS_FAILED) {
                         db.sourceVideoDao().updateStatusError(
                             video.id,
                             VideoStatus.FAILED.name,
-                            post.errorMessage
+                            existingPost.errorMessage
                         )
                         return@withContext Result.failure()
                     }
 
-                    // Tiếp tục kiểm tra bài đăng cũ trên TikTok.
                     val remoteStatus =
                         app.tiktokClient.fetchStatus(existingPublishId)
 
-                    post = post.copy(
+                    post = existingPost.copy(
                         status = remoteStatus.status,
                         errorMessage = remoteStatus.failReason,
                         publishedAt =
                             if (remoteStatus.status == STATUS_COMPLETE) {
                                 System.currentTimeMillis()
                             } else {
-                                post.publishedAt
+                                existingPost.publishedAt
                             }
                     )
 
@@ -170,7 +169,6 @@ class PublishWorker(
                         status = "PROCESSING_UPLOAD"
                     )
 
-                    // Lưu publish_id trước khi tải video lên.
                     postDao.insert(post)
 
                     app.tiktokClient.uploadFile(
@@ -183,7 +181,6 @@ class PublishWorker(
                 var finalStatus = post.status
                 var failReason = post.errorMessage
 
-                // Theo dõi đúng publish_id đã lưu.
                 for (i in 0 until 30) {
                     if (
                         finalStatus == STATUS_COMPLETE ||
@@ -194,17 +191,18 @@ class PublishWorker(
 
                     delay(10_000L)
 
-                    val status = app.tiktokClient.fetchStatus(
-                        post.publishId
-                            ?: throw IllegalStateException(
-                                "Thiếu publish_id"
-                            )
-                    )
+                    val publishId = post.publishId
+                        ?: throw IllegalStateException(
+                            "Thiếu publish_id"
+                        )
+
+                    val status =
+                        app.tiktokClient.fetchStatus(publishId)
 
                     finalStatus = status.status
                     failReason = status.failReason
 
-                    post = post.copy(
+                    val updatedPost = post.copy(
                         status = finalStatus,
                         errorMessage = failReason,
                         publishedAt =
@@ -215,34 +213,35 @@ class PublishWorker(
                             }
                     )
 
-                    postDao.update(post)
+                    postDao.update(updatedPost)
                 }
 
-                if (finalStatus == STATUS_COMPLETE) {
-                    db.sourceVideoDao().updateStatus(
-                        video.id,
-                        VideoStatus.PUBLISHED.name
-                    )
+                when (finalStatus) {
+                    STATUS_COMPLETE -> {
+                        db.sourceVideoDao().updateStatus(
+                            video.id,
+                            VideoStatus.PUBLISHED.name
+                        )
+                        Result.success()
+                    }
 
-                    Result.success()
+                    STATUS_FAILED -> {
+                        db.sourceVideoDao().updateStatusError(
+                            video.id,
+                            VideoStatus.FAILED.name,
+                            failReason
+                        )
+                        Result.failure()
+                    }
 
-                } else if (finalStatus == STATUS_FAILED) {
-                    db.sourceVideoDao().updateStatusError(
-                        video.id,
-                        VideoStatus.FAILED.name,
-                        failReason
-                    )
-
-                    Result.failure()
-
-                } else {
-                    db.sourceVideoDao().updateStatusError(
-                        video.id,
-                        VideoStatus.RETRY_PENDING.name,
-                        "TikTok vẫn đang xử lý bài đăng"
-                    )
-
-                    Result.retry()
+                    else -> {
+                        db.sourceVideoDao().updateStatusError(
+                            video.id,
+                            VideoStatus.RETRY_PENDING.name,
+                            "TikTok vẫn đang xử lý bài đăng"
+                        )
+                        Result.retry()
+                    }
                 }
 
             } catch (e: Exception) {
@@ -251,7 +250,6 @@ class PublishWorker(
                     VideoStatus.RETRY_PENDING.name,
                     e.message
                 )
-
                 Result.retry()
             }
         }
