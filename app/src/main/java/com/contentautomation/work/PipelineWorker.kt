@@ -22,6 +22,9 @@ class PipelineWorker(
 
         const val KEY_JOB_ID = "pipeline_job_id"
 
+        private fun uniqueWorkName(jobId: String): String =
+            "pipeline_$jobId"
+
         fun enqueue(context: Context, jobId: String) {
 
             val request =
@@ -40,8 +43,8 @@ class PipelineWorker(
 
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(
-                    "pipeline_$jobId",
-                    ExistingWorkPolicy.KEEP,
+                    uniqueWorkName(jobId),
+                    ExistingWorkPolicy.APPEND_OR_REPLACE,
                     request
                 )
         }
@@ -77,7 +80,6 @@ class PipelineWorker(
 
             try {
 
-                // Kiểm tra engine
                 if (!ContentAutomationApp.isEngineInitialized) {
                     throw IllegalStateException(
                         ContentAutomationApp.engineInitializationError
@@ -85,8 +87,6 @@ class PipelineWorker(
                     )
                 }
 
-                // Công đoạn chưa triển khai:
-                // Không giả lập thành công
                 if (job.stage == PipelineStage.SPEECH_TO_TEXT) {
 
                     dao.update(
@@ -100,7 +100,6 @@ class PipelineWorker(
                     return@withContext Result.success()
                 }
 
-                // Đánh dấu đang chạy
                 dao.update(
                     job.copy(
                         status = PipelineStatus.RUNNING,
@@ -111,9 +110,9 @@ class PipelineWorker(
 
                 when (job.stage) {
 
-                    // ======================
-                    // 1. TẢI VIDEO
-                    // ======================
+                    // =========================
+                    // 1. DOWNLOAD
+                    // =========================
 
                     PipelineStage.DOWNLOAD -> {
 
@@ -143,14 +142,15 @@ class PipelineWorker(
                             workDir.listFiles()
                                 ?.filter {
                                     it.isFile &&
-                                    it.name.startsWith("source.") &&
-                                    !it.name.endsWith(".part")
+                                        it.name.startsWith("source.") &&
+                                        !it.name.endsWith(".part")
                                 }
                                 ?.maxByOrNull {
                                     it.lastModified()
                                 }
 
-                        if (downloaded == null ||
+                        if (
+                            downloaded == null ||
                             downloaded.length() == 0L
                         ) {
                             throw IllegalStateException(
@@ -158,7 +158,6 @@ class PipelineWorker(
                             )
                         }
 
-                        // Lưu file video đã tải
                         dao.update(
                             job.copy(
                                 stage = PipelineStage.ANALYZE,
@@ -174,16 +173,17 @@ class PipelineWorker(
                             VideoStatus.PROCESSING_VIDEO.name
                         )
 
-                        // Chạy tiếp công đoạn
+                        // APPEND_OR_REPLACE cho phép nối
+                        // công việc tiếp theo vào unique work hiện tại.
                         enqueue(
                             applicationContext,
                             job.id
                         )
                     }
 
-                    // ======================
-                    // 2. TÁCH ÂM THANH
-                    // ======================
+                    // =========================
+                    // 2. ANALYZE
+                    // =========================
 
                     PipelineStage.ANALYZE -> {
 
@@ -191,8 +191,8 @@ class PipelineWorker(
                             workDir.listFiles()
                                 ?.filter {
                                     it.isFile &&
-                                    it.name.startsWith("source.") &&
-                                    !it.name.endsWith(".part")
+                                        it.name.startsWith("source.") &&
+                                        !it.name.endsWith(".part")
                                 }
                                 ?.maxByOrNull {
                                     it.lastModified()
@@ -233,8 +233,8 @@ class PipelineWorker(
                             )
                         }
 
-                        // Kiểm tra audio thật
-                        if (!audioFile.exists() ||
+                        if (
+                            !audioFile.exists() ||
                             audioFile.length() <= 0L
                         ) {
                             throw IllegalStateException(
@@ -242,7 +242,6 @@ class PipelineWorker(
                             )
                         }
 
-                        // Cập nhật công đoạn
                         dao.update(
                             job.copy(
                                 stage = PipelineStage.SPEECH_TO_TEXT,
@@ -252,10 +251,11 @@ class PipelineWorker(
                                 updatedAt = System.currentTimeMillis()
                             )
                         )
-
-                        // Không tự chạy bước STT
-                        // khi API chưa được cấu hình
                     }
+
+                    // =========================
+                    // CÁC CÔNG ĐOẠN CHƯA TRIỂN KHAI
+                    // =========================
 
                     else -> {
 
@@ -298,6 +298,7 @@ class PipelineWorker(
                             PipelineStatus.PENDING,
 
                         retries = retryCount,
+
                         error = e.message
                             ?: "Lỗi không xác định",
 
@@ -322,3 +323,4 @@ class PipelineWorker(
             }
         }
 }
+
