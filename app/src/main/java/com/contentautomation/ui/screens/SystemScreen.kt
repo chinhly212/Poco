@@ -1,32 +1,31 @@
 package com.contentautomation.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.contentautomation.data.db.entity.PipelineJob
-import com.contentautomation.data.db.entity.PipelineStage
 import com.contentautomation.data.db.entity.PipelineStatus
 import com.contentautomation.ui.MainViewModel
 import com.contentautomation.ui.components.*
 
 private const val MAX_VISIBLE_JOBS = 100
 
-private enum class JobFilter(val label: String) {
-    ALL("Tất cả"),
-    RUNNING("Đang chạy"),
-    PENDING("Đang chờ"),
-    DONE("Hoàn thành"),
-    FAILED("Thất bại"),
-    PAUSED("Tạm dừng")
+private enum class JobFilter(val label: String, val status: PipelineStatus?) {
+    ALL("Tất cả", null),
+    RUNNING("Đang chạy", PipelineStatus.RUNNING),
+    PENDING("Đang chờ", PipelineStatus.PENDING),
+    DONE("Hoàn thành", PipelineStatus.DONE),
+    FAILED("Thất bại", PipelineStatus.FAILED),
+    PAUSED("Tạm dừng", PipelineStatus.PAUSED)
 }
 
 @Composable
@@ -34,337 +33,94 @@ fun SystemScreen(
     vm: MainViewModel,
     jobs: List<PipelineJob>
 ) {
-    var selectedFilter by remember { mutableStateOf(JobFilter.ALL) }
+    var filter by remember { mutableStateOf(JobFilter.ALL) }
 
-    val runningCount = jobs.count { it.status == PipelineStatus.RUNNING }
-    val pendingCount = jobs.count { it.status == PipelineStatus.PENDING }
-    val doneCount = jobs.count { it.status == PipelineStatus.DONE }
-    val failedCount = jobs.count { it.status == PipelineStatus.FAILED }
-
-    val filteredJobs = remember(jobs, selectedFilter) {
-        val filtered = when (selectedFilter) {
-            JobFilter.ALL -> jobs
-            JobFilter.RUNNING -> jobs.filter { it.status == PipelineStatus.RUNNING }
-            JobFilter.PENDING -> jobs.filter { it.status == PipelineStatus.PENDING }
-            JobFilter.DONE -> jobs.filter { it.status == PipelineStatus.DONE }
-            JobFilter.FAILED -> jobs.filter { it.status == PipelineStatus.FAILED }
-            JobFilter.PAUSED -> jobs.filter { it.status == PipelineStatus.PAUSED }
-        }
-        filtered.take(MAX_VISIBLE_JOBS)
+    val shown = remember(jobs, filter) {
+        (filter.status?.let { s -> jobs.filter { it.status == s } } ?: jobs).take(MAX_VISIBLE_JOBS)
     }
 
-    ScreenColumn(
-        title = "Công việc",
-        subtitle = "Theo dõi tiến trình xử lý video"
-    ) {
+    ScreenColumn {
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                GText(
-                    "TỔNG QUAN PIPELINE",
-                    11.sp,
-                    color = GlassColors.InkSoft,
-                    weight = FontWeight.Bold
-                )
-
+                GText("Tổng số công việc", 12.sp, color = GlassColors.InkSoft)
+                GText(jobs.size.toString(), 30.sp, weight = FontWeight.Bold)
                 Spacer(Modifier.height(14.dp))
-
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    SummaryItem("Tổng việc", jobs.size.toString(), GlassColors.Blue)
-                    SummaryItem("Đang chạy", runningCount.toString(), GlassColors.Blue)
-                    SummaryItem("Hoàn thành", doneCount.toString(), GlassColors.Green)
-                    SummaryItem("Thất bại", failedCount.toString(), GlassColors.Red)
+                Row(Modifier.fillMaxWidth()) {
+                    Count("Đang chạy", jobs, PipelineStatus.RUNNING, GlassColors.Blue)
+                    Count("Đang chờ", jobs, PipelineStatus.PENDING, GlassColors.InkSoft)
+                    Count("Xong", jobs, PipelineStatus.DONE, GlassColors.Green)
+                    Count("Lỗi", jobs, PipelineStatus.FAILED, GlassColors.Red)
+                    Count("Dừng", jobs, PipelineStatus.PAUSED, GlassColors.Amber)
                 }
-
-                Spacer(Modifier.height(14.dp))
-
-                GText(
-                    "Đang chờ: $pendingCount công việc",
-                    12.sp,
-                    color = GlassColors.InkSoft
-                )
             }
         }
 
-        Spacer(Modifier.height(18.dp))
-
-        GText(
-            "LỌC CÔNG VIỆC",
-            12.sp,
-            color = GlassColors.InkSoft,
-            weight = FontWeight.Bold
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            JobFilter.entries.take(3).forEach { filter ->
-                FilterChip(
-                    selected = selectedFilter == filter,
-                    onClick = { selectedFilter = filter },
-                    label = { GText(filter.label, 11.sp) }
-                )
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            JobFilter.entries.forEach { f ->
+                GlassChip(f.label, selected = filter == f, onClick = { filter = f })
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            JobFilter.entries.drop(3).forEach { filter ->
-                FilterChip(
-                    selected = selectedFilter == filter,
-                    onClick = { selectedFilter = filter },
-                    label = { GText(filter.label, 11.sp) }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            GText(
-                "Danh sách công việc",
-                16.sp,
-                weight = FontWeight.SemiBold
-            )
-
-            GText(
-                "${filteredJobs.size} mục",
-                12.sp,
-                color = GlassColors.InkSoft
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        if (filteredJobs.isEmpty()) {
-            GlassCard(Modifier.fillMaxWidth()) {
+        if (shown.isEmpty()) {
+            GlassCard(Modifier.fillMaxWidth(), RoundedCornerShape(22.dp)) {
                 Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
+                    Modifier.fillMaxWidth().padding(25.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    StatusDot(GlassColors.InkFaint)
-
-                    Spacer(Modifier.height(12.dp))
-
                     GText(
-                        if (jobs.isEmpty()) {
-                            "Chưa có công việc nào"
-                        } else {
-                            "Không có công việc phù hợp"
-                        },
-                        15.sp,
-                        weight = FontWeight.SemiBold
+                        if (jobs.isEmpty()) "Chưa có công việc" else "Không tìm thấy công việc",
+                        15.sp, weight = FontWeight.SemiBold
                     )
-
-                    Spacer(Modifier.height(6.dp))
-
+                    Spacer(Modifier.height(5.dp))
                     GText(
-                        if (jobs.isEmpty()) {
-                            "Công việc sẽ xuất hiện tại đây khi được tạo."
-                        } else {
-                            "Hãy chọn bộ lọc khác để xem công việc."
-                        },
-                        12.sp,
-                        color = GlassColors.InkSoft
+                        if (jobs.isEmpty()) "Video được đưa vào xử lý sẽ xuất hiện tại đây."
+                        else "Hãy chọn một bộ lọc khác.",
+                        12.sp, color = GlassColors.InkSoft, align = TextAlign.Center
                     )
                 }
             }
         } else {
-            filteredJobs.forEach { job ->
-                PipelineJobCard(job)
-                Spacer(Modifier.height(9.dp))
-            }
-
+            shown.forEach { JobCard(it) }
             if (jobs.size > MAX_VISIBLE_JOBS) {
-                GText(
-                    "Danh sách được giới hạn ở 100 công việc.",
-                    11.sp,
-                    color = GlassColors.InkSoft
-                )
+                GText("Đang hiển thị tối đa $MAX_VISIBLE_JOBS công việc.", 11.sp, color = GlassColors.InkSoft)
             }
         }
     }
 }
 
 @Composable
-private fun SummaryItem(
-    label: String,
-    value: String,
-    color: androidx.compose.ui.graphics.Color
-) {
-    Column {
-        GText(
-            value,
-            21.sp,
-            color = color,
-            weight = FontWeight.Bold
-        )
-        GText(
-            label,
-            10.sp,
-            color = GlassColors.InkSoft
-        )
+private fun RowScope.Count(label: String, jobs: List<PipelineJob>, status: PipelineStatus, color: Color) {
+    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+        GText(jobs.count { it.status == status }.toString(), 20.sp, weight = FontWeight.Bold, color = color)
+        GText(label, 10.sp, color = GlassColors.InkSoft)
     }
 }
 
 @Composable
-private fun PipelineJobCard(job: PipelineJob) {
-    val statusColor = when (job.status) {
-        PipelineStatus.RUNNING -> GlassColors.Blue
-        PipelineStatus.DONE -> GlassColors.Green
-        PipelineStatus.FAILED -> GlassColors.Red
-        PipelineStatus.PAUSED -> GlassColors.Amber
-        PipelineStatus.PENDING -> GlassColors.InkFaint
+private fun JobCard(job: PipelineJob) {
+    val (color, text) = when (job.status) {
+        PipelineStatus.RUNNING -> GlassColors.Blue to "Đang chạy"
+        PipelineStatus.DONE -> GlassColors.Green to "Hoàn thành"
+        PipelineStatus.FAILED -> GlassColors.Red to "Thất bại"
+        PipelineStatus.PAUSED -> GlassColors.Amber to "Tạm dừng"
+        PipelineStatus.PENDING -> GlassColors.InkSoft to "Đang chờ"
     }
 
-    GlassCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(15.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                StatusDot(statusColor)
-
-                Spacer(Modifier.width(10.dp))
-
-                Column(Modifier.weight(1f)) {
-                    GText(
-                        stageName(job.stage),
-                        15.sp,
-                        weight = FontWeight.SemiBold
-                    )
-
-                    Spacer(Modifier.height(3.dp))
-
-                    GText(
-                        statusName(job.status),
-                        12.sp,
-                        color = statusColor,
-                        weight = FontWeight.Medium
-                    )
-                }
-
-                Surface(
-                    color = statusColor.copy(alpha = 0.12f),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    GText(
-                        statusName(job.status),
-                        10.sp,
-                        color = statusColor,
-                        weight = FontWeight.SemiBold
-                    )
-                }
+    GlassCard(Modifier.fillMaxWidth(), RoundedCornerShape(22.dp)) {
+        Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                StatusDot(color)
+                GText(job.stage.name, 14.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                GText(text, 11.sp, weight = FontWeight.Bold, color = color)
             }
-
-            Spacer(Modifier.height(13.dp))
-
-            Surface(
-                color = GlassColors.InkFaint.copy(alpha = 0.07f),
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(11.dp)
-                ) {
-                    GText(
-                        "VIDEO ID",
-                        10.sp,
-                        color = GlassColors.InkSoft,
-                        weight = FontWeight.Bold
-                    )
-
-                    Spacer(Modifier.height(4.dp))
-
-                    GText(
-                        job.sourceVideoId,
-                        12.sp,
-                        color = GlassColors.Ink
-                    )
-                }
+            GlassDivider()
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                GText(job.sourceVideoId, 12.sp, color = GlassColors.InkSoft, modifier = Modifier.weight(1f))
+                GText("Thử lại: ${job.retries}", 12.sp, color = GlassColors.InkSoft)
             }
-
-            Spacer(Modifier.height(10.dp))
-
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                GText(
-                    "Số lần thử",
-                    11.sp,
-                    color = GlassColors.InkSoft
-                )
-
-                GText(
-                    job.retries.toString(),
-                    11.sp,
-                    weight = FontWeight.SemiBold
-                )
-            }
-
             if (!job.error.isNullOrBlank()) {
-                Spacer(Modifier.height(10.dp))
-
-                Surface(
-                    color = GlassColors.Red.copy(alpha = 0.08f),
-                    shape = MaterialTheme.shapes.medium
-                ) {
-                    Column(Modifier.padding(10.dp)) {
-                        GText(
-                            "CHI TIẾT LỖI",
-                            10.sp,
-                            color = GlassColors.Red,
-                            weight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.height(4.dp))
-
-                        GText(
-                            job.error,
-                            12.sp,
-                            color = GlassColors.Red
-                        )
-                    }
-                }
+                GText(job.error!!, 12.sp, color = GlassColors.Red)
             }
         }
     }
 }
-
-private fun stageName(stage: PipelineStage): String =
-    when (stage) {
-        PipelineStage.DOWNLOAD -> "Tải video"
-        PipelineStage.ANALYZE -> "Phân tích video"
-        PipelineStage.SPEECH_TO_TEXT -> "Nhận dạng giọng nói"
-        PipelineStage.TRANSLATE -> "Dịch nội dung"
-        PipelineStage.TTS -> "Tạo giọng đọc"
-        PipelineStage.SUBTITLE -> "Tạo phụ đề"
-        PipelineStage.MERGE -> "Ghép video và âm thanh"
-        PipelineStage.EXPORT -> "Xuất video"
-        PipelineStage.UPLOAD -> "Tải lên"
-        PipelineStage.VERIFY -> "Kiểm tra kết quả"
-    }
-
-private fun statusName(status: PipelineStatus): String =
-    when (status) {
-        PipelineStatus.PENDING -> "Đang chờ"
-        PipelineStatus.RUNNING -> "Đang chạy"
-        PipelineStatus.DONE -> "Hoàn thành"
-        PipelineStatus.FAILED -> "Thất bại"
-        PipelineStatus.PAUSED -> "Tạm dừng"
-    }
-    
