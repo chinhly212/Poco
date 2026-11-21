@@ -12,6 +12,13 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
+import org.json.JSONObject
 import kotlin.coroutines.resume
 
 /**
@@ -21,12 +28,71 @@ import kotlin.coroutines.resume
  */
 class PipelineMediaProcessor(private val context: Context) {
     private val api = AiVideoServerClient()
+    private val transcriptionClient = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(180, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .callTimeout(240, TimeUnit.SECONDS)
+        .build()
+
+    /**
+     * Extracts a small mono audio track and transcribes Chinese speech with Groq Whisper.
+     * The API key is passed per request and is never written to logs or disk.
+     */
+    suspend fun transcribeChinese(video: File, groqApiKey: String): String =
+        withContext(Dispatchers.IO) {
+            require(groqApiKey.isNotBlank()) { "Chưa có Groq API key để nhận diện lời nói." }
+            require(video.exists() && video.length() > 0L) { "Không tìm thấy video để nhận diện lời nói." }
+
+            val audio = File(video.parentFile, "source-audio.m4a")
+            if (audio.exists()) audio.delete()
+            try {
+                val escapedVideo = video.absolutePath.replace("'", "'\\''")
+                val escapedAudio = audio.absolutePath.replace("'", "'\\''")
+                val command = "-y -i '$escapedVideo' -vn -ac 1 -ar 16000 -c:a aac -b:a 32k -f ipod '$escapedAudio'"
+                val extractSession = FFmpegKit.execute(command)
+                if (!ReturnCode.isSuccess(extractSession.returnCode) ||
+                    !audio.exists() || audio.length() <= 0L) {
+                    throw IllegalStateException("Không tách được âm thanh để nhận diện: \${(extractSession.failStackTrace ?: "").take(300)}")
+                }
+                if (audio.length() > 24L * 1024L * 1024L) {
+                    throw IllegalStateException("Âm thanh sau khi tách vẫn vượt 24 MB. Hãy dùng video ngắn hơn.")
+                }
+
+                val multipart = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("model", "whisper-large-v3-turbo")
+                    .addFormDataPart("language", "zh")
+                    .addFormDataPart("response_format", "json")
+                    .addFormDataPart("file", audio.name, audio.asRequestBody("audio/mp4".toMediaType()))
+                    .build()
+                val request = Request.Builder()
+                    .url("https://api.groq.com/openai/v1/audio/transcriptions")
+                    .header("Authorization", "Bearer $groqApiKey")
+                    .post(multipart)
+                    .build()
+
+                transcriptionClient.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        val detail = runCatching { JSONObject(body).optJSONObject("error")?.optString("message") }
+                            .getOrNull()?.takeIf { it.isNotBlank() }
+                        throw IllegalStateException("Groq Whisper HTTP \${response.code}: \${detail ?: body.take(300)}")
+                    }
+                    val transcript = JSONObject(body).optString("text").trim()
+                    require(transcript.isNotBlank()) { "Groq Whisper không nhận diện được lời nói trong video." }
+                    transcript
+                }
+            } finally {
+                audio.delete()
+            }
+        }
 
     suspend fun translateToVietnamese(
         sourceText: String,
         apiKeys: Map<String, String>
     ): String {
-        val input = sourceText.trim()
+        val input = sourceText.trim().take(7000)
         require(input.isNotBlank()) { "Video không có tiêu đề hoặc mô tả để dịch." }
         require(apiKeys.values.any { it.isNotBlank() }) {
             "Chưa có API AI đã lưu. Hãy vào Cài đặt → API, kết nối Gemini, OpenRouter hoặc Groq trước."
