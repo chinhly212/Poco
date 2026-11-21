@@ -12,7 +12,6 @@ import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
 import com.google.api.services.drive.DriveScopes
-import android.content.Intent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -56,7 +55,6 @@ import com.contentautomation.ui.screens.AiScreen
 import com.contentautomation.ui.screens.SettingsScreen
 import com.contentautomation.ui.screens.SystemScreen
 import com.contentautomation.ui.screens.StorageScreen
-import com.contentautomation.ui.auth.TikTokAuthActivity
 
 private object MuChiRoutes {
     const val HOME = "home"
@@ -88,10 +86,6 @@ fun AppNavHost(vm: MainViewModel) {
             }
         }
     }
-
-    val tiktokAuthLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { vm.refreshTikTokStatus() }
 
     val driveUploadLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -165,9 +159,6 @@ fun AppNavHost(vm: MainViewModel) {
 
     val driveState by vm.driveState.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.refreshDrive() }
-    val tiktokClientKey by vm.tiktokClientKey.collectAsStateWithLifecycle()
-    val tiktokClientSecret by vm.tiktokClientSecret.collectAsStateWithLifecycle()
-    val tiktokConnected by vm.tiktokConnected.collectAsStateWithLifecycle()
 
     val backStackEntry by
         navController.currentBackStackEntryAsState()
