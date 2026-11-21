@@ -184,6 +184,52 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _uiErrors.value = emptyList()
     }
 
+    // AI API KEY MANAGEMENT: keys are stored only in EncryptedSharedPreferences.
+    private val apiClient = com.contentautomation.video.AiVideoServerClient()
+
+    fun getSavedApiKeys(): Map<String, String> = listOf("gemini", "openrouter", "groq")
+        .mapNotNull { provider ->
+            application.prefs.getSecret("ai_api_$provider")?.takeIf { it.isNotBlank() }
+                ?.let { provider to it }
+        }.toMap()
+
+    fun hasSavedApiKey(provider: String): Boolean =
+        !application.prefs.getSecret("ai_api_${provider.lowercase()}").isNullOrBlank()
+
+    fun validateAndSaveApi(provider: String, apiKey: String) {
+        viewModelScope.launch {
+            val label = provider.replaceFirstChar { it.uppercase() }
+            try {
+                require(apiKey.isNotBlank()) { "API key không được để trống." }
+                apiClient.validateProvider(provider, apiKey.trim())
+                application.prefs.setSecret("ai_api_${provider.lowercase()}", apiKey.trim())
+                recordError(
+                    ErrorKind.NetworkLost,
+                    "Kết nối thành công · $label",
+                    "API đã được kiểm tra trực tiếp với nhà cung cấp và lưu mã hóa trên điện thoại.",
+                    "Đã hiểu"
+                )
+            } catch (e: Exception) {
+                recordError(
+                    ErrorKind.NetworkLost,
+                    "Kết nối thất bại · $label",
+                    e.message ?: "Không xác định được nguyên nhân. Hãy kiểm tra mạng và API key.",
+                    "Kiểm tra API"
+                )
+            }
+        }
+    }
+
+    fun removeApiKey(provider: String) {
+        application.prefs.removeSecret("ai_api_${provider.lowercase()}")
+        recordError(
+            ErrorKind.NetworkLost,
+            "Đã xóa API · ${provider.replaceFirstChar { it.uppercase() }}",
+            "Khóa API đã được xóa khỏi vùng lưu trữ mã hóa trên điện thoại.",
+            "Đã hiểu"
+        )
+    }
+
     // INITIALIZATION
 
     init {
