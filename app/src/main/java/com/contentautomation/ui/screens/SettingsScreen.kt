@@ -100,7 +100,7 @@ fun SettingsScreen(
                             color = if (douyinSession) GlassColors.Green else GlassColors.Amber)
                     }
                     GlassButton(if (douyinSession) "Đăng nhập lại" else "Đăng nhập", onClick = onLoginDouyin)
-                    if (douyinSession) TextButton(onClick = onLogoutDouyin) { GText("Thoát", 11.sp, color = GlassColors.Red) }
+                    if (douyinSession) TextButton(onClick = onLogoutDouyin) { GText("Xóa phiên", 11.sp, color = GlassColors.Red) }
                 }
                 GlassDivider()
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -110,7 +110,7 @@ fun SettingsScreen(
                             color = if (kuaishouSession) GlassColors.Green else GlassColors.Amber)
                     }
                     GlassButton(if (kuaishouSession) "Đăng nhập lại" else "Đăng nhập", onClick = onLoginKuaishou)
-                    if (kuaishouSession) TextButton(onClick = onLogoutKuaishou) { GText("Thoát", 11.sp, color = GlassColors.Red) }
+                    if (kuaishouSession) TextButton(onClick = onLogoutKuaishou) { GText("Xóa phiên", 11.sp, color = GlassColors.Red) }
                 }
             }
         }
