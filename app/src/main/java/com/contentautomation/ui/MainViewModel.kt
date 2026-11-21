@@ -40,31 +40,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val translationService = TranslationService {
         application.prefs.getTranslationApiKeySecure()
     }
-    val tiktokClientKey = application.prefs.tiktokClientKey.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
-    )
-    val tiktokClientSecret = application.prefs.tiktokClientSecret.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
-    )
-    private val _tiktokConnected = MutableStateFlow(!application.prefs.getAccessToken().isNullOrBlank())
-    val tiktokConnected = _tiktokConnected.asStateFlow()
-
-    fun saveTikTokCredentials(clientKey: String, clientSecret: String) {
-        viewModelScope.launch {
-            application.prefs.set(AppPreferences.KEY_TIKTOK_CLIENT_KEY, clientKey.trim())
-            application.prefs.set(AppPreferences.KEY_TIKTOK_CLIENT_SECRET, clientSecret.trim())
-        }
-    }
-
-    fun refreshTikTokStatus() {
-        _tiktokConnected.value = !application.prefs.getAccessToken().isNullOrBlank()
-    }
-
-    fun disconnectTikTok() {
-        application.prefs.clearTokens()
-        _tiktokConnected.value = false
-    }
-
     private val _translationResult = MutableStateFlow("")
     val translationResult = _translationResult.asStateFlow()
     private val _translationLoading = MutableStateFlow(false)
