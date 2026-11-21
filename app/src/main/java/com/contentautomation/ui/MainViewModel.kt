@@ -32,6 +32,12 @@ data class DriveUiState(
     val message: String? = null
 )
 
+data class ApiConnectionStatus(
+    val checking: Boolean = false,
+    val connected: Boolean = false,
+    val message: String = ""
+)
+
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val application = app as ContentAutomationApp
@@ -184,8 +190,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _uiErrors.value = emptyList()
     }
 
-    // AI API KEY MANAGEMENT: keys are stored only in EncryptedSharedPreferences.
+    // API keys are stored only in EncryptedSharedPreferences.
     private val apiClient = com.contentautomation.video.AiVideoServerClient()
+    private val _apiConnectionStates = MutableStateFlow<Map<String, ApiConnectionStatus>>(emptyMap())
+    val apiConnectionStates = _apiConnectionStates.asStateFlow()
 
     fun getSavedApiKeys(): Map<String, String> = listOf("gemini", "openrouter", "groq")
         .mapNotNull { provider ->
@@ -197,23 +205,42 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         !application.prefs.getSecret("ai_api_${provider.lowercase()}").isNullOrBlank()
 
     fun validateAndSaveApi(provider: String, apiKey: String) {
+        val normalized = provider.lowercase()
+        val label = when (normalized) {
+            "gemini" -> "Google Gemini"
+            "openrouter" -> "OpenRouter"
+            "groq" -> "Groq"
+            else -> normalized
+        }
         viewModelScope.launch {
-            val label = provider.replaceFirstChar { it.uppercase() }
+            _apiConnectionStates.update {
+                it + (normalized to ApiConnectionStatus(checking = true, message = "Đang kiểm tra trực tiếp với nhà cung cấp…"))
+            }
             try {
+                require(normalized in setOf("gemini", "openrouter", "groq")) {
+                    "Nhà cung cấp API chưa được hỗ trợ."
+                }
                 require(apiKey.isNotBlank()) { "API key không được để trống." }
-                apiClient.validateProvider(provider, apiKey.trim())
-                application.prefs.setSecret("ai_api_${provider.lowercase()}", apiKey.trim())
+                val result = apiClient.validateProvider(normalized, apiKey.trim())
+                application.prefs.setSecret("ai_api_$normalized", apiKey.trim())
+                _apiConnectionStates.update {
+                    it + (normalized to ApiConnectionStatus(connected = true, message = result))
+                }
                 recordError(
                     ErrorKind.NetworkLost,
                     "Kết nối thành công · $label",
-                    "API đã được kiểm tra trực tiếp với nhà cung cấp và lưu mã hóa trên điện thoại.",
+                    "Khóa API đã được xác thực với nhà cung cấp và lưu mã hóa trên điện thoại.",
                     "Đã hiểu"
                 )
             } catch (e: Exception) {
+                val reason = e.message ?: "Không xác định được nguyên nhân. Hãy kiểm tra mạng và API key."
+                _apiConnectionStates.update {
+                    it + (normalized to ApiConnectionStatus(connected = false, message = reason))
+                }
                 recordError(
                     ErrorKind.NetworkLost,
                     "Kết nối thất bại · $label",
-                    e.message ?: "Không xác định được nguyên nhân. Hãy kiểm tra mạng và API key.",
+                    reason,
                     "Kiểm tra API"
                 )
             }
