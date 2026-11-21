@@ -14,8 +14,10 @@ android {
         applicationId = "com.contentautomation"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.7.0"
+        // CI tăng phiên bản theo số lần chạy workflow; build local giữ phiên bản nền.
+        val buildNumber = providers.gradleProperty("buildNumber").orNull?.toIntOrNull() ?: 0
+        versionCode = 9 + buildNumber
+        versionName = "1.7.$buildNumber"
         multiDexEnabled = true
     }
 
