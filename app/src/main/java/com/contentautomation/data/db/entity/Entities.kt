@@ -16,8 +16,8 @@ enum class VideoStatus {
     PUBLISHING, PUBLISHED, FAILED, RETRY_PENDING
 }
 
-enum class Platform { KUAISHOU, DOUYIN, TIKTOK }
-enum class AudioMode { ORIGINAL, TIKTOK }
+enum class Platform { KUAISHOU, DOUYIN }
+enum class AudioMode { ORIGINAL }
 
 class Converters {
     private val gson = Gson()
