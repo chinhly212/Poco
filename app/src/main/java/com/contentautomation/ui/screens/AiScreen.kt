@@ -32,10 +32,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
+import com.contentautomation.ContentAutomationApp
 import com.contentautomation.ui.MainViewModel
 import com.contentautomation.video.AiVideoServerClient
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
 import com.contentautomation.video.MediaStoreSaver
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 private data class AiChatLine(val text: String, val fromUser: Boolean)
@@ -149,34 +154,88 @@ fun AiScreen(vm: MainViewModel) {
                         input = ""
                         busy = true
                         scope.launch {
+                            val sourceUrl = Regex("https?://[^\\s<>]+")
+                                .find(prompt)?.value?.trimEnd('.', ',', ')', ']', '}')
                             try {
-                                val response = server.sendChat(prompt)
-                                if (response.type == "video" && !response.videoUrl.isNullOrBlank()) {
-                                    lines.add(AiChatLine("Đã tìm thấy video qua ${response.provider ?: "máy chủ"}. Đang tải và lưu vào điện thoại…", false))
-                                    val temp = File(context.cacheDir, "muchiai_${System.currentTimeMillis()}.mp4")
-                                    try {
-                                        val downloaded = server.downloadResolvedVideo(
-                                            response.videoUrl,
-                                            temp,
-                                            response.provider,
-                                            response.title
-                                        )
-                                        val saved = MediaStoreSaver(context).saveVideoToGallery(
-                                            temp,
-                                            "MuChi_${System.currentTimeMillis()}.mp4"
-                                        )
-                                        if (saved == null) throw IllegalStateException("Không lưu được video vào thư viện.")
-                                        lines.add(
-                                            AiChatLine(
-                                                "Đã tải và lưu video vào Movies/MuChi. Nguồn: ${downloaded.provider}. Dung lượng: ${downloaded.bytesWritten / 1024} KB.",
-                                                false
+                                val response = runCatching { server.sendChat(prompt) }
+                                val serverReply = response.getOrNull()
+                                val resolvedUrl = serverReply?.videoUrl
+                                    ?.takeIf { serverReply.type == "video" && it.isNotBlank() }
+
+                                if (sourceUrl != null) {
+                                    var saved = false
+                                    var serverError = serverReply?.message
+                                        ?: response.exceptionOrNull()?.message
+                                        ?: "Máy chủ chưa trả đường dẫn video."
+                                    if (resolvedUrl != null) {
+                                        lines.add(AiChatLine("Máy chủ đã tìm thấy video qua ${serverReply?.provider ?: "API"}. Đang tải…", false))
+                                        val temp = File(context.cacheDir, "muchiai_server_${System.currentTimeMillis()}.mp4")
+                                        try {
+                                            val downloaded = server.downloadResolvedVideo(
+                                                resolvedUrl, temp, serverReply?.provider, serverReply?.title
                                             )
-                                        )
-                                    } finally {
-                                        temp.delete()
+                                            val uri = MediaStoreSaver(context).saveVideoToGallery(
+                                                temp, "MuChi_${System.currentTimeMillis()}.mp4"
+                                            )
+                                            if (uri == null) throw IllegalStateException("Không lưu được video vào thư viện.")
+                                            lines.add(AiChatLine(
+                                                "Đã tải và lưu video vào Movies/MuChi. Nguồn: ${downloaded.provider}; ${downloaded.bytesWritten / 1024} KB.",
+                                                false
+                                            ))
+                                            saved = true
+                                        } catch (error: Exception) {
+                                            serverError = error.message ?: "Không tải được file từ API."
+                                        } finally {
+                                            temp.delete()
+                                        }
+                                    }
+
+                                    if (!saved) {
+                                        lines.add(AiChatLine("API máy chủ chưa tải được. Đang thử bộ tải dự phòng trên điện thoại…", false))
+                                        val fallbackDir = File(context.cacheDir, "muchiai_fallback_${System.currentTimeMillis()}")
+                                        try {
+                                            val localFile = withContext(Dispatchers.IO) {
+                                                fallbackDir.mkdirs()
+                                                val app = context.applicationContext as ContentAutomationApp
+                                                if (!app.awaitMediaEngines()) {
+                                                    throw IllegalStateException(
+                                                        ContentAutomationApp.engineInitializationError
+                                                            ?: "Bộ tải trên điện thoại chưa sẵn sàng."
+                                                    )
+                                                }
+                                                val template = File(fallbackDir, "video.%(ext)s").absolutePath
+                                                val request = YoutubeDLRequest(sourceUrl).apply {
+                                                    addOption("--no-playlist")
+                                                    addOption("-f", "best")
+                                                    addOption("-o", template)
+                                                }
+                                                YoutubeDL.getInstance().execute(request)
+                                                fallbackDir.listFiles()
+                                                    ?.filter { it.isFile && !it.name.endsWith(".part") && it.length() > 0L }
+                                                    ?.maxByOrNull { it.length() }
+                                                    ?: throw IllegalStateException("yt-dlp không tạo được file video.")
+                                            }
+                                            val uri = MediaStoreSaver(context).saveVideoToGallery(
+                                                localFile, "MuChi_${System.currentTimeMillis()}.mp4"
+                                            )
+                                            if (uri == null) throw IllegalStateException("Tải xong nhưng không lưu được vào thư viện.")
+                                            lines.add(AiChatLine(
+                                                "Đã tải và lưu video vào Movies/MuChi bằng bộ tải dự phòng trên điện thoại.",
+                                                false
+                                            ))
+                                        } catch (localError: Exception) {
+                                            lines.add(AiChatLine(
+                                                "Chưa tải được video. Lỗi máy chủ: $serverError. Lỗi bộ tải trên điện thoại: ${localError.message ?: "không xác định"}.",
+                                                false
+                                            ))
+                                        } finally {
+                                            fallbackDir.deleteRecursively()
+                                        }
                                     }
                                 } else {
-                                    lines.add(AiChatLine(response.message, false))
+                                    val reply = serverReply?.message
+                                        ?: "Không thể kết nối máy chủ AI: ${response.exceptionOrNull()?.message ?: "lỗi không xác định"}"
+                                    lines.add(AiChatLine(reply, false))
                                 }
                             } catch (error: Exception) {
                                 lines.add(AiChatLine("Không xử lý được yêu cầu: ${error.message ?: "Lỗi không xác định"}", false))
