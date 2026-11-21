@@ -128,7 +128,7 @@ class ScanWorker(
                         db.notificationDao().insert(
                             com.contentautomation.data.db.entity.StoredNotification(
                                 id = "scan_${account.id}_$bucket",
-                                kind = "VideoUnavailable",
+                                kind = "NetworkLost",
                                 title = "Quét thất bại · ${account.accountName}",
                                 message = reason,
                                 time = SimpleDateFormat("HH:mm dd/MM/yyyy", Locale.getDefault()).format(Date()),
