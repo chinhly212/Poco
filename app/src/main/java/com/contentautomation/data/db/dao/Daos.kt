@@ -85,3 +85,19 @@ interface ProcessedVideoDao {
     fun countByStatus(status: String): Flow<Int>
 }
 
+
+
+@Dao
+interface NotificationDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(item: com.contentautomation.data.db.entity.StoredNotification)
+
+    @Query("SELECT * FROM stored_notifications ORDER BY created_at DESC LIMIT 200")
+    fun observeAll(): Flow<List<com.contentautomation.data.db.entity.StoredNotification>>
+
+    @Query("DELETE FROM stored_notifications WHERE id = :id")
+    suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM stored_notifications")
+    suspend fun deleteAll()
+}
