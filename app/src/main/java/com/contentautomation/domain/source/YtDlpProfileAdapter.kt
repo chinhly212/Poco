@@ -39,7 +39,7 @@ abstract class YtDlpProfileAdapter : SourceAdapter {
                 val entries = root.optJSONArray("entries")
                 val title = firstText(root, "uploader", "channel", "creator", "title")
                 val resolvedId = firstText(root, "channel_id", "uploader_id", "id") ?: identifier
-                val avatar = firstText(root, "thumbnail", "avatar", "channel_thumbnail")
+                val avatar = firstText(root, "avatar", "channel_thumbnail", "uploader_thumbnail")
                 val description = firstText(root, "description", "channel_description", "bio")
                 val count = root.optInt("playlist_count", -1).takeIf { it >= 0 }
                     ?: root.optInt("video_count", -1).takeIf { it >= 0 }
