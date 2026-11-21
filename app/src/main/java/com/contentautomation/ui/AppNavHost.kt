@@ -301,6 +301,7 @@ fun AppNavHost(vm: MainViewModel) {
                             }
                         },
 
+                        onDeleteError = { id -> vm.deleteNotification(id) },
                         onClearErrors = {
                             vm.clearErrors()
                         }
