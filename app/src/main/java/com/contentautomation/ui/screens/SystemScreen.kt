@@ -62,7 +62,7 @@ fun SystemScreen(
                 } else {
                     resumable.forEach { onResumeJob(it.id) }
                     android.widget.Toast.makeText(
-                        androidx.compose.ui.platform.LocalContext.current,
+                        context,
                         "Đã đưa " + resumable.size + " công việc trở lại hàng đợi.",
                         android.widget.Toast.LENGTH_LONG
                     ).show()
