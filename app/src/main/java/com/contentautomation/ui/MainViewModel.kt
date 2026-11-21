@@ -322,4 +322,86 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
     }
+
+    // APP-WIDE JOB ORCHESTRATION: all screens call the same ViewModel actions.
+
+    fun scanNow() {
+        viewModelScope.launch {
+            try {
+                val request = androidx.work.OneTimeWorkRequestBuilder<com.contentautomation.work.ScanWorker>()
+                    .setConstraints(
+                        androidx.work.Constraints.Builder()
+                            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                            .build()
+                    )
+                    .build()
+                androidx.work.WorkManager.getInstance(application)
+                    .enqueueUniqueWork(
+                        com.contentautomation.service.AutomationForegroundService.SCAN_WORK_NAME,
+                        androidx.work.ExistingWorkPolicy.KEEP,
+                        request
+                    )
+            } catch (e: Exception) {
+                recordError(
+                    ErrorKind.NetworkLost,
+                    "Không thể bắt đầu quét",
+                    e.message ?: "Không thể tạo tác vụ quét.",
+                    "Thử lại"
+                )
+            }
+        }
+    }
+
+    fun resumeJob(jobId: String) {
+        viewModelScope.launch {
+            try {
+                val dao = application.database.pipelineJobDao()
+                val job = dao.findById(jobId) ?: return@launch
+                if (job.status == PipelineStatus.DONE) return@launch
+                dao.update(
+                    job.copy(
+                        status = PipelineStatus.PENDING,
+                        retries = 0,
+                        error = null,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+                com.contentautomation.work.PipelineWorker.enqueue(application, jobId)
+            } catch (e: Exception) {
+                recordError(
+                    ErrorKind.VideoUnavailable,
+                    "Không thể tiếp tục công việc",
+                    e.message ?: "Không thể đưa công việc trở lại hàng đợi.",
+                    "Thử lại"
+                )
+            }
+        }
+    }
+
+    fun pauseJob(jobId: String) {
+        viewModelScope.launch {
+            try {
+                androidx.work.WorkManager.getInstance(application)
+                    .cancelUniqueWork("pipeline_$jobId")
+                val dao = application.database.pipelineJobDao()
+                dao.findById(jobId)?.let { job ->
+                    dao.update(
+                        job.copy(
+                            status = PipelineStatus.PAUSED,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                recordError(
+                    ErrorKind.VideoUnavailable,
+                    "Không thể tạm dừng",
+                    e.message ?: "Không thể dừng công việc.",
+                    "Thử lại"
+                )
+            }
+        }
+    }
+
+    fun retryJob(jobId: String) = resumeJob(jobId)
 }
