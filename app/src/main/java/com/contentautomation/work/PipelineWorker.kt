@@ -6,6 +6,9 @@ import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.*
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
+import android.net.Uri
+import com.contentautomation.video.VideoCompressor
+import com.contentautomation.video.MediaStoreSaver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -146,37 +149,60 @@ class PipelineWorker(
                     }
 
                     PipelineStage.ANALYZE -> {
-                        val source =
-                            workDir.listFiles()
-                                ?.filter {
-                                    it.isFile &&
-                                        it.name.startsWith("source.") &&
-                                        !it.name.endsWith(".part")
-                                }
-                                ?.maxByOrNull {
-                                    it.lastModified()
-                                }
+                        val source = workDir.listFiles()
+                            ?.filter { it.isFile && it.name.startsWith("source.") && !it.name.endsWith(".part") }
+                            ?.maxByOrNull { it.lastModified() }
+                            ?: throw IllegalStateException("Không tìm thấy video gốc đã tải")
 
-                        if (
-                            source == null ||
-                            source.length() <= 0L
-                        ) {
-                            throw IllegalStateException(
-                                "Không tìm thấy video gốc đã tải"
-                            )
+                        if (source.length() <= 0L) {
+                            throw IllegalStateException("Video gốc rỗng, không thể xử lý")
                         }
 
-                        // Không tách âm thanh từ video gốc.
-                        // Chưa tích hợp nhận diện lời bài hát tự động.
-                        dao.update(
-                            job.copy(
-                                stage = PipelineStage.SPEECH_TO_TEXT,
-                                status = PipelineStatus.PAUSED,
-                                retries = 0,
-                                error = "Đã tải video gốc. Chờ cấu hình dịch vụ nhận diện lời bài hát.",
-                                updatedAt = System.currentTimeMillis()
+                        dao.update(job.copy(
+                            status = PipelineStatus.RUNNING,
+                            error = "Đang tối ưu video và lưu vào điện thoại...",
+                            updatedAt = System.currentTimeMillis()
+                        ))
+
+                        val processedFile = File(workDir, "nichi-processed.mp4")
+                        val compressed = VideoCompressor(applicationContext)
+                            .compressKeepQuality(Uri.fromFile(source), processedFile)
+
+                        if (!compressed.success || compressed.outputFile == null ||
+                            !compressed.outputFile.exists() || compressed.outputFile.length() <= 0L) {
+                            throw IllegalStateException(compressed.errorMessage ?: "Không thể xử lý video")
+                        }
+
+                        val savedUri = MediaStoreSaver(applicationContext)
+                            .saveVideoToGallery(compressed.outputFile, "NiChi_${video.id.take(8)}.mp4")
+                            ?: throw IllegalStateException("Không thể lưu video vào thư viện điện thoại")
+
+                        val processedDao = db.processedVideoDao()
+                        val existing = processedDao.findBySourceId(video.id)
+                        val processed = if (existing == null) {
+                            ProcessedVideo(
+                                sourceVideoId = video.id,
+                                originalPath = source.absolutePath,
+                                processedPath = compressed.outputFile.absolutePath,
+                                status = VideoStatus.SAVED_TO_PHONE.name
                             )
-                        )
+                        } else {
+                            existing.copy(
+                                originalPath = source.absolutePath,
+                                processedPath = compressed.outputFile.absolutePath,
+                                status = VideoStatus.SAVED_TO_PHONE.name
+                            )
+                        }
+                        processedDao.insert(processed)
+
+                        db.sourceVideoDao().updateStatus(video.id, VideoStatus.SAVED_TO_PHONE.name)
+                        dao.update(job.copy(
+                            stage = PipelineStage.EXPORT,
+                            status = PipelineStatus.DONE,
+                            retries = 0,
+                            error = "Đã xử lý và lưu vào Movies/NiChi trên điện thoại.",
+                            updatedAt = System.currentTimeMillis()
+                        ))
                     }
 
                     PipelineStage.SPEECH_TO_TEXT -> {
