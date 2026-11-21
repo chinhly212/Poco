@@ -429,6 +429,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             StorageInfo(0f, 0f)
         )
 
+    // PLATFORM WEB SESSIONS: encrypted locally, one login per platform.
+    fun hasPlatformSession(platform: String): Boolean =
+        !application.prefs.getSecret("platform_cookie_${platform.lowercase()}").isNullOrBlank()
+
+    fun savePlatformSession(platform: String, cookieHeader: String) {
+        require(platform.uppercase() in setOf("DOUYIN", "KUAISHOU")) { "Nền tảng không hợp lệ." }
+        require(cookieHeader.isNotBlank()) { "Không lấy được phiên đăng nhập từ trang web. Hãy đăng nhập hoàn tất rồi thử lại." }
+        application.prefs.setSecret("platform_cookie_${platform.lowercase()}", cookieHeader)
+        recordError(
+            ErrorKind.NetworkLost,
+            "Đã lưu phiên ${platform}",
+            "Phiên đăng nhập đã được lưu mã hóa trên điện thoại.",
+            "Đã hiểu"
+        )
+    }
+
+    fun clearPlatformSession(platform: String) {
+        application.prefs.removeSecret("platform_cookie_${platform.lowercase()}")
+        recordError(ErrorKind.NetworkLost, "Đã ngắt phiên ${platform}", "Phiên đăng nhập đã được xóa khỏi điện thoại.", "Đã hiểu")
+    }
+
     // SOURCE ACCOUNTS
 
     val accounts =
@@ -443,7 +464,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun addAccount(
         platform: String,
         name: String,
-        identifier: String
+        identifier: String,
+        onResult: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch {
             try {
@@ -451,32 +473,42 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 require(normalizedPlatform in setOf("DOUYIN", "KUAISHOU")) {
                     "Chỉ hỗ trợ tài khoản Douyin hoặc Kuaishou."
                 }
+                val cookie = application.prefs.getSecret("platform_cookie_${normalizedPlatform.lowercase()}")
+                require(!cookie.isNullOrBlank()) {
+                    "Bạn chưa đăng nhập ${normalizedPlatform}. Hãy đăng nhập ${normalizedPlatform} trước khi thêm tài khoản theo dõi."
+                }
                 val rawIdentifier = identifier.trim()
                 require(rawIdentifier.isNotBlank()) { "ID tài khoản không được để trống." }
                 val normalizedIdentifier = normalizeSourceIdentifier(normalizedPlatform, rawIdentifier)
                 require(normalizedIdentifier.isNotBlank()) { "Không đọc được ID từ đường dẫn tài khoản." }
 
+                val adapter = com.contentautomation.domain.source.SourceAdapterFactory.create(normalizedPlatform)
+                val profile = (adapter as? com.contentautomation.domain.source.YtDlpProfileAdapter)
+                    ?.verifyProfile(normalizedIdentifier, cookie)
+                    ?: throw IllegalStateException("Bộ đọc hồ sơ của nền tảng chưa được hỗ trợ.")
+
                 application.database.sourceAccountDao().insert(
                     SourceAccount(
                         platform = normalizedPlatform,
-                        accountName = name.trim().ifBlank { normalizedIdentifier },
-                        accountIdentifier = normalizedIdentifier
+                        accountName = profile.displayName.ifBlank { name.trim().ifBlank { normalizedIdentifier } },
+                        accountIdentifier = normalizedIdentifier,
+                        profileDescription = profile.description,
+                        profileAvatarUrl = profile.avatarUrl,
+                        profileVideoCount = profile.videoCount,
+                        profileVerifiedAt = System.currentTimeMillis()
                     )
                 )
-
-            } catch (e: Exception) {
-                Log.e(
-                    "MainViewModel",
-                    "Lỗi thêm tài khoản nguồn",
-                    e
-                )
-
                 recordError(
-                    ErrorKind.VideoUnavailable,
-                    "Không thể thêm tài khoản",
-                    e.message ?: "Cơ sở dữ liệu từ chối thao tác.",
-                    "Kiểm tra lại"
+                    ErrorKind.NetworkLost,
+                    "Đã kết nối tài khoản ${profile.displayName}",
+                    "Đã xác minh hồ sơ ${profile.displayName} trên ${normalizedPlatform}.",
+                    "Đã hiểu"
                 )
+                onResult(true, "Đã kết nối thành công: ${profile.displayName}")
+            } catch (e: Exception) {
+                val reason = e.message ?: "Không xác định được nguyên nhân."
+                recordError(ErrorKind.VideoUnavailable, "Không thể kết nối tài khoản", reason, "Kiểm tra lại")
+                onResult(false, reason)
             }
         }
     }
