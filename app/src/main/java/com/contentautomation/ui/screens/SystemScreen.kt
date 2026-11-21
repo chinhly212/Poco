@@ -47,8 +47,24 @@ fun SystemScreen(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GlassButton("Quét ngay", onClick = onScanNow, primary = true, modifier = Modifier.weight(1f))
             GlassButton("Tiếp tục tất cả", onClick = {
-                jobs.filter { (it.status == PipelineStatus.PAUSED || it.status == PipelineStatus.FAILED) && it.stage in listOf(PipelineStage.DOWNLOAD, PipelineStage.ANALYZE, PipelineStage.SPEECH_TO_TEXT) }
-                    .forEach { onResumeJob(it.id) }
+                val resumable = jobs.filter {
+                    (it.status == PipelineStatus.PAUSED || it.status == PipelineStatus.FAILED) &&
+                        it.stage in listOf(PipelineStage.DOWNLOAD, PipelineStage.ANALYZE, PipelineStage.SPEECH_TO_TEXT)
+                }
+                if (resumable.isEmpty()) {
+                    android.widget.Toast.makeText(
+                        androidx.compose.ui.platform.LocalContext.current,
+                        if (jobs.isEmpty()) "Chưa có công việc để tiếp tục." else "Không có công việc nào đang tạm dừng hoặc bị lỗi có thể tiếp tục.",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    resumable.forEach { onResumeJob(it.id) }
+                    android.widget.Toast.makeText(
+                        androidx.compose.ui.platform.LocalContext.current,
+                        "Đã đưa " + resumable.size + " công việc trở lại hàng đợi.",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
             }, modifier = Modifier.weight(1f))
         }
         GlassCard(Modifier.fillMaxWidth()) {
