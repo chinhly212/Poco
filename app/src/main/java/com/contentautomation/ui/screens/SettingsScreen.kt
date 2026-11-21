@@ -22,17 +22,9 @@ fun SettingsScreen(
     appVersion: String,
     onCopyId: () -> Unit,
     onAddAccount: () -> Unit,
-    tiktokClientKey: String,
-    tiktokClientSecret: String,
-    tiktokConnected: Boolean,
-    onSaveTikTokCredentials: (String, String) -> Unit,
-    onConnectTikTok: () -> Unit,
-    onDisconnectTikTok: () -> Unit
 ) {
     val kuaishou = accounts.count { it.platform.equals("kuaishou", ignoreCase = true) }
     val douyin = accounts.count { it.platform.equals("douyin", ignoreCase = true) }
-    var clientKey by remember(tiktokClientKey) { mutableStateOf(tiktokClientKey) }
-    var clientSecret by remember(tiktokClientSecret) { mutableStateOf(tiktokClientSecret) }
 
     ScreenColumn {
         GlassCard(Modifier.fillMaxWidth()) {
@@ -59,48 +51,6 @@ fun SettingsScreen(
         }
 
         GlassButton("Thêm tài khoản", onClick = onAddAccount, primary = true, modifier = Modifier.fillMaxWidth())
-
-        GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                GText("KẾT NỐI TIKTOK", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = clientKey,
-                    onValueChange = { clientKey = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("TikTok Client Key") },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = clientSecret,
-                    onValueChange = { clientSecret = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("TikTok Client Secret") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
-                )
-                Button(
-                    onClick = { onSaveTikTokCredentials(clientKey, clientSecret) },
-                    enabled = clientKey.isNotBlank() && clientSecret.isNotBlank()
-                ) { Text("Lưu thông tin TikTok") }
-                Spacer(Modifier.height(6.dp))
-                GText(
-                    if (tiktokConnected) "Đã có phiên đăng nhập TikTok" else "Chưa đăng nhập TikTok",
-                    12.sp,
-                    color = if (tiktokConnected) GlassColors.Green else GlassColors.InkSoft
-                )
-                if (tiktokConnected) {
-                    GlassButton("Ngắt kết nối TikTok", onClick = onDisconnectTikTok)
-                } else {
-                    GlassButton("Đăng nhập TikTok", onClick = onConnectTikTok, primary = true,
-                        modifier = Modifier.fillMaxWidth())
-                }
-                GText(
-                    "Cần tạo ứng dụng tại TikTok for Developers, bật quyền video.publish và khai báo Redirect URI trùng với cấu hình ứng dụng.",
-                    11.sp, color = GlassColors.InkSoft
-                )
-            }
-        }
 
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
