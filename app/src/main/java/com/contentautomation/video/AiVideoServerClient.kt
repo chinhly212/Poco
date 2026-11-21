@@ -93,7 +93,7 @@ class AiVideoServerClient(
             val body = response.body?.string().orEmpty()
             val json = runCatching { JSONObject(body) }.getOrNull()
             if (!response.isSuccessful || json?.optBoolean("valid") != true) {
-                throw IOException(json?.optString("message")?.takeIf { it.isNotBlank() }
+                throw IOException((json?.optString("message")?.takeIf { it.isNotBlank() } ?: json?.optString("detail")?.takeIf { it.isNotBlank() })
                     ?: "Kiểm tra API thất bại: HTTP ${response.code}")
             }
             json.optString("message", "Kết nối thành công")
