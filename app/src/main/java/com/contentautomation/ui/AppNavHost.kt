@@ -339,6 +339,12 @@ fun AppNavHost(vm: MainViewModel) {
 
                         onAddAccount = {
                             showAddAccountDialog = true
+                        },
+                        onSetAccountEnabled = { id, enabled ->
+                            vm.setAccountEnabled(id, enabled)
+                        },
+                        onDeleteAccount = { id ->
+                            vm.deleteAccount(id)
                         }
                     )
                 }
