@@ -10,6 +10,16 @@ android {
     namespace = "com.contentautomation"
     compileSdk = 34
 
+    // Tạo APK riêng cho từng kiến trúc ARM để tránh gói universal quá lớn.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = false
+        }
+    }
+
     defaultConfig {
         applicationId = "com.contentautomation"
         minSdk = 26
