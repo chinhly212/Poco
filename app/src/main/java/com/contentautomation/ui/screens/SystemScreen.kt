@@ -166,7 +166,7 @@ private fun JobCard(job: PipelineJob, onPauseJob: (String) -> Unit, onResumeJob:
 private fun stageLabel(stage: PipelineStage): String = when (stage) {
     PipelineStage.DOWNLOAD -> "Tải video nguồn"
     PipelineStage.ANALYZE -> "Tối ưu video"
-    PipelineStage.SPEECH_TO_TEXT -> "Chuẩn bị nội dung nguồn"
+    PipelineStage.SPEECH_TO_TEXT -> "Nhận diện lời nói tiếng Trung"
     PipelineStage.TRANSLATE -> "Dịch tiêu đề và mô tả nguồn"
     PipelineStage.TTS -> "Tạo giọng đọc từ bản dịch"
     PipelineStage.SUBTITLE -> "Phụ đề (chưa bật)"
