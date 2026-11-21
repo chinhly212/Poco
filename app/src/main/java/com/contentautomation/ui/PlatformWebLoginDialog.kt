@@ -72,14 +72,23 @@ fun PlatformWebLoginDialog(
         confirmButton = {
             Button(onClick = {
                 CookieManager.getInstance().flush()
-                val cookies = cookieHosts.flatMap { host ->
+                val cookieParts = cookieHosts.flatMap { host ->
                     CookieManager.getInstance().getCookie(host)
                         ?.split(";")
                         ?.map { it.trim() }
                         .orEmpty()
                 }.filter { it.contains("=") }
+                val authCookieNames = if (normalized == "KUAISHOU") {
+                    setOf("kuaishou.server.web_st", "kuaishou.server.web_ph", "userId")
+                } else {
+                    setOf("sessionid", "sessionid_ss", "sid_tt")
+                }
+                val hasAuthCookie = cookieParts.any {
+                    it.substringBefore("=").trim() in authCookieNames
+                }
+                val cookies = if (hasAuthCookie) cookieParts
                     .distinctBy { it.substringBefore("=") }
-                    .joinToString("; ")
+                    .joinToString("; ") else ""
                 onSaveSession(cookies)
             }) {
                 Text("Đã đăng nhập – lưu phiên")
