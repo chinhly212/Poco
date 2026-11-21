@@ -115,6 +115,13 @@ class AppPreferences(private val context: Context) {
         }
     }
 
+    fun getTranslationApiKeySecure(): String =
+        prefs.getString("translation_api_key_secure", null).orEmpty()
+
+    fun setTranslationApiKeySecure(value: String) {
+        prefs.edit().putString("translation_api_key_secure", value).apply()
+    }
+
     // TikTok token access
     fun getAccessToken(): String? =
         prefs.getString("tiktok_access", null)
