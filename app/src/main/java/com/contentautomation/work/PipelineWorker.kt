@@ -167,13 +167,13 @@ class PipelineWorker(
                         }
 
                         // Không tách âm thanh từ video gốc.
-                        // Chờ chọn nhạc từ thư viện TikTok.
+                        // Chưa tích hợp nhận diện lời bài hát tự động.
                         dao.update(
                             job.copy(
                                 stage = PipelineStage.SPEECH_TO_TEXT,
                                 status = PipelineStatus.PAUSED,
                                 retries = 0,
-                                error = "Đã tải video gốc. Chờ chọn nhạc TikTok và nhận diện lời bài hát.",
+                                error = "Đã tải video gốc. Chờ cấu hình dịch vụ nhận diện lời bài hát.",
                                 updatedAt = System.currentTimeMillis()
                             )
                         )
@@ -183,7 +183,7 @@ class PipelineWorker(
                         dao.update(
                             job.copy(
                                 status = PipelineStatus.PAUSED,
-                                error = "Chờ audio nhạc TikTok để nhận diện lời bài hát và tạo phụ đề.",
+                                error = "Chờ cấu hình dịch vụ nhận diện lời bài hát và tạo phụ đề.",
                                 updatedAt = System.currentTimeMillis()
                             )
                         )
