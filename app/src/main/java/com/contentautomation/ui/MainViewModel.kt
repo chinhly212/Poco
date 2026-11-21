@@ -495,7 +495,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         profileDescription = profile.description,
                         profileAvatarUrl = profile.avatarUrl,
                         profileVideoCount = profile.videoCount,
-                        profileVerifiedAt = System.currentTimeMillis()
+                        profileVerifiedAt = System.currentTimeMillis(),
+                        profileFollowerCount = profile.followerCount
                     )
                 )
                 recordError(
