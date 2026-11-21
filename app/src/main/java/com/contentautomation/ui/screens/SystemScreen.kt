@@ -47,7 +47,7 @@ fun SystemScreen(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GlassButton("Quét ngay", onClick = onScanNow, primary = true, modifier = Modifier.weight(1f))
             GlassButton("Tiếp tục tất cả", onClick = {
-                jobs.filter { (it.status == PipelineStatus.PAUSED || it.status == PipelineStatus.FAILED) && it.stage == PipelineStage.DOWNLOAD }
+                jobs.filter { (it.status == PipelineStatus.PAUSED || it.status == PipelineStatus.FAILED) && it.stage in listOf(PipelineStage.DOWNLOAD, PipelineStage.ANALYZE, PipelineStage.SPEECH_TO_TEXT) }
                     .forEach { onResumeJob(it.id) }
             }, modifier = Modifier.weight(1f))
         }
@@ -121,7 +121,7 @@ private fun JobCard(job: PipelineJob, onPauseJob: (String) -> Unit, onResumeJob:
         Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                 StatusDot(color)
-                GText(job.stage.name, 14.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                GText(stageLabel(job.stage), 14.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 GText(text, 11.sp, weight = FontWeight.Bold, color = color)
             }
             GlassDivider()
@@ -135,12 +135,25 @@ private fun JobCard(job: PipelineJob, onPauseJob: (String) -> Unit, onResumeJob:
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (job.status == PipelineStatus.RUNNING || job.status == PipelineStatus.PENDING) {
                     GlassButton("Tạm dừng", onClick = { onPauseJob(job.id) })
-                } else if ((job.status == PipelineStatus.PAUSED || job.status == PipelineStatus.FAILED) && job.stage == PipelineStage.DOWNLOAD) {
+                } else if ((job.status == PipelineStatus.PAUSED || job.status == PipelineStatus.FAILED) && job.stage in listOf(PipelineStage.DOWNLOAD, PipelineStage.ANALYZE, PipelineStage.SPEECH_TO_TEXT)) {
                     GlassButton("Tiếp tục", onClick = { onResumeJob(job.id) }, primary = true)
                 } else if (job.status == PipelineStatus.PAUSED || job.status == PipelineStatus.FAILED) {
-                    GText("Công đoạn chưa tích hợp", 11.sp, color = GlassColors.Amber)
+                    GText("Cần cập nhật quy trình", 11.sp, color = GlassColors.Amber)
                 }
             }
         }
     }
+}
+
+private fun stageLabel(stage: PipelineStage): String = when (stage) {
+    PipelineStage.DOWNLOAD -> "Tải video nguồn"
+    PipelineStage.ANALYZE -> "Tối ưu video"
+    PipelineStage.SPEECH_TO_TEXT -> "Nhận diện lời nói"
+    PipelineStage.TRANSLATE -> "Dịch nội dung"
+    PipelineStage.TTS -> "Tạo giọng đọc"
+    PipelineStage.SUBTITLE -> "Tạo phụ đề"
+    PipelineStage.MERGE -> "Ghép nội dung"
+    PipelineStage.EXPORT -> "Lưu vào điện thoại"
+    PipelineStage.UPLOAD -> "Sao lưu"
+    PipelineStage.VERIFY -> "Kiểm tra tệp"
 }
