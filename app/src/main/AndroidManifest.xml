@@ -16,31 +16,7 @@
         android:icon="@drawable/muchi_logo"
         android:label="@string/app_name"
         android:theme="@style/Theme.Material3.DayNight"
-        android:usesCleartextTraffic="false">
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:theme="@style/Theme.Material3.DayNight">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <activity
-            android:name=".ui.auth.TikTokAuthActivity"
-            android:exported="true"
-            android:launchMode="singleTask">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="contentauto" android:host="tiktok-callback" />
-            </intent-filter>
-        </activity>
-
-        <service
+        android:usesCleartextTraffic="false"><service
             android:name=".service.AutomationForegroundService"
             android:enabled="true"
             android:exported="false"
