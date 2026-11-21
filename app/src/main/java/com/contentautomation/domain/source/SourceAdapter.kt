@@ -8,8 +8,16 @@ data class SourceVideoItem(
     val publishedAt: Long?
 )
 
+data class SourceProfileInfo(
+    val displayName: String,
+    val identifier: String,
+    val description: String?,
+    val avatarUrl: String?,
+    val videoCount: Int?
+)
+
 interface SourceAdapter {
-    suspend fun getLatestVideos(accountIdentifier: String): List<SourceVideoItem>
+    suspend fun getLatestVideos(accountIdentifier: String, cookieHeader: String? = null): List<SourceVideoItem>
     suspend fun getVideoMetadata(videoId: String): SourceVideoItem?
     suspend fun getDownloadUrl(videoId: String): String?
 }
