@@ -37,13 +37,14 @@ fun HomeScreen(
     onToggleSystem: () -> Unit,
     onOpenWork: () -> Unit,
     onErrorAction: (AppError) -> Unit,
+    onDeleteError: (String) -> Unit,
     onClearErrors: () -> Unit
 ) {
     ScreenColumn {
         SystemCard(systemOn, onToggleSystem)
         PipelineCard(jobs, onOpenWork)
         if (errors.isNotEmpty()) {
-            ErrorSection(errors, onErrorAction, onClearErrors)
+            ErrorSection(errors, onErrorAction, onDeleteError, onClearErrors)
         }
     }
 }
@@ -165,6 +166,7 @@ private fun statusTitle(status: PipelineStatus): String = when (status) {
 private fun ErrorSection(
     errors: List<AppError>,
     onAction: (AppError) -> Unit,
+    onDelete: (String) -> Unit,
     onClear: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -174,7 +176,7 @@ private fun ErrorSection(
                 GText("Xóa hết", 12.sp, weight = FontWeight.Bold, color = GlassColors.Blue)
             }
         }
-        errors.forEach { ErrorCard(it, onAction) }
+        errors.forEach { ErrorCard(it, onAction, onDelete) }
     }
 }
 
@@ -185,7 +187,7 @@ private fun ErrorKind.icon(): ImageVector = when (this) {
 }
 
 @Composable
-private fun ErrorCard(error: AppError, onAction: (AppError) -> Unit) {
+private fun ErrorCard(error: AppError, onAction: (AppError) -> Unit, onDelete: (String) -> Unit) {
     val tint = if (error.kind == ErrorKind.VideoUnavailable) GlassColors.Red else GlassColors.Amber
 
     GlassCard(Modifier.fillMaxWidth(), shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
@@ -198,7 +200,11 @@ private fun ErrorCard(error: AppError, onAction: (AppError) -> Unit) {
                 }
             }
             GText(error.message, 12.sp, color = GlassColors.InkSoft)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { onDelete(error.id) }) {
+                    GText("Xóa", 12.sp, weight = FontWeight.Bold, color = GlassColors.Red)
+                }
                 GlassButton(error.actionLabel, onClick = { onAction(error) })
             }
         }
