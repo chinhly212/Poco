@@ -365,6 +365,44 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun setAccountEnabled(accountId: String, enabled: Boolean) {
+        viewModelScope.launch {
+            try {
+                val dao = application.database.sourceAccountDao()
+                val account = dao.findById(accountId)
+                    ?: throw IllegalArgumentException("Không tìm thấy tài khoản nguồn.")
+                dao.update(account.copy(enabled = enabled))
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Không thể cập nhật tài khoản nguồn", e)
+                recordError(
+                    ErrorKind.VideoUnavailable,
+                    "Không thể cập nhật tài khoản",
+                    e.message ?: "Không thể thay đổi trạng thái tài khoản.",
+                    "Thử lại"
+                )
+            }
+        }
+    }
+
+    fun deleteAccount(accountId: String) {
+        viewModelScope.launch {
+            try {
+                val dao = application.database.sourceAccountDao()
+                val account = dao.findById(accountId)
+                    ?: throw IllegalArgumentException("Không tìm thấy tài khoản nguồn.")
+                dao.delete(account)
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Không thể xóa tài khoản nguồn", e)
+                recordError(
+                    ErrorKind.VideoUnavailable,
+                    "Không thể xóa tài khoản",
+                    e.message ?: "Không thể xóa tài khoản nguồn.",
+                    "Thử lại"
+                )
+            }
+        }
+    }
+
     // RETRY FAILED DOWNLOADS
 
     fun retryFailedDownloads() {
