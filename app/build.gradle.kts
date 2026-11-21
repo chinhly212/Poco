@@ -31,6 +31,8 @@ android {
     buildTypes {
         getByName("release") {
             signingConfig = signingConfigs.getByName("release")
+            // Avoid release-only PNG crunching errors in existing image resources.
+            isCrunchPngs = false
         }
     }
 
