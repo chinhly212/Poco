@@ -340,11 +340,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     ) {
         viewModelScope.launch {
             try {
+                val normalizedPlatform = platform.trim().uppercase()
+                require(normalizedPlatform in setOf("DOUYIN", "KUAISHOU")) {
+                    "Chỉ hỗ trợ tài khoản Douyin hoặc Kuaishou."
+                }
+                val rawIdentifier = identifier.trim()
+                require(rawIdentifier.isNotBlank()) { "ID tài khoản không được để trống." }
+                val normalizedIdentifier = normalizeSourceIdentifier(normalizedPlatform, rawIdentifier)
+                require(normalizedIdentifier.isNotBlank()) { "Không đọc được ID từ đường dẫn tài khoản." }
+
                 application.database.sourceAccountDao().insert(
                     SourceAccount(
-                        platform = platform.trim(),
-                        accountName = name.trim(),
-                        accountIdentifier = identifier.trim()
+                        platform = normalizedPlatform,
+                        accountName = name.trim().ifBlank { normalizedIdentifier },
+                        accountIdentifier = normalizedIdentifier
                     )
                 )
 
@@ -401,6 +410,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
         }
+    }
+
+    private fun normalizeSourceIdentifier(platform: String, input: String): String {
+        val value = input.trim().trimEnd('/')
+        val url = runCatching { android.net.Uri.parse(value) }.getOrNull()
+        val segments = url?.pathSegments.orEmpty()
+        val marker = if (platform == "DOUYIN") "user" else "profile"
+        val fromUrl = segments.indexOf(marker).takeIf { it >= 0 }
+            ?.let { segments.getOrNull(it + 1) }
+            ?.takeIf { it.isNotBlank() }
+        return (fromUrl ?: value).substringBefore('?').substringBefore('#').trim()
     }
 
     // RETRY FAILED DOWNLOADS
