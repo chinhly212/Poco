@@ -79,7 +79,7 @@ class PipelineWorker(
                 // Workers may start before Application's asynchronous native-engine setup finishes.
                 if (!app.awaitMediaEngines()) {
                     throw IllegalStateException(
-                        app.engineInitializationError
+                        ContentAutomationApp.engineInitializationError
                             ?: "Bộ máy tải và xử lý video chưa sẵn sàng. Hệ thống sẽ tự thử lại."
                     )
                 }
