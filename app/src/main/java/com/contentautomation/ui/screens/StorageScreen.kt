@@ -29,7 +29,8 @@ fun StorageScreen(
     onConnectDrive: () -> Unit,
     onRefreshDrive: () -> Unit,
     onPickUpload: () -> Unit,
-    onDeleteDriveFile: (String) -> Unit
+    onDeleteDriveFile: (String) -> Unit,
+    onDownloadDriveFile: (String, String) -> Unit
 ) {
     val low = storage.totalGb > 0f &&
         (storage.fraction >= WARN_FRACTION || storage.freeGb < WARN_FREE_GB)
@@ -116,7 +117,7 @@ fun StorageScreen(
                             color = GlassColors.InkSoft)
                     } else {
                         drive.files.forEach { file ->
-                            DriveFileRow(file, onDeleteDriveFile)
+                            DriveFileRow(file, onDeleteDriveFile, onDownloadDriveFile)
                             GlassDivider()
                         }
                     }
@@ -127,7 +128,7 @@ fun StorageScreen(
 }
 
 @Composable
-private fun DriveFileRow(file: DriveFileItem, onDelete: (String) -> Unit) {
+private fun DriveFileRow(file: DriveFileItem, onDelete: (String) -> Unit, onDownload: (String, String) -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -136,7 +137,11 @@ private fun DriveFileRow(file: DriveFileItem, onDelete: (String) -> Unit) {
             GText(file.name, 13.sp, weight = FontWeight.SemiBold)
             GText(formatBytes(file.sizeBytes), 11.sp, color = GlassColors.InkSoft)
         }
-        GlassButton("Xóa", onClick = { onDelete(file.id) })
+        Column(horizontalAlignment = Alignment.End) {
+            GlassButton("Tải về", onClick = { onDownload(file.id, file.name) })
+            Spacer(Modifier.height(4.dp))
+            GlassButton("Thùng rác", onClick = { onDelete(file.id) })
+        }
     }
 }
 
