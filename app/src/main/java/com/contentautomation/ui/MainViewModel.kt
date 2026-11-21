@@ -9,6 +9,10 @@ import androidx.lifecycle.viewModelScope
 import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.*
 import com.contentautomation.data.prefs.AppPreferences
+import com.contentautomation.data.remote.GoogleDriveClient
+import com.contentautomation.data.remote.DriveAccountInfo
+import com.contentautomation.data.remote.DriveFileItem
+import android.net.Uri
 import com.contentautomation.service.AutomationForegroundService
 import com.contentautomation.ui.models.*
 import com.contentautomation.work.DownloadWorker
@@ -19,9 +23,94 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
+
+data class DriveUiState(
+    val connected: Boolean = false,
+    val loading: Boolean = false,
+    val account: DriveAccountInfo? = null,
+    val files: List<DriveFileItem> = emptyList(),
+    val message: String? = null
+)
+
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val application = app as ContentAutomationApp
+
+    private val driveClient = GoogleDriveClient(app)
+    private val _driveState = MutableStateFlow(
+        DriveUiState(connected = driveClient.hasSavedToken())
+    )
+    val driveState = _driveState.asStateFlow()
+
+    fun acceptDriveAccessToken(token: String) {
+        driveClient.saveAccessToken(token)
+        refreshDrive()
+    }
+
+    fun refreshDrive() {
+        viewModelScope.launch {
+            _driveState.update { it.copy(loading = true, message = null) }
+            try {
+                if (!driveClient.hasSavedToken()) {
+                    _driveState.value = DriveUiState(
+                        connected = false,
+                        message = "Phiên Drive hết hạn. Hãy kết nối lại."
+                    )
+                    return@launch
+                }
+                val account = driveClient.accountInfo()
+                val files = driveClient.listFiles()
+                _driveState.value = DriveUiState(
+                    connected = true,
+                    loading = false,
+                    account = account,
+                    files = files
+                )
+            } catch (e: Exception) {
+                _driveState.update {
+                    it.copy(
+                        connected = driveClient.hasSavedToken(),
+                        loading = false,
+                        message = e.message ?: "Không thể tải dữ liệu Google Drive."
+                    )
+                }
+            }
+        }
+    }
+
+    fun uploadDriveFile(uri: Uri, name: String, mimeType: String) {
+        viewModelScope.launch {
+            _driveState.update { it.copy(loading = true, message = null) }
+            try {
+                driveClient.upload(uri, name, mimeType)
+                refreshDrive()
+            } catch (e: Exception) {
+                _driveState.update {
+                    it.copy(loading = false, message = e.message ?: "Tải tệp lên thất bại.")
+                }
+            }
+        }
+    }
+
+    fun deleteDriveFile(fileId: String) {
+        viewModelScope.launch {
+            _driveState.update { it.copy(loading = true, message = null) }
+            try {
+                driveClient.delete(fileId)
+                refreshDrive()
+            } catch (e: Exception) {
+                _driveState.update {
+                    it.copy(loading = false, message = e.message ?: "Xóa tệp thất bại.")
+                }
+            }
+        }
+    }
+
+    fun disconnectDrive() {
+        driveClient.clearAccessToken()
+        _driveState.value = DriveUiState(connected = false, message = "Đã ngắt kết nối Google Drive.")
+    }
+
 
     // SYSTEM STATUS
 
