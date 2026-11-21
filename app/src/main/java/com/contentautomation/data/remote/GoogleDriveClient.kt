@@ -139,11 +139,14 @@ class GoogleDriveClient(context: Context) {
         }
 
     suspend fun delete(fileId: String) = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("trashed", true)
+            .toString().toRequestBody("application/json; charset=utf-8".toMediaType())
         val req = Request.Builder()
             .url("https://www.googleapis.com/drive/v3/files/${Uri.encode(fileId)}")
-            .header("Authorization", "Bearer ${token()}").delete().build()
+            .header("Authorization", "Bearer ${token()}")
+            .patch(body).build()
         http.newCall(req).execute().use { response ->
-            if (!response.isSuccessful && response.code != 404) error("Xóa tệp thất bại HTTP ${response.code}.")
+            if (!response.isSuccessful && response.code != 404) error("Không thể chuyển tệp vào thùng rác (HTTP ${response.code}).")
         }
     }
 
