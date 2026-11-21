@@ -9,6 +9,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.contentautomation.ui.components.*
 import com.contentautomation.ui.models.StorageInfo
+import com.contentautomation.ui.DriveUiState
+import com.contentautomation.data.remote.DriveFileItem
 import java.util.Locale
 
 private const val WARN_FRACTION = 0.9f
@@ -23,8 +25,11 @@ private fun gb(v: Float) = String.format(Locale.getDefault(), "%.1f GB", v)
 @Composable
 fun StorageScreen(
     storage: StorageInfo,
-    driveStatus: String,
-    onDriveClick: () -> Unit
+    drive: DriveUiState,
+    onConnectDrive: () -> Unit,
+    onRefreshDrive: () -> Unit,
+    onPickUpload: () -> Unit,
+    onDeleteDriveFile: (String) -> Unit
 ) {
     val low = storage.totalGb > 0f &&
         (storage.fraction >= WARN_FRACTION || storage.freeGb < WARN_FREE_GB)
@@ -32,7 +37,7 @@ fun StorageScreen(
     ScreenColumn {
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                GText("ĐÃ SỬ DỤNG", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
+                GText("BỘ NHỚ ĐIỆN THOẠI", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
                 GText(gb(storage.usedGb), 30.sp, weight = FontWeight.Bold,
                     modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
                 GlassProgressBar(storage.fraction, color = if (low) GlassColors.Amber else GlassColors.Blue)
@@ -54,7 +59,6 @@ fun StorageScreen(
             GlassCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     GText("Cảnh báo bộ nhớ", 14.sp, weight = FontWeight.Bold, color = GlassColors.Amber)
-                    Spacer(Modifier.height(3.dp))
                     GText("Bộ nhớ sắp đầy, hãy giải phóng dung lượng để tiếp tục lưu video.",
                         12.sp, color = GlassColors.InkSoft)
                 }
@@ -62,14 +66,88 @@ fun StorageScreen(
         }
 
         GlassCard(Modifier.fillMaxWidth()) {
-            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    GText("GOOGLE DRIVE", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
-                    GText(driveStatus, 14.sp, weight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 3.dp))
+            Column(Modifier.padding(16.dp)) {
+                GText("GOOGLE DRIVE RIÊNG CỦA BẠN", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
+                Spacer(Modifier.height(6.dp))
+                if (drive.connected && drive.account != null) {
+                    GText(drive.account.email, 14.sp, weight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    val total = drive.account.totalBytes
+                    val used = drive.account.usedBytes
+                    val fraction = if (total > 0L) used.toFloat() / total.toFloat() else 0f
+                    GlassProgressBar(fraction)
+                    Spacer(Modifier.height(6.dp))
+                    GText(
+                        if (total > 0L) "Đã dùng ${formatBytes(used)} / ${formatBytes(total)}"
+                        else "Google chưa cung cấp giới hạn dung lượng cho tài khoản này",
+                        12.sp, color = GlassColors.InkSoft
+                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GlassButton("Làm mới", onClick = onRefreshDrive, modifier = Modifier.weight(1f))
+                        GlassButton("Tải tệp lên", onClick = onPickUpload, primary = true, modifier = Modifier.weight(1f))
+                    }
+                } else {
+                    GText("Chưa kết nối tài khoản Google Drive.", 13.sp, color = GlassColors.InkSoft)
+                    GlassButton("Kết nối Google Drive", onClick = onConnectDrive, primary = true,
+                        modifier = Modifier.fillMaxWidth())
                 }
-                GlassButton("Mở", onClick = onDriveClick)
+                if (drive.loading) {
+                    Spacer(Modifier.height(8.dp))
+                    GText("Đang đồng bộ...", 12.sp, color = GlassColors.Blue)
+                }
+                if (!drive.message.isNullOrBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    GText(drive.message, 12.sp, color = GlassColors.Amber)
+                }
+            }
+        }
+
+        if (drive.connected) {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        GText("TỆP TRÊN DRIVE", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft,
+                            modifier = Modifier.weight(1f))
+                        GText("${drive.files.size} tệp", 11.sp, color = GlassColors.InkSoft)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    if (drive.files.isEmpty()) {
+                        GText("Chưa có tệp nào do NiChi quản lý hoặc được cấp quyền truy cập.", 12.sp,
+                            color = GlassColors.InkSoft)
+                    } else {
+                        drive.files.forEach { file ->
+                            DriveFileRow(file, onDeleteDriveFile)
+                            GlassDivider()
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+@Composable
+private fun DriveFileRow(file: DriveFileItem, onDelete: (String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            GText(file.name, 13.sp, weight = FontWeight.SemiBold)
+            GText(formatBytes(file.sizeBytes), 11.sp, color = GlassColors.InkSoft)
+        }
+        GlassButton("Xóa", onClick = { onDelete(file.id) })
+    }
+}
+
+private fun formatBytes(value: Long): String {
+    if (value < 1024L) return "${value} B"
+    val units = listOf("KB", "MB", "GB", "TB")
+    var amount = value.toDouble()
+    var index = -1
+    do {
+        amount /= 1024.0
+        index++
+    } while (amount >= 1024.0 && index < units.lastIndex)
+    return String.format(Locale.getDefault(), "%.1f %s", amount, units[index])
 }
