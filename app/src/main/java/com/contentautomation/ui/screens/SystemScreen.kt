@@ -130,7 +130,7 @@ private fun JobCard(job: PipelineJob, onPauseJob: (String) -> Unit, onResumeJob:
                 GText("Thử lại: ${job.retries}", 12.sp, color = GlassColors.InkSoft)
             }
             if (!job.error.isNullOrBlank()) {
-                GText(job.error!!, 12.sp, color = GlassColors.Red)
+                GText(job.error!!, 12.sp, color = if (job.status == PipelineStatus.DONE) GlassColors.Green else GlassColors.Red)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (job.status == PipelineStatus.RUNNING || job.status == PipelineStatus.PENDING) {
