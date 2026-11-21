@@ -11,6 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Work
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -39,10 +41,13 @@ import com.contentautomation.ui.models.ErrorKind
 import com.contentautomation.ui.screens.HomeScreen
 import com.contentautomation.ui.screens.SettingsScreen
 import com.contentautomation.ui.screens.SystemScreen
+import com.contentautomation.ui.screens.StorageScreen
 
 private object MuChiRoutes {
     const val HOME = "home"
+    const val WORK = "work"
     const val AI = "ai"
+    const val STORAGE = "storage"
     const val SETTINGS = "settings"
 }
 
@@ -73,6 +78,9 @@ fun AppNavHost(vm: MainViewModel) {
     val accounts by
         vm.accounts.collectAsStateWithLifecycle()
 
+    val phoneStorage by
+        vm.phoneStorage.collectAsStateWithLifecycle()
+
     val backStackEntry by
         navController.currentBackStackEntryAsState()
 
@@ -81,8 +89,10 @@ fun AppNavHost(vm: MainViewModel) {
 
     val selectedIndex = when (currentRoute) {
         MuChiRoutes.HOME -> 0
-        MuChiRoutes.AI -> 1
-        MuChiRoutes.SETTINGS -> 2
+        MuChiRoutes.WORK -> 1
+        MuChiRoutes.AI -> 2
+        MuChiRoutes.STORAGE -> 3
+        MuChiRoutes.SETTINGS -> 4
         else -> 0
     }
 
@@ -134,14 +144,10 @@ fun AppNavHost(vm: MainViewModel) {
                             label = "Trang chủ",
                             icon = Icons.Rounded.Home
                         ),
-                        BottomItem(
-                            label = "AI",
-                            icon = Icons.Rounded.AutoAwesome
-                        ),
-                        BottomItem(
-                            label = "Cài đặt",
-                            icon = Icons.Rounded.Settings
-                        )
+                        BottomItem(label = "Công việc", icon = Icons.Rounded.Work),
+                        BottomItem(label = "AI", icon = Icons.Rounded.AutoAwesome),
+                        BottomItem(label = "Dung lượng", icon = Icons.Rounded.Storage),
+                        BottomItem(label = "Cài đặt", icon = Icons.Rounded.Settings)
                     ),
 
                     selectedIndex = selectedIndex,
@@ -149,8 +155,10 @@ fun AppNavHost(vm: MainViewModel) {
                     onSelect = { index ->
                         when (index) {
                             0 -> navigateTo(MuChiRoutes.HOME)
-                            1 -> navigateTo(MuChiRoutes.AI)
-                            2 -> navigateTo(MuChiRoutes.SETTINGS)
+                            1 -> navigateTo(MuChiRoutes.WORK)
+                            2 -> navigateTo(MuChiRoutes.AI)
+                            3 -> navigateTo(MuChiRoutes.STORAGE)
+                            4 -> navigateTo(MuChiRoutes.SETTINGS)
                         }
                     }
                 )
@@ -202,11 +210,19 @@ fun AppNavHost(vm: MainViewModel) {
                     )
                 }
 
-                composable(MuChiRoutes.AI) {
+                composable(MuChiRoutes.WORK) {
+                    SystemScreen(vm = vm, jobs = pipelineJobs)
+                }
 
-                    SystemScreen(
-                        vm = vm,
-                        jobs = pipelineJobs
+                composable(MuChiRoutes.AI) {
+                    Box(modifier = Modifier.fillMaxSize())
+                }
+
+                composable(MuChiRoutes.STORAGE) {
+                    StorageScreen(
+                        storage = phoneStorage,
+                        driveStatus = "Chưa kết nối Google Drive",
+                        onDriveClick = { navigateTo(MuChiRoutes.SETTINGS) }
                     )
                 }
 
