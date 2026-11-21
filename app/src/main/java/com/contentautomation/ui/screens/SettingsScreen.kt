@@ -145,6 +145,9 @@ fun SettingsScreen(
                             account.profileDescription?.takeIf { it.isNotBlank() }?.let {
                                 GText(it, 11.sp, color = GlassColors.InkSoft)
                             }
+                            account.profileFollowerCount?.let {
+                                GText("Người theo dõi: $it", 11.sp, color = GlassColors.Blue)
+                            }
                             account.profileVideoCount?.let {
                                 GText("Số video: $it", 11.sp, color = GlassColors.Blue)
                             }
