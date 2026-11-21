@@ -61,7 +61,7 @@ fun StorageScreen(
             Column(Modifier.padding(16.dp)) {
                 GText("VIDEO ĐÃ XỬ LÝ", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
                 Spacer(Modifier.height(6.dp))
-                GText("NiChi tự lưu video hoàn tất vào thư viện điện thoại, thư mục Movies/NiChi.", 13.sp)
+                GText("MuChi tự lưu video hoàn tất vào thư viện điện thoại, thư mục Movies/MuChi.", 13.sp)
                 GText("Không cần đăng nhập hay kết nối bất kỳ mạng xã hội nào.", 11.sp, color = GlassColors.InkSoft)
             }
         }
