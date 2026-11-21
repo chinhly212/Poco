@@ -83,6 +83,16 @@ class AppPreferences(private val context: Context) {
             it[KEY_FOREGROUND_ENABLED] ?: false
         }
 
+    fun getSecret(key: String): String? = prefs.getString(key, null)
+
+    fun setSecret(key: String, value: String) {
+        prefs.edit().putString(key, value).apply()
+    }
+
+    fun removeSecret(key: String) {
+        prefs.edit().remove(key).apply()
+    }
+
     suspend fun <T> set(key: Preferences.Key<T>, value: T) {
         context.dataStore.edit {
             it[key] = value
