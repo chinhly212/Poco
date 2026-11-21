@@ -106,6 +106,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun downloadDriveFile(fileId: String, name: String) {
+        viewModelScope.launch {
+            _driveState.update { it.copy(loading = true, message = null) }
+            try {
+                val file = driveClient.download(fileId, name)
+                _driveState.update {
+                    it.copy(loading = false, message = "Đã tải về: ${file.absolutePath}")
+                }
+            } catch (e: Exception) {
+                _driveState.update {
+                    it.copy(loading = false, message = e.message ?: "Tải tệp xuống thất bại.")
+                }
+            }
+        }
+    }
+
     fun disconnectDrive() {
         driveClient.clearAccessToken()
         _driveState.value = DriveUiState(connected = false, message = "Đã ngắt kết nối Google Drive.")
