@@ -49,9 +49,22 @@ fun AiScreen(vm: MainViewModel) {
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var serverOnline by remember { mutableStateOf<Boolean?>(null) }
+    var serverStatusLine by remember { mutableStateOf("Đang kết nối máy chủ…") }
 
     LaunchedEffect(Unit) {
-        serverOnline = runCatching { server.checkHealth() }.isSuccess
+        runCatching { server.getHealth() }
+            .onSuccess { health ->
+                serverOnline = true
+                serverStatusLine = if (health.aiReady) {
+                    "Đang hoạt động · mô hình: ${health.configuredProviders.joinToString()}"
+                } else {
+                    "Máy chủ đã kết nối · chưa cấu hình API mô hình AI"
+                }
+            }
+            .onFailure { error ->
+                serverOnline = false
+                serverStatusLine = error.message ?: "Không kết nối được máy chủ"
+            }
         if (lines.isEmpty()) {
             lines.add(
                 AiChatLine(
@@ -74,7 +87,7 @@ fun AiScreen(vm: MainViewModel) {
             Column {
                 Text("MuChi AI", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(
-                    if (serverOnline == true) "Trợ lý trực tuyến" else if (serverOnline == false) "Đang chờ máy chủ phản hồi" else "Đang kết nối…",
+                    serverStatusLine,
                     style = MaterialTheme.typography.labelSmall,
                     color = if (serverOnline == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
