@@ -26,7 +26,13 @@ fun SettingsScreen(
     storagePermissionRequired: Boolean,
     storageGranted: Boolean,
     onRequestNotifications: () -> Unit,
-    onRequestStorage: () -> Unit
+    onRequestStorage: () -> Unit,
+    douyinSession: Boolean,
+    kuaishouSession: Boolean,
+    onLoginDouyin: () -> Unit,
+    onLoginKuaishou: () -> Unit,
+    onLogoutDouyin: () -> Unit,
+    onLogoutKuaishou: () -> Unit
 ) {
     val kuaishou = accounts.count { it.platform.equals("kuaishou", ignoreCase = true) }
     val douyin = accounts.count { it.platform.equals("douyin", ignoreCase = true) }
@@ -80,6 +86,31 @@ fun SettingsScreen(
                     if (storagePermissionRequired) {
                         GlassButton(if (storageGranted) "Đã bật" else "Cấp quyền", onClick = onRequestStorage)
                     }
+                }
+            }
+        }
+
+        GlassCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                GText("ĐĂNG NHẬP NỀN TẢNG", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        GText("Douyin", 13.sp, weight = FontWeight.SemiBold)
+                        GText(if (douyinSession) "Đã lưu phiên đăng nhập" else "Chưa đăng nhập", 11.sp,
+                            color = if (douyinSession) GlassColors.Green else GlassColors.Amber)
+                    }
+                    GlassButton(if (douyinSession) "Đăng nhập lại" else "Đăng nhập", onClick = onLoginDouyin)
+                    if (douyinSession) TextButton(onClick = onLogoutDouyin) { GText("Thoát", 11.sp, color = GlassColors.Red) }
+                }
+                GlassDivider()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        GText("Kuaishou", 13.sp, weight = FontWeight.SemiBold)
+                        GText(if (kuaishouSession) "Đã lưu phiên đăng nhập" else "Chưa đăng nhập", 11.sp,
+                            color = if (kuaishouSession) GlassColors.Green else GlassColors.Amber)
+                    }
+                    GlassButton(if (kuaishouSession) "Đăng nhập lại" else "Đăng nhập", onClick = onLoginKuaishou)
+                    if (kuaishouSession) TextButton(onClick = onLogoutKuaishou) { GText("Thoát", 11.sp, color = GlassColors.Red) }
                 }
             }
         }
