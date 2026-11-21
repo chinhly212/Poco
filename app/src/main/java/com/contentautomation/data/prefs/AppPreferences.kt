@@ -34,9 +34,6 @@ class AppPreferences(private val context: Context) {
         val KEY_MAX_RETRY = intPreferencesKey("max_retry")
         val KEY_DEFAULT_HASHTAG = stringPreferencesKey("default_hashtag")
 
-        val KEY_TRANSLATION_API_KEY =
-            stringPreferencesKey("translation_api_key")
-
         val KEY_DRIVE_FOLDER_ID =
             stringPreferencesKey("drive_folder_id")
 
@@ -75,11 +72,6 @@ class AppPreferences(private val context: Context) {
             it[KEY_DEFAULT_HASHTAG] ?: "#thienlaolucqianqian"
         }
 
-    val translationApiKey: Flow<String> =
-        context.dataStore.data.map {
-            it[KEY_TRANSLATION_API_KEY] ?: ""
-        }
-
     val driveFolderId: Flow<String> =
         context.dataStore.data.map {
             it[KEY_DRIVE_FOLDER_ID] ?: ""
@@ -95,12 +87,5 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit {
             it[key] = value
         }
-    }
-
-    fun getTranslationApiKeySecure(): String =
-        prefs.getString("translation_api_key_secure", null).orEmpty()
-
-    fun setTranslationApiKeySecure(value: String) {
-        prefs.edit().putString("translation_api_key_secure", value).apply()
     }
 }
