@@ -81,12 +81,34 @@ class AiVideoServerClient(
         }
     }
 
-    suspend fun sendChat(message: String): AiVideoChatResult = withContext(Dispatchers.IO) {
-        val json = JSONObject().put("message", message)
+    suspend fun validateProvider(provider: String, apiKey: String): String = withContext(Dispatchers.IO) {
+        require(apiKey.isNotBlank()) { "API key không được để trống." }
         val request = Request.Builder()
+            .url("${baseUrl.trimEnd('/')}/api/validate")
+            .post(JSONObject().put("provider", provider.lowercase()).toString()
+                .toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .header("X-Provider-Api-Key", apiKey)
+            .build()
+        client.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            val json = runCatching { JSONObject(body) }.getOrNull()
+            if (!response.isSuccessful || json?.optBoolean("valid") != true) {
+                throw IOException(json?.optString("message")?.takeIf { it.isNotBlank() }
+                    ?: "Kiểm tra API thất bại: HTTP ${response.code}")
+            }
+            json.optString("message", "Kết nối thành công")
+        }
+    }
+
+    suspend fun sendChat(message: String, apiKeys: Map<String, String> = emptyMap()): AiVideoChatResult = withContext(Dispatchers.IO) {
+        val json = JSONObject().put("message", message)
+        val builder = Request.Builder()
             .url("${baseUrl.trimEnd('/')}/chat")
             .post(json.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
-            .build()
+        apiKeys["gemini"]?.takeIf { it.isNotBlank() }?.let { builder.header("X-Gemini-Api-Key", it) }
+        apiKeys["openrouter"]?.takeIf { it.isNotBlank() }?.let { builder.header("X-OpenRouter-Api-Key", it) }
+        apiKeys["groq"]?.takeIf { it.isNotBlank() }?.let { builder.header("X-Groq-Api-Key", it) }
+        val request = builder.build()
         client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw IOException("AI HTTP ${response.code}: ${body.take(300)}")
