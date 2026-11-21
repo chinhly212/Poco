@@ -91,7 +91,7 @@ fun SystemScreen(
                 }
             }
         } else {
-            shown.forEach { JobCard(it) }
+            shown.forEach { job -> JobCard(job, onPauseJob, onResumeJob) }
             if (jobs.size > MAX_VISIBLE_JOBS) {
                 GText("Đang hiển thị tối đa $MAX_VISIBLE_JOBS công việc.", 11.sp, color = GlassColors.InkSoft)
             }
@@ -108,7 +108,7 @@ private fun RowScope.Count(label: String, jobs: List<PipelineJob>, status: Pipel
 }
 
 @Composable
-private fun JobCard(job: PipelineJob) {
+private fun JobCard(job: PipelineJob, onPauseJob: (String) -> Unit, onResumeJob: (String) -> Unit) {
     val (color, text) = when (job.status) {
         PipelineStatus.RUNNING -> GlassColors.Blue to "Đang chạy"
         PipelineStatus.DONE -> GlassColors.Green to "Hoàn thành"
