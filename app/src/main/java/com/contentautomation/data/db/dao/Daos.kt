@@ -85,32 +85,3 @@ interface ProcessedVideoDao {
     fun countByStatus(status: String): Flow<Int>
 }
 
-@Dao
-interface TikTokPostDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(post: TikTokPost): Long
-
-    @Update
-    suspend fun update(post: TikTokPost)
-
-    @Query("SELECT * FROM tiktok_posts ORDER BY created_at DESC LIMIT 200")
-    fun observeAll(): Flow<List<TikTokPost>>
-
-    @Query("SELECT * FROM tiktok_posts WHERE id = :id")
-    suspend fun findById(id: String): TikTokPost?
-
-    @Query("SELECT * FROM tiktok_posts WHERE publish_id = :publishId LIMIT 1")
-    suspend fun findByPublishId(publishId: String): TikTokPost?
-
-    @Query("SELECT * FROM tiktok_posts WHERE processed_video_id = :processedVideoId ORDER BY created_at DESC LIMIT 1")
-    suspend fun findLatestByProcessedVideoId(processedVideoId: String): TikTokPost?
-
-    @Query("SELECT * FROM tiktok_posts WHERE status IN ('PENDING','PROCESSING_UPLOAD','PROCESSING_DOWNLOAD')")
-    suspend fun findInFlight(): List<TikTokPost>
-
-    @Query("SELECT * FROM tiktok_posts WHERE status = :status ORDER BY created_at DESC")
-    fun observeByStatus(status: String): Flow<List<TikTokPost>>
-
-    @Query("SELECT COUNT(*) FROM tiktok_posts WHERE status = :status")
-    fun countByStatus(status: String): Flow<Int>
-}
