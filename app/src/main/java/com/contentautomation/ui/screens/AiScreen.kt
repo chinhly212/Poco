@@ -60,7 +60,7 @@ fun AiScreen(vm: MainViewModel) {
         runCatching { server.getHealth() }
             .onSuccess { health ->
                 serverOnline = true
-                serverStatusLine = if (health.aiReady) {
+                serverStatusLine = if (health.aiReady || vm.getSavedApiKeys().isNotEmpty()) {
                     "Đang hoạt động · mô hình: ${health.configuredProviders.joinToString()}"
                 } else {
                     "Máy chủ đã kết nối · chưa cấu hình API mô hình AI"
@@ -157,7 +157,7 @@ fun AiScreen(vm: MainViewModel) {
                             val sourceUrl = Regex("https?://[^\\s<>]+")
                                 .find(prompt)?.value?.trimEnd('.', ',', ')', ']', '}')
                             try {
-                                val response = runCatching { server.sendChat(prompt) }
+                                val response = runCatching { server.sendChat(prompt, vm.getSavedApiKeys()) }
                                 val serverReply = response.getOrNull()
                                 val resolvedUrl = serverReply?.videoUrl
                                     ?.takeIf { serverReply.type == "video" && it.isNotBlank() }
