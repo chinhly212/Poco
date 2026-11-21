@@ -121,10 +121,9 @@ class GoogleDriveClient(context: Context) {
             val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 ?: error("Không đọc được tệp đã chọn.")
             val metadata = JSONObject().put("name", displayName).put("mimeType", mimeType)
-            val body = MultipartBody.Builder().setType(MultipartBody.FORM)
-                .addFormDataPart("metadata", null,
-                    metadata.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .addFormDataPart("file", displayName, bytes.toRequestBody(mimeType.toMediaType()))
+            val body = MultipartBody.Builder().setType("multipart/related".toMediaType())
+                .addPart(metadata.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .addPart(bytes.toRequestBody(mimeType.toMediaType()))
                 .build()
             val req = Request.Builder()
                 .url("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,modifiedTime")
