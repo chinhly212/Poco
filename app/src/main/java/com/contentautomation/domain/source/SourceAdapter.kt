@@ -13,7 +13,8 @@ data class SourceProfileInfo(
     val identifier: String,
     val description: String?,
     val avatarUrl: String?,
-    val videoCount: Int?
+    val videoCount: Int?,
+    val followerCount: Long?
 )
 
 interface SourceAdapter {
