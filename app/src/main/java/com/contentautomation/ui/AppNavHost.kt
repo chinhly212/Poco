@@ -540,7 +540,7 @@ private fun AddAccountDialog(
                     )
                 }
             ) {
-                Text("Thêm")
+                Text("Lưu và xác minh")
             }
         },
 
