@@ -309,7 +309,8 @@ fun AppNavHost(vm: MainViewModel) {
                         onConnectDrive = { connectDrive() },
                         onRefreshDrive = { vm.refreshDrive() },
                         onPickUpload = { driveUploadLauncher.launch(arrayOf("*/*")) },
-                        onDeleteDriveFile = { vm.deleteDriveFile(it) }
+                        onDeleteDriveFile = { vm.deleteDriveFile(it) },
+                        onDownloadDriveFile = { id, name -> vm.downloadDriveFile(id, name) }
                     )
                 }
 
