@@ -17,6 +17,12 @@ data class AiVideoDownloadResult(
     val bytesWritten: Long
 )
 
+data class AiServerHealth(
+    val version: String,
+    val aiReady: Boolean,
+    val configuredProviders: List<String>
+)
+
 data class AiVideoChatResult(
     val type: String,
     val message: String,
@@ -41,14 +47,37 @@ class AiVideoServerClient(
         .followRedirects(true)
         .build()
 
-    suspend fun checkHealth(): String = withContext(Dispatchers.IO) {
+    suspend fun getHealth(): AiServerHealth = withContext(Dispatchers.IO) {
         val request = Request.Builder().url("${baseUrl.trimEnd('/')}/health").get().build()
         client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw IOException("Health HTTP ${response.code}: ${body.take(200)}")
             val json = JSONObject(body)
             if (json.optString("status") != "healthy") throw IOException("Máy chủ chưa sẵn sàng.")
-            "Đang hoạt động · phiên bản ${json.optString("version", "unknown")}"
+            val providersJson = json.optJSONArray("ai_providers")
+            val providers = buildList {
+                if (providersJson != null) {
+                    for (index in 0 until providersJson.length()) add(providersJson.optString(index))
+                } else {
+                    if (json.optBoolean("gemini_configured")) add("Gemini")
+                    if (json.optBoolean("openrouter_configured")) add("OpenRouter")
+                    if (json.optBoolean("groq_configured")) add("Groq")
+                }
+            }
+            AiServerHealth(
+                version = json.optString("version", "unknown"),
+                aiReady = json.optBoolean("ai_ready", providers.isNotEmpty()),
+                configuredProviders = providers
+            )
+        }
+    }
+
+    suspend fun checkHealth(): String {
+        val health = getHealth()
+        return if (health.aiReady) {
+            "Máy chủ hoạt động · AI: ${health.configuredProviders.joinToString()}"
+        } else {
+            "Máy chủ hoạt động nhưng chưa cấu hình API mô hình AI."
         }
     }
 
@@ -81,7 +110,9 @@ class AiVideoServerClient(
     ): AiVideoDownloadResult = withContext(Dispatchers.IO) {
         destination.parentFile?.mkdirs()
         val request = Request.Builder().url(videoUrl).get()
-            .header("Accept", "video/*,application/octet-stream;q=0.9,*/*;q=0.8").build()
+            .header("Accept", "video/*,application/octet-stream;q=0.9,*/*;q=0.8")
+            .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
+            .build()
         val bytes = client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("Không tải được file video: HTTP ${response.code}")
             val body = response.body ?: throw IOException("Máy chủ video trả nội dung rỗng.")
