@@ -377,6 +377,7 @@ fun AppNavHost(vm: MainViewModel) {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun AddAccountDialog(
     onDismiss: () -> Unit,
