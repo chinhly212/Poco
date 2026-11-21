@@ -29,10 +29,6 @@ class AppPreferences(private val context: Context) {
     }
 
     companion object {
-        val KEY_TIKTOK_ACCESS = stringPreferencesKey("tiktok_access")
-        val KEY_TIKTOK_REFRESH = stringPreferencesKey("tiktok_refresh")
-        val KEY_TIKTOK_EXPIRES = longPreferencesKey("tiktok_expires")
-        val KEY_TIKTOK_OPEN_ID = stringPreferencesKey("tiktok_open_id")
 
         val KEY_SCAN_INTERVAL = intPreferencesKey("scan_interval")
         val KEY_MAX_RETRY = intPreferencesKey("max_retry")
@@ -44,10 +40,6 @@ class AppPreferences(private val context: Context) {
         val KEY_DRIVE_FOLDER_ID =
             stringPreferencesKey("drive_folder_id")
 
-        val KEY_TIKTOK_CLIENT_KEY =
-            stringPreferencesKey("tiktok_client_key")
-
-        val KEY_TIKTOK_CLIENT_SECRET =
             stringPreferencesKey("tiktok_client_secret")
 
         val KEY_FOREGROUND_ENABLED =
@@ -94,15 +86,6 @@ class AppPreferences(private val context: Context) {
             it[KEY_DRIVE_FOLDER_ID] ?: ""
         }
 
-    val tiktokClientKey: Flow<String> =
-        context.dataStore.data.map {
-            it[KEY_TIKTOK_CLIENT_KEY] ?: ""
-        }
-
-    val tiktokClientSecret: Flow<String> =
-        context.dataStore.data.map {
-            it[KEY_TIKTOK_CLIENT_SECRET] ?: ""
-        }
 
     val foregroundEnabled: Flow<Boolean> =
         context.dataStore.data.map {
@@ -122,7 +105,7 @@ class AppPreferences(private val context: Context) {
         prefs.edit().putString("translation_api_key_secure", value).apply()
     }
 
-    // TikTok token access
+
     fun getAccessToken(): String? =
         prefs.getString("tiktok_access", null)
 
