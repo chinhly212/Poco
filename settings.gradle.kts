@@ -1,18 +1,8 @@
 pluginManagement {
     repositories {
-        mavenCentral()
-        google()
         gradlePluginPortal()
-    }
-
-    resolutionStrategy {
-        eachPlugin {
-            if (requested.id.id == "com.google.devtools.ksp") {
-                useModule(
-                    "com.google.devtools.ksp:symbol-processing-gradle-plugin:${requested.version}"
-                )
-            }
-        }
+        google()
+        mavenCentral()
     }
 }
 
