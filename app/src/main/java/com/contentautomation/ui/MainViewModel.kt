@@ -12,6 +12,7 @@ import com.contentautomation.data.prefs.AppPreferences
 import com.contentautomation.data.remote.GoogleDriveClient
 import com.contentautomation.data.remote.DriveAccountInfo
 import com.contentautomation.data.remote.DriveFileItem
+import com.contentautomation.domain.translate.TranslationService
 import android.net.Uri
 import com.contentautomation.service.AutomationForegroundService
 import com.contentautomation.ui.models.*
@@ -35,6 +36,37 @@ data class DriveUiState(
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val application = app as ContentAutomationApp
+
+    private val translationService = TranslationService {
+        application.prefs.getTranslationApiKeySecure()
+    }
+    private val _translationResult = MutableStateFlow("")
+    val translationResult = _translationResult.asStateFlow()
+    private val _translationLoading = MutableStateFlow(false)
+    val translationLoading = _translationLoading.asStateFlow()
+    private val _translationError = MutableStateFlow<String?>(null)
+    val translationError = _translationError.asStateFlow()
+
+    fun saveTranslationApiKey(key: String) {
+        application.prefs.setTranslationApiKeySecure(key.trim())
+        _translationError.value = "Đã lưu khóa dịch trên thiết bị."
+    }
+
+    fun translateText(sourceLang: String, targetLang: String, text: String) {
+        viewModelScope.launch {
+            _translationLoading.value = true
+            _translationError.value = null
+            _translationResult.value = ""
+            try {
+                _translationResult.value = translationService.translate(sourceLang, targetLang, text)
+            } catch (e: Exception) {
+                _translationError.value = e.message ?: "Dịch thuật thất bại."
+            } finally {
+                _translationLoading.value = false
+            }
+        }
+    }
+
 
     private val driveClient = GoogleDriveClient(app)
     private val _driveState = MutableStateFlow(
