@@ -38,6 +38,19 @@ jobs:
           printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > app/nichi-release.jks
           test -s app/nichi-release.jks
 
+      - name: Verify release signing keystore and passwords
+        env:
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          echo "Checking keystore file and alias..."
+          keytool -list -keystore app/nichi-release.jks -storepass "$SIGNING_STORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS"
+          echo "Checking private-key password..."
+          keytool -certreq -keystore app/nichi-release.jks -storepass "$SIGNING_STORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" -keypass "$SIGNING_KEY_PASSWORD" -file /tmp/nichi-signing-check.csr
+          rm -f /tmp/nichi-signing-check.csr
+          echo "Signing keystore verification passed."
+
       - name: Build signed release APK with Gradle 8.9
         uses: gradle/gradle-build-action@v3
         env:
