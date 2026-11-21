@@ -1,6 +1,10 @@
 package com.contentautomation.ui
 
 import android.app.Activity
+import android.os.Build
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.widget.Toast
@@ -89,6 +93,12 @@ fun AppNavHost(vm: MainViewModel) {
                 Toast.makeText(context, e.message ?: "Không nhận được quyền Google Drive.", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        Toast.makeText(context, if (granted) "Đã cấp quyền." else "Bạn chưa cấp quyền. Có thể bật lại trong Cài đặt Android.", Toast.LENGTH_LONG).show()
     }
 
     val driveUploadLauncher = rememberLauncherForActivityResult(
@@ -354,7 +364,18 @@ fun AppNavHost(vm: MainViewModel) {
                         onDeleteAccount = { id ->
                             vm.deleteAccount(id)
                         },
-                        onOpenApi = { navigateTo(MuChiRoutes.API) }
+                        onOpenApi = { navigateTo(MuChiRoutes.API) },
+                        notificationsGranted = Build.VERSION.SDK_INT < 33 ||
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+                        storagePermissionRequired = Build.VERSION.SDK_INT <= 28,
+                        storageGranted = Build.VERSION.SDK_INT > 28 ||
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED,
+                        onRequestNotifications = {
+                            if (Build.VERSION.SDK_INT >= 33) permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        },
+                        onRequestStorage = {
+                            if (Build.VERSION.SDK_INT <= 28) permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        }
                     )
                 }
 
