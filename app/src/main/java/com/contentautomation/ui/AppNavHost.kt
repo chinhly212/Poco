@@ -339,15 +339,7 @@ fun AppNavHost(vm: MainViewModel) {
 
                         onAddAccount = {
                             showAddAccountDialog = true
-                        },
-                        tiktokClientKey = tiktokClientKey,
-                        tiktokClientSecret = tiktokClientSecret,
-                        tiktokConnected = tiktokConnected,
-                        onSaveTikTokCredentials = { key, secret -> vm.saveTikTokCredentials(key, secret) },
-                        onConnectTikTok = {
-                            tiktokAuthLauncher.launch(Intent(context, TikTokAuthActivity::class.java))
-                        },
-                        onDisconnectTikTok = { vm.disconnectTikTok() }
+                        }
                     )
                 }
             }
