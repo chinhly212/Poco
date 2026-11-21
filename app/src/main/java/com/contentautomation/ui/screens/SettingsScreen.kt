@@ -134,6 +134,22 @@ fun SettingsScreen(
                             )
                         }
                         GText(account.accountIdentifier, 12.sp, color = GlassColors.InkSoft)
+                        if (account.profileVerifiedAt != null) {
+                            account.profileAvatarUrl?.takeIf { it.startsWith("https://") }?.let { avatar ->
+                                coil.compose.AsyncImage(
+                                    model = avatar,
+                                    contentDescription = "Ảnh đại diện tài khoản",
+                                    modifier = Modifier.size(64.dp)
+                                )
+                            }
+                            account.profileDescription?.takeIf { it.isNotBlank() }?.let {
+                                GText(it, 11.sp, color = GlassColors.InkSoft)
+                            }
+                            account.profileVideoCount?.let {
+                                GText("Số video: $it", 11.sp, color = GlassColors.Blue)
+                            }
+                            GText("Đã xác minh hồ sơ", 10.sp, color = GlassColors.Green)
+                        }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             TextButton(onClick = { onDeleteAccount(account.id) }) {
                                 GText("Xóa tài khoản", 12.sp, color = GlassColors.Red)
