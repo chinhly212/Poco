@@ -19,6 +19,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 
 @Composable
@@ -27,6 +28,7 @@ fun PlatformWebLoginDialog(
     onDismiss: () -> Unit,
     onSaveSession: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val normalized = platform.uppercase()
     val loginUrl = if (normalized == "KUAISHOU") {
         "https://www.kuaishou.com/account/login/"
@@ -39,7 +41,7 @@ fun PlatformWebLoginDialog(
         listOf("https://www.douyin.com", "https://passport.douyin.com")
     }
     val webView = remember(platform) {
-        WebView(androidx.compose.ui.platform.LocalContext.current).apply {
+        WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.loadsImagesAutomatically = true
