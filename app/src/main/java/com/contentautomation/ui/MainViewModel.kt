@@ -495,17 +495,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val dao = application.database.pipelineJobDao()
                 val job = dao.findById(jobId) ?: return@launch
                 if (job.status == PipelineStatus.DONE) return@launch
-                if (job.stage != PipelineStage.DOWNLOAD) {
+                if (job.stage !in listOf(PipelineStage.DOWNLOAD, PipelineStage.ANALYZE, PipelineStage.SPEECH_TO_TEXT)) {
                     recordError(
                         ErrorKind.VideoUnavailable,
-                        "Công đoạn chưa được tích hợp",
-                        "Hiện tại chỉ có thể tiếp tục lại bước tải video. Công đoạn ${job.stage} cần được triển khai trước.",
+                        "Không thể tiếp tục công đoạn này",
+                        "Công đoạn ${job.stage} chưa nằm trong quy trình xử lý hiện tại.",
                         "Đã hiểu"
                     )
                     return@launch
                 }
+                val resumeStage = if (job.stage == PipelineStage.SPEECH_TO_TEXT) PipelineStage.ANALYZE else job.stage
                 dao.update(
                     job.copy(
+                        stage = resumeStage,
                         status = PipelineStatus.PENDING,
                         retries = 0,
                         error = null,
