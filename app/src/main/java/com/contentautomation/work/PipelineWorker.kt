@@ -97,8 +97,15 @@ class PipelineWorker(
                     }
 
                     if (!downloadedByServer) {
+                        val sourceAccount = db.sourceAccountDao().findById(video.sourceAccountId)
+                        val sessionCookie = sourceAccount?.let { account ->
+                            app.prefs.getSecret("platform_cookie_${account.platform.lowercase()}")
+                        }
                         YoutubeDL.getInstance().execute(
                             YoutubeDLRequest(video.sourceUrl).apply {
+                                if (!sessionCookie.isNullOrBlank()) {
+                                    addOption("--add-headers", "Cookie: $sessionCookie")
+                                }
                                 addOption("--no-playlist")
                                 addOption("-o", outputTemplate)
                                 addOption("-f", "best")
