@@ -206,6 +206,10 @@ fun AppNavHost(vm: MainViewModel) {
     var showAddAccountDialog by remember {
         mutableStateOf(false)
     }
+    var platformLogin by remember { mutableStateOf<String?>(null) }
+    var sessionRefresh by remember { mutableStateOf(0) }
+    val douyinSession = remember(sessionRefresh) { vm.hasPlatformSession("DOUYIN") }
+    val kuaishouSession = remember(sessionRefresh) { vm.hasPlatformSession("KUAISHOU") }
 
     fun navigateTo(route: String) {
         navController.navigate(route) {
@@ -376,7 +380,13 @@ fun AppNavHost(vm: MainViewModel) {
                         },
                         onRequestStorage = {
                             if (Build.VERSION.SDK_INT <= 28) permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                        }
+                        },
+                        douyinSession = douyinSession,
+                        kuaishouSession = kuaishouSession,
+                        onLoginDouyin = { platformLogin = "DOUYIN" },
+                        onLoginKuaishou = { platformLogin = "KUAISHOU" },
+                        onLogoutDouyin = { vm.clearPlatformSession("DOUYIN"); sessionRefresh++ },
+                        onLogoutKuaishou = { vm.clearPlatformSession("KUAISHOU"); sessionRefresh++ }
                     )
                 }
 
@@ -385,6 +395,28 @@ fun AppNavHost(vm: MainViewModel) {
                 }
             }
         }
+    }
+
+    platformLogin?.let { platform ->
+        PlatformWebLoginDialog(
+            platform = platform,
+            onDismiss = { platformLogin = null },
+            onSaveSession = { cookies ->
+                if (cookies.isBlank()) {
+                    Toast.makeText(context, "Không tìm thấy cookie đăng nhập. Hãy hoàn tất đăng nhập trên trang web rồi thử lại.", Toast.LENGTH_LONG).show()
+                } else {
+                    runCatching { vm.savePlatformSession(platform, cookies) }
+                        .onSuccess {
+                            sessionRefresh++
+                            platformLogin = null
+                            Toast.makeText(context, "Đã lưu phiên $platform trên điện thoại.", Toast.LENGTH_LONG).show()
+                        }
+                        .onFailure {
+                            Toast.makeText(context, it.message ?: "Không thể lưu phiên đăng nhập.", Toast.LENGTH_LONG).show()
+                        }
+                }
+            }
+        )
     }
 
     if (showAddAccountDialog) {
@@ -400,9 +432,10 @@ fun AppNavHost(vm: MainViewModel) {
                     platform = platform,
                     name = name,
                     identifier = identifier
-                )
-
-                showAddAccountDialog = false
+                ) { success, message ->
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    if (success) showAddAccountDialog = false
+                }
             }
         )
     }
