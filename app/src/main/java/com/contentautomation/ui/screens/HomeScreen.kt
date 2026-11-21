@@ -169,7 +169,7 @@ private fun ErrorSection(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            GText("Cảnh báo hệ thống", 17.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            GText("Thông báo hệ thống", 17.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
             TextButton(onClick = onClear) {
                 GText("Xóa hết", 12.sp, weight = FontWeight.Bold, color = GlassColors.Blue)
             }
