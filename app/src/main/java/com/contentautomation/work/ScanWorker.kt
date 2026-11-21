@@ -22,6 +22,10 @@ class ScanWorker(
     override suspend fun doWork(): Result =
         withContext(Dispatchers.IO) {
 
+            if (!app.awaitMediaEngines()) {
+                return@withContext Result.retry()
+            }
+
             val accounts = db.sourceAccountDao().getEnabled()
 
             var scanned = 0
