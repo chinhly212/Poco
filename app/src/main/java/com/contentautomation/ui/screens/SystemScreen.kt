@@ -31,7 +31,10 @@ private enum class JobFilter(val label: String, val status: PipelineStatus?) {
 @Composable
 fun SystemScreen(
     vm: MainViewModel,
-    jobs: List<PipelineJob>
+    jobs: List<PipelineJob>,
+    onScanNow: () -> Unit,
+    onPauseJob: (String) -> Unit,
+    onResumeJob: (String) -> Unit
 ) {
     var filter by remember { mutableStateOf(JobFilter.ALL) }
 
@@ -40,6 +43,13 @@ fun SystemScreen(
     }
 
     ScreenColumn {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GlassButton("Quét ngay", onClick = onScanNow, primary = true, modifier = Modifier.weight(1f))
+            GlassButton("Tiếp tục tất cả", onClick = {
+                jobs.filter { it.status == PipelineStatus.PAUSED || it.status == PipelineStatus.FAILED }
+                    .forEach { onResumeJob(it.id) }
+            }, modifier = Modifier.weight(1f))
+        }
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 GText("Tổng số công việc", 12.sp, color = GlassColors.InkSoft)
@@ -120,6 +130,13 @@ private fun JobCard(job: PipelineJob) {
             }
             if (!job.error.isNullOrBlank()) {
                 GText(job.error!!, 12.sp, color = GlassColors.Red)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                if (job.status == PipelineStatus.RUNNING || job.status == PipelineStatus.PENDING) {
+                    GlassButton("Tạm dừng", onClick = { onPauseJob(job.id) })
+                } else if (job.status == PipelineStatus.PAUSED || job.status == PipelineStatus.FAILED) {
+                    GlassButton("Tiếp tục", onClick = { onResumeJob(job.id) }, primary = true)
+                }
             }
         }
     }
