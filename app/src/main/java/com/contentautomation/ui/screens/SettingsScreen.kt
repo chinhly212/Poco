@@ -2,11 +2,8 @@ package com.contentautomation.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.*
-import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -22,6 +19,8 @@ fun SettingsScreen(
     appVersion: String,
     onCopyId: () -> Unit,
     onAddAccount: () -> Unit,
+    onSetAccountEnabled: (String, Boolean) -> Unit,
+    onDeleteAccount: (String) -> Unit
 ) {
     val kuaishou = accounts.count { it.platform.equals("kuaishou", ignoreCase = true) }
     val douyin = accounts.count { it.platform.equals("douyin", ignoreCase = true) }
@@ -51,6 +50,32 @@ fun SettingsScreen(
         }
 
         GlassButton("Thêm tài khoản", onClick = onAddAccount, primary = true, modifier = Modifier.fillMaxWidth())
+
+        if (accounts.isNotEmpty()) {
+            GText("QUẢN LÝ TÀI KHOẢN", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
+            accounts.forEach { account ->
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                GText(account.accountName.ifBlank { account.accountIdentifier }, 14.sp, weight = FontWeight.Bold)
+                                GText(account.platform.uppercase(), 11.sp, color = GlassColors.Blue)
+                            }
+                            Switch(
+                                checked = account.enabled,
+                                onCheckedChange = { onSetAccountEnabled(account.id, it) }
+                            )
+                        }
+                        GText(account.accountIdentifier, 12.sp, color = GlassColors.InkSoft)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { onDeleteAccount(account.id) }) {
+                                GText("Xóa tài khoản", 12.sp, color = GlassColors.Red)
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
