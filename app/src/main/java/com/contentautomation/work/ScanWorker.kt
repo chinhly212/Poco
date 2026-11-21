@@ -13,6 +13,9 @@ import com.contentautomation.domain.source.SourceAdapterFactory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class ScanWorker(
     ctx: Context,
@@ -115,11 +118,26 @@ class ScanWorker(
                 } catch (e: Exception) {
                     failed++
 
+                    val reason = e.message ?: "Không xác định được nguyên nhân."
                     Log.e(
                         "MuChiScan",
-                        "Lỗi quét tài khoản ${account.accountName}",
+                        "Lỗi quét tài khoản ${account.accountName}: $reason",
                         e
                     )
+                    runCatching {
+                        val bucket = System.currentTimeMillis() / 900_000L
+                        db.notificationDao().insert(
+                            com.contentautomation.data.db.entity.StoredNotification(
+                                id = "scan_${account.id}_$bucket",
+                                kind = "VideoUnavailable",
+                                title = "Quét thất bại · ${account.accountName}",
+                                message = reason,
+                                time = SimpleDateFormat("HH:mm dd/MM/yyyy", Locale.getDefault()).format(Date()),
+                                actionLabel = "Kiểm tra đăng nhập",
+                                createdAt = System.currentTimeMillis()
+                            )
+                        )
+                    }.onFailure { Log.e("MuChiScan", "Không lưu được thông báo lỗi quét", it) }
                 }
             }
 
