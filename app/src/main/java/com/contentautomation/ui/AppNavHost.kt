@@ -278,7 +278,9 @@ fun AppNavHost(vm: MainViewModel) {
                                 }
 
                                 ErrorKind.NetworkLost -> {
-                                    vm.setSystemRunning(true)
+                                    if (!error.title.startsWith("Kết nối") && !error.title.startsWith("Đã xóa API")) {
+                                        vm.setSystemRunning(true)
+                                    }
                                 }
 
                                 ErrorKind.StorageAlmostFull -> {
