@@ -358,6 +358,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val dao = application.database.pipelineJobDao()
                 val job = dao.findById(jobId) ?: return@launch
                 if (job.status == PipelineStatus.DONE) return@launch
+                if (job.stage != PipelineStage.DOWNLOAD) {
+                    recordError(
+                        ErrorKind.VideoUnavailable,
+                        "Công đoạn chưa được tích hợp",
+                        "Hiện tại chỉ có thể tiếp tục lại bước tải video. Công đoạn ${job.stage} cần được triển khai trước.",
+                        "Đã hiểu"
+                    )
+                    return@launch
+                }
                 dao.update(
                     job.copy(
                         status = PipelineStatus.PENDING,
