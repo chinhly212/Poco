@@ -86,11 +86,18 @@ class AppPreferences(private val context: Context) {
     fun getSecret(key: String): String? = prefs.getString(key, null)
 
     fun setSecret(key: String, value: String) {
-        prefs.edit().putString(key, value).apply()
+        check(prefs.edit().putString(key, value).commit()) {
+            "Android không thể lưu khóa API vào bộ nhớ mã hóa."
+        }
+        check(prefs.getString(key, null) == value) {
+            "Không đọc lại được khóa API sau khi lưu."
+        }
     }
 
     fun removeSecret(key: String) {
-        prefs.edit().remove(key).apply()
+        check(prefs.edit().remove(key).commit()) {
+            "Không thể xóa khóa API khỏi bộ nhớ mã hóa."
+        }
     }
 
     suspend fun <T> set(key: Preferences.Key<T>, value: T) {
