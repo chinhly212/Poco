@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.contentautomation.data.db.entity.PipelineJob
 import com.contentautomation.data.db.entity.PipelineStatus
+import com.contentautomation.data.db.entity.PipelineStage
 import com.contentautomation.ui.MainViewModel
 import com.contentautomation.ui.components.*
 
@@ -46,7 +47,7 @@ fun SystemScreen(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GlassButton("Quét ngay", onClick = onScanNow, primary = true, modifier = Modifier.weight(1f))
             GlassButton("Tiếp tục tất cả", onClick = {
-                jobs.filter { it.status == PipelineStatus.PAUSED || it.status == PipelineStatus.FAILED }
+                jobs.filter { (it.status == PipelineStatus.PAUSED || it.status == PipelineStatus.FAILED) && it.stage == PipelineStage.DOWNLOAD }
                     .forEach { onResumeJob(it.id) }
             }, modifier = Modifier.weight(1f))
         }
@@ -134,8 +135,10 @@ private fun JobCard(job: PipelineJob) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (job.status == PipelineStatus.RUNNING || job.status == PipelineStatus.PENDING) {
                     GlassButton("Tạm dừng", onClick = { onPauseJob(job.id) })
-                } else if (job.status == PipelineStatus.PAUSED || job.status == PipelineStatus.FAILED) {
+                } else if ((job.status == PipelineStatus.PAUSED || job.status == PipelineStatus.FAILED) && job.stage == PipelineStage.DOWNLOAD) {
                     GlassButton("Tiếp tục", onClick = { onResumeJob(job.id) }, primary = true)
+                } else if (job.status == PipelineStatus.PAUSED || job.status == PipelineStatus.FAILED) {
+                    GText("Công đoạn chưa tích hợp", 11.sp, color = GlassColors.Amber)
                 }
             }
         }
