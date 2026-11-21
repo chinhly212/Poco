@@ -15,9 +15,10 @@ import com.contentautomation.data.db.entity.*
         SourceAccount::class,
         SourceVideo::class,
         ProcessedVideo::class,
-        PipelineJob::class
+        PipelineJob::class,
+        StoredNotification::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(
@@ -34,6 +35,8 @@ abstract class AppDatabase : RoomDatabase() {
 
 
     abstract fun pipelineJobDao(): PipelineJobDao
+
+    abstract fun notificationDao(): NotificationDao
 
     companion object {
 
@@ -76,6 +79,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS stored_notifications (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        kind TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        message TEXT NOT NULL,
+                        time TEXT NOT NULL,
+                        action_label TEXT NOT NULL,
+                        created_at INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_stored_notifications_created_at ON stored_notifications(created_at)")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -88,7 +108,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "content_automation.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also {
                         INSTANCE = it
