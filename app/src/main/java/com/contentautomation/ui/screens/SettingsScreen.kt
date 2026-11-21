@@ -20,7 +20,8 @@ fun SettingsScreen(
     onCopyId: () -> Unit,
     onAddAccount: () -> Unit,
     onSetAccountEnabled: (String, Boolean) -> Unit,
-    onDeleteAccount: (String) -> Unit
+    onDeleteAccount: (String) -> Unit,
+    onOpenApi: () -> Unit
 ) {
     val kuaishou = accounts.count { it.platform.equals("kuaishou", ignoreCase = true) }
     val douyin = accounts.count { it.platform.equals("douyin", ignoreCase = true) }
@@ -49,7 +50,8 @@ fun SettingsScreen(
             }
         }
 
-        GlassButton("Thêm tài khoản", onClick = onAddAccount, primary = true, modifier = Modifier.fillMaxWidth())
+        GlassButton("API mô hình AI", onClick = onOpenApi, primary = true, modifier = Modifier.fillMaxWidth())
+        GlassButton("Thêm tài khoản", onClick = onAddAccount, modifier = Modifier.fillMaxWidth())
 
         if (accounts.isNotEmpty()) {
             GText("QUẢN LÝ TÀI KHOẢN", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
