@@ -206,7 +206,9 @@ fun AiScreen(vm: MainViewModel) {
                                                 val template = File(fallbackDir, "video.%(ext)s").absolutePath
                                                 val request = YoutubeDLRequest(sourceUrl).apply {
                                                     addOption("--no-playlist")
-                                                    addOption("-f", "best")
+                                                    addOption("-f", "best[ext=mp4]/best")
+                                                    addOption("--merge-output-format", "mp4")
+                                                    addOption("--remux-video", "mp4")
                                                     addOption("-o", template)
                                                 }
                                                 YoutubeDL.getInstance().execute(request)
