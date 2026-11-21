@@ -161,6 +161,9 @@ dependencies {
 
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.7")
 
+    // Google Identity authorization for per-user Google Drive access
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
+
     // ==============================
     // Google Drive
     // ==============================
