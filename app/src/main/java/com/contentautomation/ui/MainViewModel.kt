@@ -699,7 +699,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     )
                     return@launch
                 }
-                val resumeStage = if (job.stage == PipelineStage.SPEECH_TO_TEXT) PipelineStage.TRANSLATE else job.stage
+                val resumeStage = job.stage
                 dao.update(
                     job.copy(
                         stage = resumeStage,
