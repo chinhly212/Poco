@@ -10,7 +10,10 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.BufferedSink
+import okio.source
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -118,23 +121,46 @@ class GoogleDriveClient(context: Context) {
 
     suspend fun upload(uri: Uri, displayName: String, mimeType: String): DriveFileItem =
         withContext(Dispatchers.IO) {
-            val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                ?: error("Không đọc được tệp đã chọn.")
+            val length = appContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                ?: -1L
+            if (length <= 0L) error("Không xác định được dung lượng tệp để tải lên.")
             val metadata = JSONObject().put("name", displayName).put("mimeType", mimeType)
-            val body = MultipartBody.Builder().setType("multipart/related".toMediaType())
-                .addPart(metadata.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .addPart(bytes.toRequestBody(mimeType.toMediaType()))
+            val initiate = Request.Builder()
+                .url("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,mimeType,size,modifiedTime")
+                .header("Authorization", "Bearer ${token()}")
+                .header("X-Upload-Content-Type", mimeType)
+                .header("X-Upload-Content-Length", length.toString())
+                .post(metadata.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .build()
-            val req = Request.Builder()
-                .url("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,modifiedTime")
-                .header("Authorization", "Bearer ${token()}").post(body).build()
-            http.newCall(req).execute().use { response ->
+            val uploadUrl = http.newCall(initiate).execute().use { response ->
+                if (!response.isSuccessful) error("Không thể khởi tạo tải lên (HTTP ${response.code}).")
+                response.header("Location") ?: error("Google Drive không trả đường dẫn tải lên.")
+            }
+            val streamBody = object : RequestBody() {
+                override fun contentType() = mimeType.toMediaType()
+                override fun contentLength() = length
+                override fun writeTo(sink: BufferedSink) {
+                    val input = appContext.contentResolver.openInputStream(uri)
+                        ?: error("Không mở được tệp nguồn.")
+                    input.source().use { source -> sink.writeAll(source) }
+                }
+            }
+            val uploadRequest = Request.Builder()
+                .url(uploadUrl)
+                .header("Authorization", "Bearer ${token()}")
+                .put(streamBody)
+                .build()
+            http.newCall(uploadRequest).execute().use { response ->
                 val text = response.body?.string().orEmpty()
                 if (!response.isSuccessful) error("Tải lên thất bại HTTP ${response.code}: ${text.take(250)}")
                 val item = JSONObject(text)
-                DriveFileItem(item.getString("id"), item.optString("name"),
-                    item.optString("mimeType"), item.optString("size").toLongOrNull() ?: bytes.size.toLong(),
-                    item.optString("modifiedTime"))
+                DriveFileItem(
+                    item.getString("id"),
+                    item.optString("name"),
+                    item.optString("mimeType"),
+                    item.optString("size").toLongOrNull() ?: length,
+                    item.optString("modifiedTime")
+                )
             }
         }
 
