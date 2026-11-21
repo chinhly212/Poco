@@ -38,7 +38,11 @@ data class SourceAccount(
     @ColumnInfo(name = "account_identifier") val accountIdentifier: String,
     val enabled: Boolean = true,
     @ColumnInfo(name = "last_scan_at") val lastScanAt: Long? = null,
-    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis()
+    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "profile_description") val profileDescription: String? = null,
+    @ColumnInfo(name = "profile_avatar_url") val profileAvatarUrl: String? = null,
+    @ColumnInfo(name = "profile_video_count") val profileVideoCount: Int? = null,
+    @ColumnInfo(name = "profile_verified_at") val profileVerifiedAt: Long? = null
 )
 
 @Entity(
