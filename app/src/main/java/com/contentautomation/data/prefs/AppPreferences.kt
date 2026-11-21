@@ -102,8 +102,4 @@ class AppPreferences(private val context: Context) {
 
     fun setTranslationApiKeySecure(value: String) {
         prefs.edit().putString("translation_api_key_secure", value).apply()
-    }
-
-
-        prefs.edit().clear().apply()
-}
+    }}
