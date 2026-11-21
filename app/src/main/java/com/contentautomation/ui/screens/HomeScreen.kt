@@ -25,19 +25,23 @@ import androidx.compose.ui.unit.sp
 import com.contentautomation.ui.components.*
 import com.contentautomation.ui.models.AppError
 import com.contentautomation.ui.models.ErrorKind
-import com.contentautomation.ui.models.PipelineSteps
+import com.contentautomation.data.db.entity.PipelineJob
+import com.contentautomation.data.db.entity.PipelineStage
+import com.contentautomation.data.db.entity.PipelineStatus
 
 @Composable
 fun HomeScreen(
     systemOn: Boolean,
     errors: List<AppError>,
+    jobs: List<PipelineJob>,
     onToggleSystem: () -> Unit,
+    onOpenWork: () -> Unit,
     onErrorAction: (AppError) -> Unit,
     onClearErrors: () -> Unit
 ) {
     ScreenColumn {
         SystemCard(systemOn, onToggleSystem)
-        PipelineCard()
+        PipelineCard(jobs, onOpenWork)
         if (errors.isNotEmpty()) {
             ErrorSection(errors, onErrorAction, onClearErrors)
         }
@@ -84,27 +88,77 @@ private fun SystemCard(systemOn: Boolean, onToggle: () -> Unit) {
 }
 
 @Composable
-private fun PipelineCard() {
+private fun PipelineCard(jobs: List<PipelineJob>, onOpenWork: () -> Unit) {
+    val running = jobs.count { it.status == PipelineStatus.RUNNING }
+    val pending = jobs.count { it.status == PipelineStatus.PENDING }
+    val done = jobs.count { it.status == PipelineStatus.DONE }
+    val failed = jobs.count { it.status == PipelineStatus.FAILED }
+
     GlassCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            GText(
-                "QUY TRÌNH XỬ LÝ VIDEO", 10.sp,
-                weight = FontWeight.Bold, color = GlassColors.InkSoft,
-                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
-            )
-            PipelineSteps.all.forEachIndexed { i, step ->
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    GText("${i + 1}", 13.sp, weight = FontWeight.Bold, color = GlassColors.Blue,
-                        modifier = Modifier.width(24.dp))
-                    GText(step.pending, 13.sp, modifier = Modifier.weight(1f))
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                GText("TIẾN TRÌNH CÔNG VIỆC", 10.sp, weight = FontWeight.Bold,
+                    color = GlassColors.InkSoft, modifier = Modifier.weight(1f))
+                TextButton(onClick = onOpenWork) {
+                    GText("Mở công việc", 12.sp, weight = FontWeight.Bold, color = GlassColors.Blue)
                 }
-                if (i != PipelineSteps.all.lastIndex) GlassDivider()
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                GText("Tổng: ${jobs.size}", 12.sp, weight = FontWeight.SemiBold)
+                GText("Đang chạy: $running", 12.sp, color = GlassColors.Blue)
+                GText("Chờ: $pending", 12.sp, color = GlassColors.InkSoft)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                GText("Đã lưu: $done", 12.sp, color = GlassColors.Green)
+                GText("Lỗi: $failed", 12.sp, color = GlassColors.Red)
+            }
+            Spacer(Modifier.height(8.dp))
+            if (jobs.isEmpty()) {
+                GText("Chưa có công việc. Thêm tài khoản nguồn rồi chọn Quét ngay.",
+                    12.sp, color = GlassColors.InkSoft)
+            } else {
+                jobs.take(3).forEach { job ->
+                    GlassDivider()
+                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            GText(stageTitle(job.stage), 12.sp, weight = FontWeight.SemiBold)
+                            GText(job.sourceVideoId, 10.sp, color = GlassColors.InkSoft)
+                        }
+                        GText(statusTitle(job.status), 11.sp, weight = FontWeight.Bold,
+                            color = when (job.status) {
+                                PipelineStatus.RUNNING -> GlassColors.Blue
+                                PipelineStatus.DONE -> GlassColors.Green
+                                PipelineStatus.FAILED -> GlassColors.Red
+                                PipelineStatus.PAUSED -> GlassColors.Amber
+                                PipelineStatus.PENDING -> GlassColors.InkSoft
+                            })
+                    }
+                }
             }
         }
     }
+}
+
+private fun stageTitle(stage: PipelineStage): String = when (stage) {
+    PipelineStage.DOWNLOAD -> "Tải video"
+    PipelineStage.ANALYZE -> "Tối ưu và lưu video"
+    PipelineStage.SPEECH_TO_TEXT -> "Nhận diện giọng nói"
+    PipelineStage.TRANSLATE -> "Dịch nội dung"
+    PipelineStage.TTS -> "Tạo giọng đọc"
+    PipelineStage.SUBTITLE -> "Tạo phụ đề"
+    PipelineStage.MERGE -> "Ghép video"
+    PipelineStage.EXPORT -> "Xuất video"
+    PipelineStage.UPLOAD -> "Tải lên máy chủ"
+    PipelineStage.VERIFY -> "Kiểm tra kết quả"
+}
+
+private fun statusTitle(status: PipelineStatus): String = when (status) {
+    PipelineStatus.RUNNING -> "Đang chạy"
+    PipelineStatus.PENDING -> "Đang chờ"
+    PipelineStatus.DONE -> "Hoàn thành"
+    PipelineStatus.FAILED -> "Thất bại"
+    PipelineStatus.PAUSED -> "Tạm dừng"
 }
 
 @Composable
