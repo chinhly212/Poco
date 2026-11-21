@@ -51,7 +51,7 @@ fun SystemScreen(
             GlassButton("Tiếp tục tất cả", onClick = {
                 val resumable = jobs.filter {
                     (it.status == PipelineStatus.PAUSED || it.status == PipelineStatus.FAILED) &&
-                        it.stage in listOf(PipelineStage.DOWNLOAD, PipelineStage.ANALYZE, PipelineStage.SPEECH_TO_TEXT)
+                        it.stage in listOf(PipelineStage.DOWNLOAD, PipelineStage.ANALYZE, PipelineStage.SPEECH_TO_TEXT, PipelineStage.TRANSLATE, PipelineStage.TTS, PipelineStage.MERGE, PipelineStage.EXPORT, PipelineStage.VERIFY)
                 }
                 if (resumable.isEmpty()) {
                     android.widget.Toast.makeText(
@@ -153,7 +153,7 @@ private fun JobCard(job: PipelineJob, onPauseJob: (String) -> Unit, onResumeJob:
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (job.status == PipelineStatus.RUNNING || job.status == PipelineStatus.PENDING) {
                     GlassButton("Tạm dừng", onClick = { onPauseJob(job.id) })
-                } else if ((job.status == PipelineStatus.PAUSED || job.status == PipelineStatus.FAILED) && job.stage in listOf(PipelineStage.DOWNLOAD, PipelineStage.ANALYZE, PipelineStage.SPEECH_TO_TEXT)) {
+                } else if ((job.status == PipelineStatus.PAUSED || job.status == PipelineStatus.FAILED) && job.stage in listOf(PipelineStage.DOWNLOAD, PipelineStage.ANALYZE, PipelineStage.SPEECH_TO_TEXT, PipelineStage.TRANSLATE, PipelineStage.TTS, PipelineStage.MERGE, PipelineStage.EXPORT, PipelineStage.VERIFY)) {
                     GlassButton("Tiếp tục", onClick = { onResumeJob(job.id) }, primary = true)
                 } else if (job.status == PipelineStatus.PAUSED || job.status == PipelineStatus.FAILED) {
                     GText("Cần cập nhật quy trình", 11.sp, color = GlassColors.Amber)
@@ -166,7 +166,7 @@ private fun JobCard(job: PipelineJob, onPauseJob: (String) -> Unit, onResumeJob:
 private fun stageLabel(stage: PipelineStage): String = when (stage) {
     PipelineStage.DOWNLOAD -> "Tải video nguồn"
     PipelineStage.ANALYZE -> "Tối ưu video"
-    PipelineStage.SPEECH_TO_TEXT -> "Nhận diện lời nói"
+    PipelineStage.SPEECH_TO_TEXT -> "Chuẩn bị nội dung nguồn"
     PipelineStage.TRANSLATE -> "Dịch nội dung"
     PipelineStage.TTS -> "Tạo giọng đọc"
     PipelineStage.SUBTITLE -> "Tạo phụ đề"
