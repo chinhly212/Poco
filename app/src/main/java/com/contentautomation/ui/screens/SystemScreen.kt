@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,6 +38,7 @@ fun SystemScreen(
     onPauseJob: (String) -> Unit,
     onResumeJob: (String) -> Unit
 ) {
+    val context = LocalContext.current
     var filter by remember { mutableStateOf(JobFilter.ALL) }
 
     val shown = remember(jobs, filter) {
@@ -53,7 +55,7 @@ fun SystemScreen(
                 }
                 if (resumable.isEmpty()) {
                     android.widget.Toast.makeText(
-                        androidx.compose.ui.platform.LocalContext.current,
+                        context,
                         if (jobs.isEmpty()) "Chưa có công việc để tiếp tục." else "Không có công việc nào đang tạm dừng hoặc bị lỗi có thể tiếp tục.",
                         android.widget.Toast.LENGTH_LONG
                     ).show()
