@@ -10,175 +10,171 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import com.contentautomation.video.AiVideoServerClient
 import com.contentautomation.video.MediaStoreSaver
 import kotlinx.coroutines.launch
 import java.io.File
+
+private data class AiChatLine(val text: String, val fromUser: Boolean)
 
 @Composable
 fun AiScreen(vm: MainViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val server = remember { AiVideoServerClient() }
-
-    var serverStatus by remember { mutableStateOf("Đang kiểm tra máy chủ…") }
-    var serverReady by remember { mutableStateOf(false) }
+    val lines = remember { mutableStateListOf<AiChatLine>() }
+    var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    var videoUrl by remember { mutableStateOf("") }
-    var message by remember { mutableStateOf("") }
-    var chatReply by remember { mutableStateOf("") }
-    var result by remember { mutableStateOf("") }
+    var serverOnline by remember { mutableStateOf<Boolean?>(null) }
 
-    suspend fun refreshServer() {
-        serverStatus = "Đang kiểm tra máy chủ…"
-        try {
-            serverStatus = server.checkHealth()
-            serverReady = true
-        } catch (error: Exception) {
-            serverStatus = error.message ?: "Không kết nối được máy chủ."
-            serverReady = false
+    LaunchedEffect(Unit) {
+        serverOnline = runCatching { server.checkHealth() }.isSuccess
+        if (lines.isEmpty()) {
+            lines.add(
+                AiChatLine(
+                    "Xin chào! Tôi là trợ lý MuChi. Bạn có thể trò chuyện, hỏi AI hoặc gửi link video để tôi tự tìm nguồn tải và lưu vào điện thoại.",
+                    false
+                )
+            )
         }
     }
 
-    LaunchedEffect(Unit) { refreshServer() }
-
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("TRUNG TÂM AI", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text(
-            "Trò chuyện với trợ lý và tải video qua máy chủ. Các nguồn tải sẽ tự chuyển khi nguồn trước gặp lỗi.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Card(
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                    Text("Máy chủ AI Video", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        if (serverReady) "Đã kết nối" else "Chưa kết nối",
-                        color = if (serverReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                    )
-                }
-                Text(serverStatus, style = MaterialTheme.typography.bodySmall)
+            Column {
+                Text("MuChi AI", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(
-                    "Nguồn tải: GenDownload · WebDownloader · TikTok Worker · yt-dlp",
-                    style = MaterialTheme.typography.bodySmall
+                    if (serverOnline == true) "Trợ lý trực tuyến" else if (serverOnline == false) "Đang chờ máy chủ phản hồi" else "Đang kết nối…",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (serverOnline == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                TextButton(enabled = !busy, onClick = { scope.launch { refreshServer() } }) {
-                    Text("Kiểm tra lại máy chủ")
-                }
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("TẢI VIDEO", fontWeight = FontWeight.Bold)
-                OutlinedTextField(
-                    value = videoUrl,
-                    onValueChange = { videoUrl = it },
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            lines.forEach { line ->
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Dán đường dẫn video") },
-                    placeholder = { Text("https://…") },
-                    minLines = 2,
-                    maxLines = 4
-                )
-                Button(
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !busy && videoUrl.trim().startsWith("http"),
-                    onClick = {
-                        scope.launch {
-                            busy = true
-                            result = "Đang yêu cầu máy chủ tìm nguồn tải…"
-                            val temp = File(context.cacheDir, "muchiai_${System.currentTimeMillis()}.mp4")
-                            try {
-                                val downloaded = server.downloadVideo(videoUrl.trim(), temp)
-                                val saved = MediaStoreSaver(context).saveVideoToGallery(
-                                    temp,
-                                    "MuChi_${System.currentTimeMillis()}.mp4"
-                                )
-                                if (saved == null) throw IllegalStateException("Tải được video nhưng không lưu được vào thư viện.")
-                                result = "Đã tải và lưu video vào Movies/MuChi. Nguồn: ${downloaded.provider}. Dung lượng: ${downloaded.bytesWritten / 1024} KB."
-                                videoUrl = ""
-                            } catch (error: Exception) {
-                                result = "Tải video thất bại: ${error.message ?: "Lỗi không xác định"}"
-                            } finally {
-                                temp.delete()
-                                busy = false
-                            }
-                        }
-                    }
+                    horizontalArrangement = if (line.fromUser) Arrangement.End else Arrangement.Start
                 ) {
-                    if (busy) CircularProgressIndicator() else Text("Tải video và lưu vào điện thoại")
+                    Surface(
+                        color = if (line.fromUser) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                        shape = MaterialTheme.shapes.large,
+                        modifier = Modifier.fillMaxWidth(0.88f)
+                    ) {
+                        Text(
+                            line.text,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (line.fromUser) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                if (result.isNotBlank()) Text(result, style = MaterialTheme.typography.bodySmall)
+            }
+            if (busy) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator()
+                    Text("MuChi AI đang xử lý…", style = MaterialTheme.typography.labelMedium)
+                }
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("TRỢ LÝ AI", fontWeight = FontWeight.Bold)
-                OutlinedTextField(
-                    value = message,
-                    onValueChange = { message = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Nhập câu hỏi") },
-                    placeholder = { Text("Bạn cần trợ giúp điều gì?") },
-                    minLines = 2,
-                    maxLines = 5
-                )
-                Button(
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !busy && message.isNotBlank(),
-                    onClick = {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Nhắn tin hoặc dán link video…") },
+                maxLines = 4,
+                enabled = !busy
+            )
+            IconButton(
+                enabled = !busy && input.isNotBlank(),
+                onClick = {
+                    val prompt = input.trim()
+                    if (prompt.isNotEmpty()) {
+                        lines.add(AiChatLine(prompt, true))
+                        input = ""
+                        busy = true
                         scope.launch {
-                            busy = true
-                            chatReply = "Đang gửi yêu cầu…"
                             try {
-                                chatReply = server.sendChat(message.trim()).message
+                                val response = server.sendChat(prompt)
+                                if (response.type == "video" && !response.videoUrl.isNullOrBlank()) {
+                                    lines.add(AiChatLine("Đã tìm thấy video qua ${response.provider ?: "máy chủ"}. Đang tải và lưu vào điện thoại…", false))
+                                    val temp = File(context.cacheDir, "muchiai_${System.currentTimeMillis()}.mp4")
+                                    try {
+                                        val downloaded = server.downloadResolvedVideo(
+                                            response.videoUrl,
+                                            temp,
+                                            response.provider,
+                                            response.title
+                                        )
+                                        val saved = MediaStoreSaver(context).saveVideoToGallery(
+                                            temp,
+                                            "MuChi_${System.currentTimeMillis()}.mp4"
+                                        )
+                                        if (saved == null) throw IllegalStateException("Không lưu được video vào thư viện.")
+                                        lines.add(
+                                            AiChatLine(
+                                                "Đã tải và lưu video vào Movies/MuChi. Nguồn: ${downloaded.provider}. Dung lượng: ${downloaded.bytesWritten / 1024} KB.",
+                                                false
+                                            )
+                                        )
+                                    } finally {
+                                        temp.delete()
+                                    }
+                                } else {
+                                    lines.add(AiChatLine(response.message, false))
+                                }
                             } catch (error: Exception) {
-                                chatReply = "Không thể kết nối AI: ${error.message ?: "Lỗi không xác định"}"
+                                lines.add(AiChatLine("Không xử lý được yêu cầu: ${error.message ?: "Lỗi không xác định"}", false))
                             } finally {
                                 busy = false
                             }
                         }
                     }
-                ) { Text("Gửi cho AI") }
-                if (chatReply.isNotBlank()) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Text(chatReply, modifier = Modifier.fillMaxWidth().padding(12.dp))
-                    }
                 }
+            ) {
+                Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Gửi")
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(2.dp))
     }
 }
