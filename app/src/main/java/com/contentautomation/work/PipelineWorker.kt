@@ -106,20 +106,33 @@ class PipelineWorker(
                                 "source.%(ext)s"
                             ).absolutePath
 
-                        val request =
-                            YoutubeDLRequest(video.sourceUrl).apply {
-                                addOption("--no-playlist")
-                                addOption("-o", outputTemplate)
-                                addOption("-f", "best")
-                            }
+                        // First use the centralized server: it automatically fails over
+                        // GenDownload -> public fallbacks -> server-side yt-dlp.
+                        // If the server is asleep/unavailable, fall back to on-device yt-dlp.
+                        val serverDownloaded = try {
+                            com.contentautomation.video.AiVideoServerClient()
+                                .downloadVideo(video.sourceUrl, File(workDir, "server-source.mp4"))
+                            true
+                        } catch (serverError: Exception) {
+                            File(workDir, "server-source.mp4").delete()
+                            false
+                        }
 
-                        YoutubeDL.getInstance().execute(request)
+                        if (!serverDownloaded) {
+                            val request =
+                                YoutubeDLRequest(video.sourceUrl).apply {
+                                    addOption("--no-playlist")
+                                    addOption("-o", outputTemplate)
+                                    addOption("-f", "best")
+                                }
+                            YoutubeDL.getInstance().execute(request)
+                        }
 
                         val downloaded =
                             workDir.listFiles()
                                 ?.filter {
                                     it.isFile &&
-                                        it.name.startsWith("source.") &&
+                                        (it.name.startsWith("source.") || it.name == "server-source.mp4") &&
                                         !it.name.endsWith(".part")
                                 }
                                 ?.maxByOrNull {
