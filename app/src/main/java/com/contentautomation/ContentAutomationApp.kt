@@ -1,4 +1,3 @@
-
 package com.contentautomation
 
 import android.app.Application
@@ -7,29 +6,29 @@ import com.contentautomation.data.db.AppDatabase
 import com.contentautomation.data.prefs.AppPreferences
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class ContentAutomationApp : Application() {
 
     private val applicationScope =
         CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // Database dùng chung toàn ứng dụng
+    private val mediaEnginesReady = CompletableDeferred<Boolean>()
+
     val database: AppDatabase by lazy {
         AppDatabase.get(applicationContext)
     }
 
-    // Cài đặt ứng dụng
     val prefs: AppPreferences by lazy {
         AppPreferences(applicationContext)
     }
 
-
     companion object {
-
         @Volatile
         var isEngineInitialized: Boolean = false
             private set
@@ -41,57 +40,43 @@ class ContentAutomationApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-
-        // Khởi tạo các thành phần dùng chung
         initializeAppComponents()
-
-        // Khởi tạo YoutubeDL và FFmpeg ở luồng nền
         initMediaEngines()
+    }
+
+    suspend fun awaitMediaEngines(timeoutMillis: Long = 60_000L): Boolean {
+        return withTimeoutOrNull(timeoutMillis) {
+            mediaEnginesReady.await()
+        } ?: false
     }
 
     private fun initializeAppComponents() {
         try {
             database
             prefs
-
-            Log.d("NiChiApp", "App components initialized")
+            Log.d("MuChiApp", "App components initialized")
         } catch (e: Exception) {
-            Log.e("NiChiApp", "App initialization error", e)
+            Log.e("MuChiApp", "App initialization error", e)
         }
     }
 
     private fun initMediaEngines() {
         applicationScope.launch(Dispatchers.IO) {
             try {
-                Log.d("MuChiEngine", "Initializing YoutubeDL...")
-
-                YoutubeDL.getInstance()
-                    .init(applicationContext)
-
-                Log.d("MuChiEngine", "YoutubeDL initialized")
-
-                Log.d("MuChiEngine", "Initializing FFmpeg...")
-
-                FFmpeg.getInstance()
-                    .init(applicationContext)
+                YoutubeDL.getInstance().init(applicationContext)
+                FFmpeg.getInstance().init(applicationContext)
 
                 isEngineInitialized = true
                 engineInitializationError = null
-
-                Log.d(
-                    "MuChiEngine",
-                    "YoutubeDL and FFmpeg initialized successfully"
-                )
-
+                mediaEnginesReady.complete(true)
+                Log.d("MuChiEngine", "YoutubeDL and FFmpeg initialized")
             } catch (e: Exception) {
                 isEngineInitialized = false
                 engineInitializationError = e.message
-
-                Log.e(
-                    "MuChiEngine",
-                    "Media engine initialization failed",
-                    e
-                )
+                if (!mediaEnginesReady.isCompleted) {
+                    mediaEnginesReady.complete(false)
+                }
+                Log.e("MuChiEngine", "Media engine initialization failed", e)
             }
         }
     }
