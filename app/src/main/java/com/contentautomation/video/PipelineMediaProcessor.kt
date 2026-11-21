@@ -23,8 +23,8 @@ import kotlin.coroutines.resume
 
 /**
  * Real translation, Vietnamese speech synthesis and video/audio muxing for MuChi.
- * Speech is generated from translated title/description metadata. It does not claim
- * to transcribe dialogue embedded in the original video.
+ * Chinese dialogue is transcribed with Groq Whisper when a Groq key is configured.
+ * If Groq is not configured, the pipeline can use source title/description instead.
  */
 class PipelineMediaProcessor(private val context: Context) {
     private val api = AiVideoServerClient()
@@ -53,7 +53,7 @@ class PipelineMediaProcessor(private val context: Context) {
                 val extractSession = FFmpegKit.execute(command)
                 if (!ReturnCode.isSuccess(extractSession.returnCode) ||
                     !audio.exists() || audio.length() <= 0L) {
-                    throw IllegalStateException("Không tách được âm thanh để nhận diện: \${(extractSession.failStackTrace ?: "").take(300)}")
+                    throw IllegalStateException("Không tách được âm thanh để nhận diện: ${(extractSession.failStackTrace ?: "").take(300)}")
                 }
                 if (audio.length() > 24L * 1024L * 1024L) {
                     throw IllegalStateException("Âm thanh sau khi tách vẫn vượt 24 MB. Hãy dùng video ngắn hơn.")
@@ -77,7 +77,7 @@ class PipelineMediaProcessor(private val context: Context) {
                     if (!response.isSuccessful) {
                         val detail = runCatching { JSONObject(body).optJSONObject("error")?.optString("message") }
                             .getOrNull()?.takeIf { it.isNotBlank() }
-                        throw IllegalStateException("Groq Whisper HTTP \${response.code}: \${detail ?: body.take(300)}")
+                        throw IllegalStateException("Groq Whisper HTTP ${response.code}: ${detail ?: body.take(300)}")
                     }
                     val transcript = JSONObject(body).optString("text").trim()
                     require(transcript.isNotBlank()) { "Groq Whisper không nhận diện được lời nói trong video." }
