@@ -30,18 +30,16 @@ data class StepDef(
  *
  * 1. Lấy video nguồn.
  * 2. Tải video không logo, không âm thanh.
- * 3. Tách âm thanh từ video gốc.
- * 4. Ghép nhạc lấy từ kho TikTok.
- * 5. Gửi MP3 sang Gemini để nhận diện lời bài hát.
- * 6. Căn chỉnh lời và ghép lời vào video.
- * 7. Tự động lưu video hoàn tất vào điện thoại.
+ * 3. Xử lý video theo cấu hình.
+ * 4. Tạo phụ đề khi đã cấu hình dịch vụ nhận diện.
+ * 5. Lưu video hoàn tất trực tiếp vào điện thoại.
  */
 object PipelineSteps {
 
     const val GET_VIDEO = 0
     const val DOWNLOAD_VIDEO = 1
     const val EXTRACT_AUDIO = 2
-    const val MERGE_TIKTOK_MUSIC = 3
+    const val PROCESS_VIDEO = 3
     const val GEMINI_LYRICS = 4
     const val MERGE_LYRICS = 5
     const val SAVE_TO_PHONE = 6
@@ -71,9 +69,9 @@ object PipelineSteps {
         ),
 
         StepDef(
-            pending = "Ghép nhạc từ kho TikTok",
-            running = "Đang ghép nhạc từ kho TikTok",
-            done = "Đã ghép nhạc vào video"
+            pending = "Xử lý video",
+            running = "Đang xử lý video",
+            done = "Đã xử lý video"
         ),
 
         StepDef(
