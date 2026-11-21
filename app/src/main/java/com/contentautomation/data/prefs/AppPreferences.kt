@@ -40,7 +40,6 @@ class AppPreferences(private val context: Context) {
         val KEY_DRIVE_FOLDER_ID =
             stringPreferencesKey("drive_folder_id")
 
-            stringPreferencesKey("tiktok_client_secret")
 
         val KEY_FOREGROUND_ENABLED =
             booleanPreferencesKey("foreground_enabled")
@@ -106,30 +105,5 @@ class AppPreferences(private val context: Context) {
     }
 
 
-    fun getAccessToken(): String? =
-        prefs.getString("tiktok_access", null)
-
-    fun setAccessToken(token: String) =
-        prefs.edit().putString("tiktok_access", token).apply()
-
-    fun getRefreshToken(): String? =
-        prefs.getString("tiktok_refresh", null)
-
-    fun setRefreshToken(token: String) =
-        prefs.edit().putString("tiktok_refresh", token).apply()
-
-    fun getTokenExpiresAt(): Long =
-        prefs.getLong("tiktok_expires", 0L)
-
-    fun setTokenExpiresAt(ts: Long) =
-        prefs.edit().putLong("tiktok_expires", ts).apply()
-
-    fun getOpenId(): String? =
-        prefs.getString("tiktok_open_id", null)
-
-    fun setOpenId(id: String) =
-        prefs.edit().putString("tiktok_open_id", id).apply()
-
-    fun clearTokens() =
         prefs.edit().clear().apply()
 }
