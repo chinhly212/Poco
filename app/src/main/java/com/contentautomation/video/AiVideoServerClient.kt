@@ -21,7 +21,8 @@ data class AiVideoChatResult(
     val type: String,
     val message: String,
     val videoUrl: String? = null,
-    val provider: String? = null
+    val provider: String? = null,
+    val title: String? = null
 )
 
 /**
@@ -66,9 +67,37 @@ class AiVideoServerClient(
                 type = payload.optString("type", "text"),
                 message = payload.optString("message", "Máy chủ không trả lời."),
                 videoUrl = data?.optString("video_url")?.takeIf { it.isNotBlank() },
-                provider = data?.optString("provider")?.takeIf { it.isNotBlank() }
+                provider = data?.optString("provider")?.takeIf { it.isNotBlank() },
+                title = data?.optString("title")?.takeIf { it.isNotBlank() }
             )
         }
+    }
+
+    suspend fun downloadResolvedVideo(
+        videoUrl: String,
+        destination: File,
+        provider: String?,
+        title: String?
+    ): AiVideoDownloadResult = withContext(Dispatchers.IO) {
+        destination.parentFile?.mkdirs()
+        val request = Request.Builder().url(videoUrl).get()
+            .header("Accept", "video/*,application/octet-stream;q=0.9,*/*;q=0.8").build()
+        val bytes = client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Không tải được file video: HTTP ${response.code}")
+            val body = response.body ?: throw IOException("Máy chủ video trả nội dung rỗng.")
+            val type = body.contentType()?.toString()?.lowercase().orEmpty()
+            if (type.contains("text/html") || type.contains("application/json")) {
+                throw IOException("Đường dẫn trả về không phải file video ($type).")
+            }
+            destination.outputStream().buffered().use { output ->
+                body.byteStream().use { input -> input.copyTo(output) }
+            }
+        }
+        if (bytes <= 0L || !destination.exists() || destination.length() <= 0L) {
+            destination.delete()
+            throw IOException("File video tải về rỗng.")
+        }
+        AiVideoDownloadResult(provider ?: "AI Video Server", title, bytes)
     }
 
     suspend fun downloadVideo(sourceUrl: String, destination: File): AiVideoDownloadResult =
