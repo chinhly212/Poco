@@ -31,6 +31,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.contentautomation.data.prefs.UserIdentity
+import com.contentautomation.data.remote.SupabaseAuth
 import com.contentautomation.ui.components.BottomItem
 import com.contentautomation.ui.components.GlassBackground
 import com.contentautomation.ui.components.GlassBottomBar
@@ -49,6 +50,15 @@ private object MuChiRoutes {
 fun AppNavHost(vm: MainViewModel) {
 
     val context = LocalContext.current
+    val auth = remember(context) { SupabaseAuth(context.applicationContext) }
+    var authenticated by remember { mutableStateOf(!auth.currentAccessToken().isNullOrBlank()) }
+    if (!authenticated) {
+        SupabaseLoginScreen(
+            auth = auth,
+            onSignedIn = { authenticated = true }
+        )
+        return
+    }
     val navController = rememberNavController()
 
     val isSystemRunning by
