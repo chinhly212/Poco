@@ -17,6 +17,13 @@ data class AiVideoDownloadResult(
     val bytesWritten: Long
 )
 
+data class AiVideoChatResult(
+    val type: String,
+    val message: String,
+    val videoUrl: String? = null,
+    val provider: String? = null
+)
+
 /**
  * Calls the user's AI Video Server. Provider failover (GenDownload and its
  * fallbacks) is performed by the server; this client only streams the
@@ -32,6 +39,37 @@ class AiVideoServerClient(
         .callTimeout(240, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
+
+    suspend fun checkHealth(): String = withContext(Dispatchers.IO) {
+        val request = Request.Builder().url("${baseUrl.trimEnd('/')}/health").get().build()
+        client.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IOException("Health HTTP ${response.code}: ${body.take(200)}")
+            val json = JSONObject(body)
+            if (json.optString("status") != "healthy") throw IOException("Máy chủ chưa sẵn sàng.")
+            "Đang hoạt động · phiên bản ${json.optString("version", "unknown")}"
+        }
+    }
+
+    suspend fun sendChat(message: String): AiVideoChatResult = withContext(Dispatchers.IO) {
+        val json = JSONObject().put("message", message)
+        val request = Request.Builder()
+            .url("${baseUrl.trimEnd('/')}/chat")
+            .post(json.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IOException("AI HTTP ${response.code}: ${body.take(300)}")
+            val payload = JSONObject(body)
+            val data = payload.optJSONObject("data")
+            AiVideoChatResult(
+                type = payload.optString("type", "text"),
+                message = payload.optString("message", "Máy chủ không trả lời."),
+                videoUrl = data?.optString("video_url")?.takeIf { it.isNotBlank() },
+                provider = data?.optString("provider")?.takeIf { it.isNotBlank() }
+            )
+        }
+    }
 
     suspend fun downloadVideo(sourceUrl: String, destination: File): AiVideoDownloadResult =
         withContext(Dispatchers.IO) {
