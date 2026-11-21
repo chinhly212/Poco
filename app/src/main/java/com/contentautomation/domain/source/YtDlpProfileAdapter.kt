@@ -44,13 +44,16 @@ abstract class YtDlpProfileAdapter : SourceAdapter {
                 val count = root.optInt("playlist_count", -1).takeIf { it >= 0 }
                     ?: root.optInt("video_count", -1).takeIf { it >= 0 }
                     ?: entries?.length()
+                val followers = root.optLong("follower_count", -1L).takeIf { it >= 0L }
+                    ?: root.optLong("followers", -1L).takeIf { it >= 0L }
+                    ?: root.optLong("fans", -1L).takeIf { it >= 0L }
                 val hasEvidence = !title.isNullOrBlank() ||
                     !firstText(root, "channel_id", "uploader_id").isNullOrBlank() ||
                     (entries != null && entries.length() > 0)
                 if (!hasEvidence) {
                     throw IllegalStateException("Trang không trả thông tin hồ sơ. ID có thể sai, phiên đăng nhập hết hạn hoặc nền tảng yêu cầu xác minh.")
                 }
-                SourceProfileInfo(title ?: identifier, resolvedId, description, avatar, count)
+                SourceProfileInfo(title ?: identifier, resolvedId, description, avatar, count, followers)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
