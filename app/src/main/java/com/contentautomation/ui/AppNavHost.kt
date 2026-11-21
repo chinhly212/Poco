@@ -211,7 +211,13 @@ fun AppNavHost(vm: MainViewModel) {
                 }
 
                 composable(MuChiRoutes.WORK) {
-                    SystemScreen(vm = vm, jobs = pipelineJobs)
+                    SystemScreen(
+                        vm = vm,
+                        jobs = pipelineJobs,
+                        onScanNow = { vm.scanNow() },
+                        onPauseJob = { vm.pauseJob(it) },
+                        onResumeJob = { vm.resumeJob(it) }
+                    )
                 }
 
                 composable(MuChiRoutes.AI) {
