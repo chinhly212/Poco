@@ -76,6 +76,14 @@ class PipelineWorker(
             workDir.mkdirs()
 
             try {
+                // Workers may start before Application's asynchronous native-engine setup finishes.
+                if (!app.awaitMediaEngines()) {
+                    throw IllegalStateException(
+                        app.engineInitializationError
+                            ?: "Bộ máy tải và xử lý video chưa sẵn sàng. Hệ thống sẽ tự thử lại."
+                    )
+                }
+
                 when (job.stage) {
 
                     PipelineStage.DOWNLOAD -> {
@@ -174,7 +182,7 @@ class PipelineWorker(
                         }
 
                         val savedUri = MediaStoreSaver(applicationContext)
-                            .saveVideoToGallery(compressed.outputFile, "NiChi_${video.id.take(8)}.mp4")
+                            .saveVideoToGallery(compressed.outputFile, "MuChi_${video.id.take(8)}.mp4")
                             ?: throw IllegalStateException("Không thể lưu video vào thư viện điện thoại")
 
                         val processedDao = db.processedVideoDao()
@@ -200,7 +208,7 @@ class PipelineWorker(
                             stage = PipelineStage.EXPORT,
                             status = PipelineStatus.DONE,
                             retries = 0,
-                            error = "Đã xử lý và lưu vào Movies/NiChi trên điện thoại.",
+                            error = "Đã xử lý và lưu vào Movies/MuChi trên điện thoại.",
                             updatedAt = System.currentTimeMillis()
                         ))
                     }
