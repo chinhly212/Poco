@@ -184,10 +184,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _uiErrors.update { current ->
             (listOf(error) + current).take(50)
         }
+        viewModelScope.launch {
+            runCatching {
+                application.database.notificationDao().insert(
+                    com.contentautomation.data.db.entity.StoredNotification(
+                        id = error.id,
+                        kind = error.kind.name,
+                        title = error.title,
+                        message = error.message,
+                        time = error.time,
+                        actionLabel = error.actionLabel,
+                        createdAt = System.currentTimeMillis()
+                    )
+                )
+            }.onFailure { Log.e("MainViewModel", "Không thể lưu thông báo", it) }
+        }
     }
 
     fun clearErrors() {
         _uiErrors.value = emptyList()
+        viewModelScope.launch {
+            runCatching { application.database.notificationDao().deleteAll() }
+                .onFailure { Log.e("MainViewModel", "Không thể xóa thông báo", it) }
+        }
+    }
+
+    fun deleteNotification(id: String) {
+        viewModelScope.launch {
+            runCatching { application.database.notificationDao().deleteById(id) }
+                .onFailure { Log.e("MainViewModel", "Không thể xóa thông báo", it) }
+        }
     }
 
     // API keys are stored only in EncryptedSharedPreferences.
@@ -260,6 +286,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // INITIALIZATION
 
     init {
+        viewModelScope.launch {
+            application.database.notificationDao().observeAll().collect { stored ->
+                _uiErrors.value = stored.mapNotNull { item ->
+                    val kind = runCatching { ErrorKind.valueOf(item.kind) }.getOrNull() ?: return@mapNotNull null
+                    AppError(item.id, kind, item.title, item.message, item.time, item.actionLabel)
+                }
+            }
+        }
         viewModelScope.launch {
             try {
                 val savedState =
