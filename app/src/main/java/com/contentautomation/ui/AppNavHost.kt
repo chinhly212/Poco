@@ -26,6 +26,8 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -386,6 +388,7 @@ private fun AddAccountDialog(
     var platform by remember {
         mutableStateOf("Douyin")
     }
+    var platformMenuExpanded by remember { mutableStateOf(false) }
 
     var accountName by remember {
         mutableStateOf("")
@@ -405,16 +408,33 @@ private fun AddAccountDialog(
         text = {
             Column {
 
-                OutlinedTextField(
-                    value = platform,
-                    onValueChange = {
-                        platform = it
-                    },
-                    label = {
-                        Text("Nền tảng")
-                    },
-                    singleLine = true
-                )
+                androidx.compose.material3.ExposedDropdownMenuBox(
+                    expanded = platformMenuExpanded,
+                    onExpandedChange = { platformMenuExpanded = !platformMenuExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = platform,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Nền tảng") },
+                        modifier = Modifier.menuAnchor(),
+                        singleLine = true
+                    )
+                    DropdownMenu(
+                        expanded = platformMenuExpanded,
+                        onDismissRequest = { platformMenuExpanded = false }
+                    ) {
+                        listOf("Douyin", "Kuaishou").forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                onClick = {
+                                    platform = option
+                                    platformMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
 
                 OutlinedTextField(
                     value = accountName,
