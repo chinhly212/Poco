@@ -1,5 +1,17 @@
 package com.contentautomation.ui
 
+import android.app.Activity
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.Scope
+import com.google.api.services.drive.DriveScopes
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -57,6 +69,69 @@ fun AppNavHost(vm: MainViewModel) {
     val context = LocalContext.current
     val auth = remember(context) { SupabaseAuth(context.applicationContext) }
     var authenticated by remember { mutableStateOf(!auth.currentAccessToken().isNullOrBlank()) }
+
+    val driveAuthorizationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            try {
+                val authorization = Identity.getAuthorizationClient(context)
+                    .getAuthorizationResultFromIntent(result.data)
+                val token = authorization.accessToken
+                if (!token.isNullOrBlank()) vm.acceptDriveAccessToken(token)
+                else Toast.makeText(context, "Google không trả access token.", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, e.message ?: "Không nhận được quyền Google Drive.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    val driveUploadLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val name = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+            } ?: "nichi-upload"
+            val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+            vm.uploadDriveFile(uri, name, mime)
+        }
+    }
+
+    fun connectDrive() {
+        val request = AuthorizationRequest.builder()
+            .setRequestedScopes(
+                listOf(
+                    Scope(DriveScopes.DRIVE_FILE),
+                    Scope("openid"),
+                    Scope("email"),
+                    Scope("profile")
+                )
+            )
+            .build()
+        Identity.getAuthorizationClient(context)
+            .authorize(request)
+            .addOnSuccessListener { authorization ->
+                if (authorization.hasResolution()) {
+                    val pending = authorization.pendingIntent
+                    if (pending != null) {
+                        driveAuthorizationLauncher.launch(
+                            IntentSenderRequest.Builder(pending.intentSender).build()
+                        )
+                    } else {
+                        Toast.makeText(context, "Google không trả yêu cầu cấp quyền.", Toast.LENGTH_LONG).show()
+                    }
+                } else {
+                    val token = authorization.accessToken
+                    if (!token.isNullOrBlank()) vm.acceptDriveAccessToken(token)
+                    else Toast.makeText(context, "Google không trả access token.", Toast.LENGTH_LONG).show()
+                }
+            }
+            .addOnFailureListener { error ->
+                Toast.makeText(context, error.message ?: "Không thể kết nối Google Drive.", Toast.LENGTH_LONG).show()
+            }
+    }
     if (!authenticated) {
         SupabaseLoginScreen(
             auth = auth,
@@ -80,6 +155,9 @@ fun AppNavHost(vm: MainViewModel) {
 
     val phoneStorage by
         vm.phoneStorage.collectAsStateWithLifecycle()
+
+    val driveState by vm.driveState.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { vm.refreshDrive() }
 
     val backStackEntry by
         navController.currentBackStackEntryAsState()
@@ -227,8 +305,11 @@ fun AppNavHost(vm: MainViewModel) {
                 composable(MuChiRoutes.STORAGE) {
                     StorageScreen(
                         storage = phoneStorage,
-                        driveStatus = "Chưa kết nối Google Drive",
-                        onDriveClick = { navigateTo(MuChiRoutes.SETTINGS) }
+                        drive = driveState,
+                        onConnectDrive = { connectDrive() },
+                        onRefreshDrive = { connectDrive() },
+                        onPickUpload = { driveUploadLauncher.launch(arrayOf("*/*")) },
+                        onDeleteDriveFile = { vm.deleteDriveFile(it) }
                     )
                 }
 
