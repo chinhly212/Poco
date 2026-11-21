@@ -57,6 +57,7 @@ import com.contentautomation.ui.screens.AiScreen
 import com.contentautomation.ui.screens.SettingsScreen
 import com.contentautomation.ui.screens.SystemScreen
 import com.contentautomation.ui.screens.StorageScreen
+import com.contentautomation.ui.screens.ApiSettingsScreen
 
 private object MuChiRoutes {
     const val HOME = "home"
@@ -64,6 +65,7 @@ private object MuChiRoutes {
     const val AI = "ai"
     const val STORAGE = "storage"
     const val SETTINGS = "settings"
+    const val API = "api"
 }
 
 @Composable
@@ -173,7 +175,7 @@ fun AppNavHost(vm: MainViewModel) {
         MuChiRoutes.WORK -> 1
         MuChiRoutes.AI -> 2
         MuChiRoutes.STORAGE -> 3
-        MuChiRoutes.SETTINGS -> 4
+        MuChiRoutes.SETTINGS, MuChiRoutes.API -> 4
         else -> 0
     }
 
@@ -349,8 +351,13 @@ fun AppNavHost(vm: MainViewModel) {
                         },
                         onDeleteAccount = { id ->
                             vm.deleteAccount(id)
-                        }
+                        },
+                        onOpenApi = { navigateTo(MuChiRoutes.API) }
                     )
+                }
+
+                composable(MuChiRoutes.API) {
+                    ApiSettingsScreen(vm = vm, onBack = { navController.popBackStack() })
                 }
             }
         }
