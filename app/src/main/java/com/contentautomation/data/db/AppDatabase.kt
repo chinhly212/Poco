@@ -15,10 +15,9 @@ import com.contentautomation.data.db.entity.*
         SourceAccount::class,
         SourceVideo::class,
         ProcessedVideo::class,
-        TikTokPost::class,
         PipelineJob::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(
@@ -33,7 +32,6 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun processedVideoDao(): ProcessedVideoDao
 
-    abstract fun tiktokPostDao(): TikTokPostDao
 
     abstract fun pipelineJobDao(): PipelineJobDao
 
@@ -72,6 +70,12 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS tiktok_posts")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -84,7 +88,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "content_automation.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also {
                         INSTANCE = it
