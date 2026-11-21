@@ -41,15 +41,14 @@ class ScanWorker(
                     val adapter =
                         SourceAdapterFactory.create(account.platform)
 
-                    val items =
-                        val sessionCookie = prefs.getSecret("platform_cookie_${account.platform.lowercase()}")
-                        if (sessionCookie.isNullOrBlank()) {
-                            throw IllegalStateException("Chưa đăng nhập ${account.platform}. Hãy đăng nhập nền tảng trước khi quét.")
-                        }
-                        adapter.getLatestVideos(
-                            account.accountIdentifier,
-                            sessionCookie
-                        )
+                    val sessionCookie = prefs.getSecret("platform_cookie_${account.platform.lowercase()}")
+                    if (sessionCookie.isNullOrBlank()) {
+                        throw IllegalStateException("Chưa đăng nhập ${account.platform}. Hãy đăng nhập nền tảng trước khi quét.")
+                    }
+                    val items = adapter.getLatestVideos(
+                        account.accountIdentifier,
+                        sessionCookie
+                    )
 
                     scanned++
 
