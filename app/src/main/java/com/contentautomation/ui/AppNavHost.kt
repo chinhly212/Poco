@@ -259,6 +259,8 @@ fun AppNavHost(vm: MainViewModel) {
                     HomeScreen(
                         systemOn = isSystemRunning,
                         errors = uiErrors,
+                        jobs = pipelineJobs,
+                        onOpenWork = { navigateTo(MuChiRoutes.WORK) },
 
                         onToggleSystem = {
                             vm.setSystemRunning(
