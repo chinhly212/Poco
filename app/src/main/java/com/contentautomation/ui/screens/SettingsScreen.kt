@@ -21,7 +21,12 @@ fun SettingsScreen(
     onAddAccount: () -> Unit,
     onSetAccountEnabled: (String, Boolean) -> Unit,
     onDeleteAccount: (String) -> Unit,
-    onOpenApi: () -> Unit
+    onOpenApi: () -> Unit,
+    notificationsGranted: Boolean,
+    storagePermissionRequired: Boolean,
+    storageGranted: Boolean,
+    onRequestNotifications: () -> Unit,
+    onRequestStorage: () -> Unit
 ) {
     val kuaishou = accounts.count { it.platform.equals("kuaishou", ignoreCase = true) }
     val douyin = accounts.count { it.platform.equals("douyin", ignoreCase = true) }
@@ -47,6 +52,35 @@ fun SettingsScreen(
                 InfoRow("Kuaishou", kuaishou.toString())
                 GlassDivider()
                 InfoRow("Douyin", douyin.toString())
+            }
+        }
+
+        GlassCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                GText("QUYỀN ỨNG DỤNG", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        GText("Thông báo Android", 13.sp, weight = FontWeight.SemiBold)
+                        GText(if (notificationsGranted) "Đã cấp quyền" else "Chưa cấp quyền", 11.sp,
+                            color = if (notificationsGranted) GlassColors.Green else GlassColors.Amber)
+                    }
+                    GlassButton(if (notificationsGranted) "Đã bật" else "Cấp quyền", onClick = onRequestNotifications)
+                }
+                GlassDivider()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        GText("Lưu video và tệp", 13.sp, weight = FontWeight.SemiBold)
+                        GText(
+                            if (!storagePermissionRequired) "Android 10 trở lên: dùng bộ chọn/MediaStore, không cần quyền truy cập toàn bộ bộ nhớ."
+                            else if (storageGranted) "Đã cấp quyền lưu trữ cho Android 9 trở xuống."
+                            else "Cần quyền lưu trữ trên Android 9 trở xuống.",
+                            11.sp, color = GlassColors.InkSoft
+                        )
+                    }
+                    if (storagePermissionRequired) {
+                        GlassButton(if (storageGranted) "Đã bật" else "Cấp quyền", onClick = onRequestStorage)
+                    }
+                }
             }
         }
 
