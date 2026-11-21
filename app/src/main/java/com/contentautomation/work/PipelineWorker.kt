@@ -126,23 +126,50 @@ class PipelineWorker(
                     if (!result.success || !optimized.exists() || optimized.length() <= 0L) {
                         throw IllegalStateException(result.errorMessage ?: "Không thể tối ưu video nguồn.")
                     }
-                    next(PipelineStage.TRANSLATE, "Đã tối ưu video. Chờ dịch tiêu đề và mô tả.")
+                    next(PipelineStage.SPEECH_TO_TEXT, "Đã tối ưu video. Chờ nhận diện lời nói.")
                 }
 
                 PipelineStage.SPEECH_TO_TEXT -> {
-                    // Legacy jobs from older app versions are routed into the implemented
-                    // metadata translation stage instead of remaining paused forever.
-                    next(PipelineStage.TRANSLATE, "Chuyển công việc cũ sang bước dịch nội dung nguồn.")
+                    val optimized = File(workDir, "optimized-source.mp4")
+                    if (!optimized.exists() || optimized.length() <= 0L) {
+                        throw IllegalStateException("Không tìm thấy video đã tối ưu để nhận diện lời nói.")
+                    }
+                    val groqKey = app.prefs.getSecret("ai_api_groq")
+                    val metadataText = listOfNotNull(
+                        video.title?.takeIf { it.isNotBlank() },
+                        video.descriptionZh?.takeIf { it.isNotBlank() }
+                    ).joinToString("\n")
+
+                    val transcript = if (!groqKey.isNullOrBlank()) {
+                        processor.transcribeChinese(optimized, groqKey)
+                    } else {
+                        metadataText
+                    }
+                    if (transcript.isBlank()) {
+                        throw IllegalStateException("Chưa có Groq API để nhận diện lời nói và tài khoản nguồn cũng không có tiêu đề/mô tả. Hãy kết nối Groq trong Cài đặt → API.")
+                    }
+                    File(workDir, "transcript-zh.txt").writeText(transcript, Charsets.UTF_8)
+                    val statusMessage = if (groqKey.isNullOrBlank()) {
+                        "Chưa cấu hình Groq: dùng tiêu đề/mô tả nguồn thay cho lời thoại."
+                    } else {
+                        "Đã nhận diện lời nói bằng Groq Whisper."
+                    }
+                    next(PipelineStage.TRANSLATE, statusMessage)
                 }
 
                 PipelineStage.TRANSLATE -> {
                     db.sourceVideoDao().updateStatus(video.id, VideoStatus.TRANSLATING.name)
-                    val sourceText = listOfNotNull(
-                        video.title?.takeIf { it.isNotBlank() },
-                        video.descriptionZh?.takeIf { it.isNotBlank() }
-                    ).joinToString("\n")
+                    val transcriptFile = File(workDir, "transcript-zh.txt")
+                    val sourceText = if (transcriptFile.exists()) {
+                        transcriptFile.readText(Charsets.UTF_8).trim()
+                    } else {
+                        listOfNotNull(
+                            video.title?.takeIf { it.isNotBlank() },
+                            video.descriptionZh?.takeIf { it.isNotBlank() }
+                        ).joinToString("\n")
+                    }
                     if (sourceText.isBlank()) {
-                        throw IllegalStateException("Tài khoản nguồn không cung cấp tiêu đề/mô tả để dịch. Không thể tạo lời đọc tiếng Việt.")
+                        throw IllegalStateException("Không có lời thoại hoặc nội dung nguồn để dịch sang tiếng Việt.")
                     }
 
                     val keys = listOf("gemini", "openrouter", "groq").mapNotNull { provider ->
