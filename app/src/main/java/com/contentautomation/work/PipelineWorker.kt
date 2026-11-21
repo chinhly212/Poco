@@ -1,14 +1,15 @@
 package com.contentautomation.work
 
 import android.content.Context
+import android.net.Uri
 import androidx.work.*
 import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.*
+import com.contentautomation.video.MediaStoreSaver
+import com.contentautomation.video.PipelineMediaProcessor
+import com.contentautomation.video.VideoCompressor
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
-import android.net.Uri
-import com.contentautomation.video.VideoCompressor
-import com.contentautomation.video.MediaStoreSaver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -20,274 +21,262 @@ class PipelineWorker(
 ) : CoroutineWorker(ctx, params) {
 
     companion object {
-
         const val KEY_JOB_ID = "pipeline_job_id"
 
-        private fun uniqueWorkName(jobId: String) =
-            "pipeline_$jobId"
+        private fun uniqueWorkName(jobId: String) = "pipeline_$jobId"
 
         fun enqueue(context: Context, jobId: String) {
-            val request =
-                OneTimeWorkRequestBuilder<PipelineWorker>()
-                    .setInputData(
-                        workDataOf(KEY_JOB_ID to jobId)
-                    )
-                    .setConstraints(
-                        Constraints.Builder()
-                            .setRequiredNetworkType(NetworkType.CONNECTED)
-                            .build()
-                    )
-                    .build()
-
-            WorkManager.getInstance(context)
-                .enqueueUniqueWork(
-                    uniqueWorkName(jobId),
-                    ExistingWorkPolicy.APPEND_OR_REPLACE,
-                    request
+            val request = OneTimeWorkRequestBuilder<PipelineWorker>()
+                .setInputData(workDataOf(KEY_JOB_ID to jobId))
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
                 )
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                uniqueWorkName(jobId),
+                ExistingWorkPolicy.APPEND_OR_REPLACE,
+                request
+            )
         }
     }
 
-    override suspend fun doWork(): Result =
-        withContext(Dispatchers.IO) {
+    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        val app = applicationContext as ContentAutomationApp
+        val db = app.database
+        val dao = db.pipelineJobDao()
+        val jobId = inputData.getString(KEY_JOB_ID)
+            ?: return@withContext Result.failure()
+        val job = dao.findById(jobId) ?: return@withContext Result.failure()
+        val video = db.sourceVideoDao().findById(job.sourceVideoId)
+            ?: return@withContext Result.failure()
 
-            val app =
-                applicationContext as ContentAutomationApp
+        val workDir = File(applicationContext.filesDir, "MuChi/${video.id}").apply { mkdirs() }
+        val processor = PipelineMediaProcessor(applicationContext)
 
-            val db = app.database
-            val dao = db.pipelineJobDao()
+        suspend fun next(stage: PipelineStage, message: String) {
+            dao.update(job.copy(
+                stage = stage,
+                status = PipelineStatus.PENDING,
+                retries = 0,
+                error = message,
+                updatedAt = System.currentTimeMillis()
+            ))
+            enqueue(applicationContext, job.id)
+        }
 
-            val jobId =
-                inputData.getString(KEY_JOB_ID)
-                    ?: return@withContext Result.failure()
+        try {
+            if (!app.awaitMediaEngines()) {
+                throw IllegalStateException(
+                    ContentAutomationApp.engineInitializationError
+                        ?: "Bộ máy tải và xử lý video chưa sẵn sàng."
+                )
+            }
 
-            val job = dao.findById(jobId)
-                ?: return@withContext Result.failure()
+            dao.update(job.copy(
+                status = PipelineStatus.RUNNING,
+                error = "Đang thực hiện: ${job.stage.name}",
+                updatedAt = System.currentTimeMillis()
+            ))
 
-            val video = db.sourceVideoDao()
-                .findById(job.sourceVideoId)
-                ?: return@withContext Result.failure()
+            when (job.stage) {
+                PipelineStage.DOWNLOAD -> {
+                    db.sourceVideoDao().updateStatus(video.id, VideoStatus.DOWNLOADING.name)
+                    val serverFile = File(workDir, "server-source.mp4")
+                    val outputTemplate = File(workDir, "source.%(ext)s").absolutePath
 
-            val workDir = File(
-                applicationContext.filesDir,
-                "MuChi/${video.id}"
-            )
+                    val downloadedByServer = try {
+                        com.contentautomation.video.AiVideoServerClient()
+                            .downloadVideo(video.sourceUrl, serverFile)
+                        serverFile.exists() && serverFile.length() > 0L
+                    } catch (_: Exception) {
+                        serverFile.delete()
+                        false
+                    }
 
-            workDir.mkdirs()
+                    if (!downloadedByServer) {
+                        YoutubeDL.getInstance().execute(
+                            YoutubeDLRequest(video.sourceUrl).apply {
+                                addOption("--no-playlist")
+                                addOption("-o", outputTemplate)
+                                addOption("-f", "best")
+                            }
+                        )
+                    }
 
-            try {
-                // Workers may start before Application's asynchronous native-engine setup finishes.
-                if (!app.awaitMediaEngines()) {
+                    val downloaded = findOriginalVideo(workDir)
+                        ?: throw IllegalStateException("Tải video thất bại: không tìm thấy tệp video hợp lệ.")
+                    if (downloaded.length() <= 0L) {
+                        throw IllegalStateException("Video tải về rỗng.")
+                    }
+
+                    db.sourceVideoDao().updateStatus(video.id, VideoStatus.PROCESSING_VIDEO.name)
+                    next(PipelineStage.ANALYZE, "Đã tải video. Chờ tối ưu video.")
+                }
+
+                PipelineStage.ANALYZE -> {
+                    val source = findOriginalVideo(workDir)
+                        ?: throw IllegalStateException("Không tìm thấy video gốc đã tải.")
+                    val optimized = File(workDir, "optimized-source.mp4")
+                    val result = VideoCompressor(applicationContext)
+                        .compressKeepQuality(Uri.fromFile(source), optimized)
+
+                    if (!result.success || !optimized.exists() || optimized.length() <= 0L) {
+                        throw IllegalStateException(result.errorMessage ?: "Không thể tối ưu video nguồn.")
+                    }
+                    next(PipelineStage.TRANSLATE, "Đã tối ưu video. Chờ dịch tiêu đề và mô tả.")
+                }
+
+                PipelineStage.SPEECH_TO_TEXT -> {
+                    // Legacy jobs from older app versions are routed into the implemented
+                    // metadata translation stage instead of remaining paused forever.
+                    next(PipelineStage.TRANSLATE, "Chuyển công việc cũ sang bước dịch nội dung nguồn.")
+                }
+
+                PipelineStage.TRANSLATE -> {
+                    db.sourceVideoDao().updateStatus(video.id, VideoStatus.TRANSLATING.name)
+                    val sourceText = listOfNotNull(
+                        video.title?.takeIf { it.isNotBlank() },
+                        video.descriptionZh?.takeIf { it.isNotBlank() }
+                    ).joinToString("\n")
+                    if (sourceText.isBlank()) {
+                        throw IllegalStateException("Tài khoản nguồn không cung cấp tiêu đề/mô tả để dịch. Không thể tạo lời đọc tiếng Việt.")
+                    }
+
+                    val keys = listOf("gemini", "openrouter", "groq").mapNotNull { provider ->
+                        app.prefs.getSecret("ai_api_$provider")
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { provider to it }
+                    }.toMap()
+
+                    val translated = processor.translateToVietnamese(sourceText, keys)
+                    File(workDir, "translated-vi.txt").writeText(translated, Charsets.UTF_8)
+
+                    val processedDao = db.processedVideoDao()
+                    val existing = processedDao.findBySourceId(video.id)
+                    val row = if (existing == null) {
+                        ProcessedVideo(
+                            sourceVideoId = video.id,
+                            originalPath = findOriginalVideo(workDir)?.absolutePath,
+                            descriptionVi = translated,
+                            status = VideoStatus.TRANSLATING.name
+                        )
+                    } else {
+                        existing.copy(descriptionVi = translated, status = VideoStatus.TRANSLATING.name)
+                    }
+                    processedDao.insert(row)
+                    next(PipelineStage.TTS, "Đã dịch nội dung. Chờ tạo giọng đọc tiếng Việt.")
+                }
+
+                PipelineStage.TTS -> {
+                    val translatedFile = File(workDir, "translated-vi.txt")
+                    if (!translatedFile.exists() || translatedFile.readText().isBlank()) {
+                        throw IllegalStateException("Không tìm thấy bản dịch tiếng Việt để tạo giọng đọc.")
+                    }
+                    processor.synthesizeVietnamese(
+                        translatedFile.readText(Charsets.UTF_8),
+                        File(workDir, "voice-vi.wav")
+                    )
+                    next(PipelineStage.MERGE, "Đã tạo giọng đọc tiếng Việt.")
+                }
+
+                PipelineStage.MERGE -> {
+                    val optimized = File(workDir, "optimized-source.mp4")
+                    val voice = File(workDir, "voice-vi.wav")
+                    val dubbed = File(workDir, "muchi-vietnamese.mp4")
+                    processor.mergeVideoAndVoice(optimized, voice, dubbed)
+                    next(PipelineStage.EXPORT, "Đã ghép giọng đọc tiếng Việt vào video.")
+                }
+
+                PipelineStage.EXPORT -> {
+                    val dubbed = File(workDir, "muchi-vietnamese.mp4")
+                    if (!dubbed.exists() || dubbed.length() <= 0L) {
+                        throw IllegalStateException("Không tìm thấy video đã ghép tiếng Việt để xuất.")
+                    }
+
+                    val savedUri = MediaStoreSaver(applicationContext)
+                        .saveVideoToGallery(dubbed, "MuChi_VI_${video.id.take(8)}.mp4")
+                        ?: throw IllegalStateException("Android không lưu được video vào thư viện.")
+
+                    val processedDao = db.processedVideoDao()
+                    val existing = processedDao.findBySourceId(video.id)
+                    val translated = File(workDir, "translated-vi.txt")
+                        .takeIf { it.exists() }?.readText(Charsets.UTF_8)
+                    val row = if (existing == null) {
+                        ProcessedVideo(
+                            sourceVideoId = video.id,
+                            originalPath = findOriginalVideo(workDir)?.absolutePath,
+                            processedPath = dubbed.absolutePath,
+                            descriptionVi = translated,
+                            status = VideoStatus.SAVED_TO_PHONE.name
+                        )
+                    } else {
+                        existing.copy(
+                            processedPath = dubbed.absolutePath,
+                            descriptionVi = translated ?: existing.descriptionVi,
+                            status = VideoStatus.SAVED_TO_PHONE.name
+                        )
+                    }
+                    processedDao.insert(row)
+                    db.sourceVideoDao().updateStatus(video.id, VideoStatus.SAVED_TO_PHONE.name)
+                    next(PipelineStage.VERIFY, "Đã xuất video vào thư viện: $savedUri")
+                }
+
+                PipelineStage.VERIFY -> {
+                    val output = File(workDir, "muchi-vietnamese.mp4")
+                    if (!output.exists() || output.length() <= 0L) {
+                        throw IllegalStateException("Kiểm tra sau xuất thất bại: tệp đầu ra không tồn tại hoặc rỗng.")
+                    }
+                    dao.update(job.copy(
+                        status = PipelineStatus.DONE,
+                        retries = 0,
+                        error = "Hoàn tất: video đã có bản dịch và giọng đọc tiếng Việt, đã ghép và lưu vào thư viện điện thoại.",
+                        updatedAt = System.currentTimeMillis()
+                    ))
+                    db.sourceVideoDao().updateStatus(video.id, VideoStatus.SAVED_TO_PHONE.name)
+                }
+
+                PipelineStage.SUBTITLE, PipelineStage.UPLOAD -> {
                     throw IllegalStateException(
-                        ContentAutomationApp.engineInitializationError
-                            ?: "Bộ máy tải và xử lý video chưa sẵn sàng. Hệ thống sẽ tự thử lại."
+                        "Công đoạn ${job.stage} chưa được bật trong quy trình hiện tại; video không bị đánh dấu hoàn thành giả."
                     )
-                }
-
-                when (job.stage) {
-
-                    PipelineStage.DOWNLOAD -> {
-                        dao.update(
-                            job.copy(
-                                status = PipelineStatus.RUNNING,
-                                error = null,
-                                updatedAt = System.currentTimeMillis()
-                            )
-                        )
-
-                        db.sourceVideoDao().updateStatus(
-                            video.id,
-                            VideoStatus.DOWNLOADING.name
-                        )
-
-                        val outputTemplate =
-                            File(
-                                workDir,
-                                "source.%(ext)s"
-                            ).absolutePath
-
-                        // First use the centralized server: it automatically fails over
-                        // GenDownload -> public fallbacks -> server-side yt-dlp.
-                        // If the server is asleep/unavailable, fall back to on-device yt-dlp.
-                        val serverDownloaded = try {
-                            com.contentautomation.video.AiVideoServerClient()
-                                .downloadVideo(video.sourceUrl, File(workDir, "server-source.mp4"))
-                            true
-                        } catch (serverError: Exception) {
-                            File(workDir, "server-source.mp4").delete()
-                            false
-                        }
-
-                        if (!serverDownloaded) {
-                            val request =
-                                YoutubeDLRequest(video.sourceUrl).apply {
-                                    addOption("--no-playlist")
-                                    addOption("-o", outputTemplate)
-                                    addOption("-f", "best")
-                                }
-                            YoutubeDL.getInstance().execute(request)
-                        }
-
-                        val downloaded =
-                            workDir.listFiles()
-                                ?.filter {
-                                    it.isFile &&
-                                        (it.name.startsWith("source.") || it.name == "server-source.mp4") &&
-                                        !it.name.endsWith(".part")
-                                }
-                                ?.maxByOrNull {
-                                    it.lastModified()
-                                }
-
-                        if (
-                            downloaded == null ||
-                            downloaded.length() <= 0L
-                        ) {
-                            throw IllegalStateException(
-                                "Tải video thất bại: không tìm thấy file"
-                            )
-                        }
-
-                        db.sourceVideoDao().updateStatus(
-                            video.id,
-                            VideoStatus.PROCESSING_VIDEO.name
-                        )
-
-                        dao.update(
-                            job.copy(
-                                stage = PipelineStage.ANALYZE,
-                                status = PipelineStatus.PENDING,
-                                retries = 0,
-                                error = null,
-                                updatedAt = System.currentTimeMillis()
-                            )
-                        )
-
-                        enqueue(
-                            applicationContext,
-                            job.id
-                        )
-                    }
-
-                    PipelineStage.ANALYZE -> {
-                        val source = workDir.listFiles()
-                            ?.filter { it.isFile && it.name.startsWith("source.") && !it.name.endsWith(".part") }
-                            ?.maxByOrNull { it.lastModified() }
-                            ?: throw IllegalStateException("Không tìm thấy video gốc đã tải")
-
-                        if (source.length() <= 0L) {
-                            throw IllegalStateException("Video gốc rỗng, không thể xử lý")
-                        }
-
-                        dao.update(job.copy(
-                            status = PipelineStatus.RUNNING,
-                            error = "Đang tối ưu video và lưu vào điện thoại...",
-                            updatedAt = System.currentTimeMillis()
-                        ))
-
-                        val processedFile = File(workDir, "nichi-processed.mp4")
-                        val compressed = VideoCompressor(applicationContext)
-                            .compressKeepQuality(Uri.fromFile(source), processedFile)
-
-                        if (!compressed.success || compressed.outputFile == null ||
-                            !compressed.outputFile.exists() || compressed.outputFile.length() <= 0L) {
-                            throw IllegalStateException(compressed.errorMessage ?: "Không thể xử lý video")
-                        }
-
-                        val savedUri = MediaStoreSaver(applicationContext)
-                            .saveVideoToGallery(compressed.outputFile, "MuChi_${video.id.take(8)}.mp4")
-                            ?: throw IllegalStateException("Không thể lưu video vào thư viện điện thoại")
-
-                        val processedDao = db.processedVideoDao()
-                        val existing = processedDao.findBySourceId(video.id)
-                        val processed = if (existing == null) {
-                            ProcessedVideo(
-                                sourceVideoId = video.id,
-                                originalPath = source.absolutePath,
-                                processedPath = compressed.outputFile.absolutePath,
-                                status = VideoStatus.SAVED_TO_PHONE.name
-                            )
-                        } else {
-                            existing.copy(
-                                originalPath = source.absolutePath,
-                                processedPath = compressed.outputFile.absolutePath,
-                                status = VideoStatus.SAVED_TO_PHONE.name
-                            )
-                        }
-                        processedDao.insert(processed)
-
-                        db.sourceVideoDao().updateStatus(video.id, VideoStatus.SAVED_TO_PHONE.name)
-                        dao.update(job.copy(
-                            stage = PipelineStage.EXPORT,
-                            status = PipelineStatus.DONE,
-                            retries = 0,
-                            error = "Đã xử lý và lưu vào Movies/MuChi trên điện thoại.",
-                            updatedAt = System.currentTimeMillis()
-                        ))
-                    }
-
-                    PipelineStage.SPEECH_TO_TEXT -> {
-                        dao.update(
-                            job.copy(
-                                status = PipelineStatus.PAUSED,
-                                error = "Chờ cấu hình dịch vụ nhận diện lời bài hát và tạo phụ đề.",
-                                updatedAt = System.currentTimeMillis()
-                            )
-                        )
-                    }
-
-                    else -> {
-                        dao.update(
-                            job.copy(
-                                status = PipelineStatus.PAUSED,
-                                error = "Công đoạn ${job.stage} chưa được triển khai.",
-                                updatedAt = System.currentTimeMillis()
-                            )
-                        )
-                    }
-                }
-
-                Result.success()
-
-            } catch (e: CancellationException) {
-                dao.update(
-                    job.copy(
-                        status = PipelineStatus.PENDING,
-                        updatedAt = System.currentTimeMillis()
-                    )
-                )
-                throw e
-
-            } catch (e: Exception) {
-                val retryCount = job.retries + 1
-                val failedPermanently = retryCount >= 3
-
-                dao.update(
-                    job.copy(
-                        status = if (failedPermanently)
-                            PipelineStatus.FAILED
-                        else
-                            PipelineStatus.PENDING,
-                        retries = retryCount,
-                        error = e.message ?: "Lỗi không xác định",
-                        updatedAt = System.currentTimeMillis()
-                    )
-                )
-
-                db.sourceVideoDao().updateStatusError(
-                    video.id,
-                    if (failedPermanently)
-                        VideoStatus.FAILED.name
-                    else
-                        VideoStatus.RETRY_PENDING.name,
-                    e.message
-                )
-
-                if (failedPermanently) {
-                    Result.failure()
-                } else {
-                    Result.retry()
                 }
             }
+
+            Result.success()
+        } catch (e: CancellationException) {
+            dao.update(job.copy(
+                status = PipelineStatus.PENDING,
+                updatedAt = System.currentTimeMillis()
+            ))
+            throw e
+        } catch (e: Exception) {
+            val retryCount = job.retries + 1
+            val failedPermanently = retryCount >= 3
+            dao.update(job.copy(
+                status = if (failedPermanently) PipelineStatus.FAILED else PipelineStatus.PENDING,
+                retries = retryCount,
+                error = e.message ?: "Lỗi không xác định.",
+                updatedAt = System.currentTimeMillis()
+            ))
+            db.sourceVideoDao().updateStatusError(
+                video.id,
+                if (failedPermanently) VideoStatus.FAILED.name else VideoStatus.RETRY_PENDING.name,
+                e.message
+            )
+            if (failedPermanently) Result.failure() else Result.retry()
         }
+    }
+
+    private fun findOriginalVideo(directory: File): File? =
+        directory.listFiles()
+            ?.filter {
+                it.isFile &&
+                    (it.name == "server-source.mp4" || it.name.startsWith("source.")) &&
+                    !it.name.endsWith(".part") &&
+                    it.length() > 0L
+            }
+            ?.maxByOrNull { it.lastModified() }
 }
