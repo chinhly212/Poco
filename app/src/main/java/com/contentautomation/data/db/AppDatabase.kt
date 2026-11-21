@@ -18,7 +18,7 @@ import com.contentautomation.data.db.entity.*
         PipelineJob::class,
         StoredNotification::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(
@@ -79,6 +79,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE source_accounts ADD COLUMN profile_description TEXT")
+                db.execSQL("ALTER TABLE source_accounts ADD COLUMN profile_avatar_url TEXT")
+                db.execSQL("ALTER TABLE source_accounts ADD COLUMN profile_video_count INTEGER")
+                db.execSQL("ALTER TABLE source_accounts ADD COLUMN profile_verified_at INTEGER")
+            }
+        }
+
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""
@@ -108,7 +117,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "content_automation.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also {
                         INSTANCE = it
