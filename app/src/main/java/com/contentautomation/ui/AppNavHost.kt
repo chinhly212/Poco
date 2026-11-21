@@ -51,6 +51,7 @@ import com.contentautomation.ui.components.GlassBackground
 import com.contentautomation.ui.components.GlassBottomBar
 import com.contentautomation.ui.models.ErrorKind
 import com.contentautomation.ui.screens.HomeScreen
+import com.contentautomation.ui.screens.AiScreen
 import com.contentautomation.ui.screens.SettingsScreen
 import com.contentautomation.ui.screens.SystemScreen
 import com.contentautomation.ui.screens.StorageScreen
@@ -299,7 +300,7 @@ fun AppNavHost(vm: MainViewModel) {
                 }
 
                 composable(MuChiRoutes.AI) {
-                    Box(modifier = Modifier.fillMaxSize())
+                    AiScreen(vm)
                 }
 
                 composable(MuChiRoutes.STORAGE) {
