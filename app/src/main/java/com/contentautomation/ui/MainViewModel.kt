@@ -508,7 +508,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 onResult(true, "Đã kết nối thành công: ${profile.displayName}")
             } catch (e: Exception) {
                 val reason = e.message ?: "Không xác định được nguyên nhân."
-                recordError(ErrorKind.VideoUnavailable, "Không thể kết nối tài khoản", reason, "Kiểm tra lại")
+                recordError(ErrorKind.NetworkLost, "Không thể kết nối tài khoản", reason, "Kiểm tra đăng nhập")
                 onResult(false, reason)
             }
         }
