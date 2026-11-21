@@ -30,7 +30,8 @@ fun StorageScreen(
     onRefreshDrive: () -> Unit,
     onPickUpload: () -> Unit,
     onDeleteDriveFile: (String) -> Unit,
-    onDownloadDriveFile: (String, String) -> Unit
+    onDownloadDriveFile: (String, String) -> Unit,
+    onDisconnectDrive: () -> Unit
 ) {
     val low = storage.totalGb > 0f &&
         (storage.fraction >= WARN_FRACTION || storage.freeGb < WARN_FREE_GB)
@@ -87,6 +88,8 @@ fun StorageScreen(
                         GlassButton("Làm mới", onClick = onRefreshDrive, modifier = Modifier.weight(1f))
                         GlassButton("Tải tệp lên", onClick = onPickUpload, primary = true, modifier = Modifier.weight(1f))
                     }
+                    Spacer(Modifier.height(6.dp))
+                    GlassButton("Ngắt kết nối tài khoản này", onClick = onDisconnectDrive)
                 } else {
                     GText("Chưa kết nối tài khoản Google Drive.", 13.sp, color = GlassColors.InkSoft)
                     GlassButton("Kết nối Google Drive", onClick = onConnectDrive, primary = true,
