@@ -5,13 +5,11 @@ import android.app.Application
 import android.util.Log
 import com.contentautomation.data.db.AppDatabase
 import com.contentautomation.data.prefs.AppPreferences
-import com.contentautomation.domain.tiktok.TikTokClient
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -25,27 +23,11 @@ class ContentAutomationApp : Application() {
         AppDatabase.get(applicationContext)
     }
 
-    // Cài đặt và thông tin TikTok
+    // Cài đặt ứng dụng
     val prefs: AppPreferences by lazy {
         AppPreferences(applicationContext)
     }
 
-    // TikTok API Client
-    val tiktokClient: TikTokClient by lazy {
-        TikTokClient(
-            prefs = prefs,
-            clientKeyProvider = {
-                runBlocking {
-                    prefs.tiktokClientKey.first()
-                }
-            },
-            clientSecretProvider = {
-                runBlocking {
-                    prefs.tiktokClientSecret.first()
-                }
-            }
-        )
-    }
 
     companion object {
 
@@ -72,11 +54,10 @@ class ContentAutomationApp : Application() {
         try {
             database
             prefs
-            tiktokClient
 
-            Log.d("MuChiApp", "App components initialized")
+            Log.d("NiChiApp", "App components initialized")
         } catch (e: Exception) {
-            Log.e("MuChiApp", "App initialization error", e)
+            Log.e("NiChiApp", "App initialization error", e)
         }
     }
 
