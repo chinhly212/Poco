@@ -491,7 +491,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     SourceAccount(
                         platform = normalizedPlatform,
                         accountName = profile.displayName.ifBlank { name.trim().ifBlank { normalizedIdentifier } },
-                        accountIdentifier = normalizedIdentifier,
+                        accountIdentifier = profile.identifier.ifBlank { normalizedIdentifier },
                         profileDescription = profile.description,
                         profileAvatarUrl = profile.avatarUrl,
                         profileVideoCount = profile.videoCount,
