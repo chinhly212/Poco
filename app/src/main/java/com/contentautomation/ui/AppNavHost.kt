@@ -292,7 +292,12 @@ fun AppNavHost(vm: MainViewModel) {
                                 }
 
                                 ErrorKind.NetworkLost -> {
-                                    if (!error.title.startsWith("Kết nối") && !error.title.startsWith("Đã xóa API")) {
+                                    if (error.title.startsWith("Quét thất bại") ||
+                                        error.title.startsWith("Không thể kết nối tài khoản")) {
+                                        navigateTo(MuChiRoutes.SETTINGS)
+                                    } else if (!error.title.startsWith("Kết nối") &&
+                                        !error.title.startsWith("Đã xóa API") &&
+                                        !error.title.startsWith("Đã lưu phiên")) {
                                         vm.setSystemRunning(true)
                                     }
                                 }
