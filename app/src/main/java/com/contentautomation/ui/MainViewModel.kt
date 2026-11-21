@@ -491,6 +491,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun scanNow() {
         viewModelScope.launch {
             try {
+                val enabledAccounts = application.database.sourceAccountDao().getEnabled()
+                if (enabledAccounts.isEmpty()) {
+                    android.widget.Toast.makeText(
+                        application,
+                        "Chưa có nguồn đang bật. Hãy thêm tài khoản tại Cài đặt trước khi quét.",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                    return@launch
+                }
+
                 val request = androidx.work.OneTimeWorkRequestBuilder<com.contentautomation.work.ScanWorker>()
                     .setConstraints(
                         androidx.work.Constraints.Builder()
@@ -504,6 +514,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         androidx.work.ExistingWorkPolicy.KEEP,
                         request
                     )
+                android.widget.Toast.makeText(
+                    application,
+                    "Đã gửi lệnh quét ${enabledAccounts.size} nguồn. Kết quả sẽ xuất hiện trong Công việc.",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
             } catch (e: Exception) {
                 recordError(
                     ErrorKind.NetworkLost,
@@ -511,6 +526,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     e.message ?: "Không thể tạo tác vụ quét.",
                     "Thử lại"
                 )
+                android.widget.Toast.makeText(
+                    application,
+                    "Không thể bắt đầu quét: " + (e.message ?: "lỗi không xác định"),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
             }
         }
     }
