@@ -43,7 +43,8 @@ data class SourceAccount(
     @ColumnInfo(name = "profile_avatar_url") val profileAvatarUrl: String? = null,
     @ColumnInfo(name = "profile_video_count") val profileVideoCount: Int? = null,
     @ColumnInfo(name = "profile_verified_at") val profileVerifiedAt: Long? = null,
-    @ColumnInfo(name = "profile_follower_count") val profileFollowerCount: Long? = null
+    @ColumnInfo(name = "profile_follower_count") val profileFollowerCount: Long? = null,
+    @ColumnInfo(name = "profile_following_count") val profileFollowingCount: Long? = null
 )
 
 @Entity(
