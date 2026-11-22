@@ -57,8 +57,8 @@ class KuaishouAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapt
                     identifier = profile.optString("profile_id").takeIf { it.isNotBlank() && it != "null" } ?: identifier,
                     description = profile.optString("description").takeIf { it.isNotBlank() && it != "null" },
                     avatarUrl = profile.optString("avatar_url").takeIf { it.startsWith("http") },
-                    videoCount = profile.optInt("video_count", -1).takeIf { it >= 0 } ?: root.optInt("video_count", -1).takeIf { it >= 0 },
-                    followerCount = profile.optLong("follower_count").takeIf { it > 0L },
+                    videoCount = profile.optInt("video_count", -1).takeIf { it >= 0 },
+                    followerCount = profile.optLong("follower_count", -1L).takeIf { it >= 0L },
                     followingCount = profile.optLong("following_count", -1L).takeIf { it >= 0L }
                 )
             }
