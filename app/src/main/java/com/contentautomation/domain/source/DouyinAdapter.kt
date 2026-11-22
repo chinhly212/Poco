@@ -58,12 +58,12 @@ class DouyinAdapter : YtDlpProfileAdapter() {
             fun stringField(vararg keys: String): String? {
                 for (key in keys) {
                     val pattern = Regex(
-                        """["']${Regex.escape(key)}["']\\s*:\\s*["']([^"']{1,1000})["']""",
+                        """["']${Regex.escape(key)}["']\s*:\s*["']([^"']{1,1000})["']""",
                         RegexOption.IGNORE_CASE
                     )
                     val value = pattern.find(html)?.groupValues?.getOrNull(1)
-                        ?.replace("\\\\u002F", "/")
-                        ?.replace("\\\\u0026", "&")
+                        ?.replace("\\u002F", "/")
+                        ?.replace("\\u0026", "&")
                         ?.trim()
                     if (!value.isNullOrBlank() && value != "null") return value
                 }
@@ -73,7 +73,7 @@ class DouyinAdapter : YtDlpProfileAdapter() {
             fun numberField(vararg keys: String): Long? {
                 for (key in keys) {
                     val pattern = Regex(
-                        """["']${Regex.escape(key)}["']\\s*:\\s*["']?(\\d+)""",
+                        """["']${Regex.escape(key)}["']\s*:\s*["']?(\d+)""",
                         RegexOption.IGNORE_CASE
                     )
                     val value = pattern.find(html)?.groupValues?.getOrNull(1)?.toLongOrNull()
