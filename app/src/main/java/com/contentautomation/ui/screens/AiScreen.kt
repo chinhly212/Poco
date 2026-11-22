@@ -16,6 +16,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
@@ -113,6 +114,23 @@ fun AiScreen(vm: MainViewModel) {
                     color = if (serverOnline == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            TextButton(
+                enabled = !busy,
+                onClick = {
+                    scope.launch {
+                        runCatching { chatDao.deleteAll() }
+                            .onSuccess { lines.clear() }
+                            .onFailure {
+                                vm.reportAiIssue(
+                                    "Không xóa được lịch sử chat",
+                                    it.message ?: it.javaClass.simpleName
+                                )
+                            }
+                    }
+                }
+            ) {
+                Text("Xóa toàn bộ")
+            }
         }
 
         Column(
@@ -177,9 +195,23 @@ fun AiScreen(vm: MainViewModel) {
                         busy = true
                         scope.launch {
                             appendLine(AiChatLine(prompt, true))
-                            val sourceUrl = Regex("https?://[^\\s<>]+")
-                                .find(prompt)?.value?.trimEnd('.', ',', ')', ']', '}')
+                            val sourceUrls = Regex("""https?://[^\s<>]+""")
+                                .findAll(prompt)
+                                .map { it.value.trimEnd('.', ',', ')', ']', '}') }
+                                .toList()
+                            val sourceUrl = sourceUrls.firstOrNull()
                             try {
+                                if (sourceUrls.isNotEmpty() &&
+                                    (sourceUrls.size != 1 || sourceUrl == null || !isSupportedVideoLink(sourceUrl))
+                                ) {
+                                    appendLine(
+                                        AiChatLine(
+                                            "Đường dẫn này không được hỗ trợ. MuChi chỉ nhận một link video hợp lệ từ các nền tảng được hỗ trợ.",
+                                            false
+                                        )
+                                    )
+                                    return@launch
+                                }
                                 val chatHistory = lines.dropLast(1).takeLast(12).map {
                                     AiChatTurn(if (it.fromUser) "user" else "assistant", it.text)
                                 }
@@ -190,37 +222,35 @@ fun AiScreen(vm: MainViewModel) {
                                 val resolvedUrl = serverReply?.videoUrl
                                     ?.takeIf { serverReply.type == "video" && it.isNotBlank() }
 
-                                if (sourceUrl != null) {
+                                if (sourceUrl != null && serverReply?.type == "unsupported_link") {
+                                    appendLine(AiChatLine(serverReply.message, false))
+                                } else if (sourceUrl != null) {
                                     var saved = false
-                                    var serverFileDownloaded = false
                                     var serverError = serverReply?.message
                                         ?: response.exceptionOrNull()?.message
                                         ?: "Không nhận được kết quả từ máy chủ."
                                     val providerErrors = serverReply?.providerErrors.orEmpty()
 
                                     if (resolvedUrl != null) {
-                                        // Keep provider names and download infrastructure out of the chat.
                                         appendLine(AiChatLine("Tôi đã tìm thấy video.", false))
-                                        val temp = File(context.cacheDir, "muchiai_server_${System.currentTimeMillis()}.mp4")
                                         try {
-                                            server.downloadResolvedVideo(
-                                                resolvedUrl, temp, serverReply?.provider, serverReply?.title, sourceUrl
-                                            )
-                                            serverFileDownloaded = true
-                                            MediaStoreSaver(context).saveVideoToGallery(
-                                                temp, "MuChi_${System.currentTimeMillis()}.mp4"
+                                            server.downloadResolvedVideoToGallery(
+                                                resolvedUrl,
+                                                MediaStoreSaver(context),
+                                                "MuChi_\${System.currentTimeMillis()}.mp4",
+                                                serverReply?.provider,
+                                                serverReply?.title,
+                                                sourceUrl
                                             )
                                             appendLine(AiChatLine("Tôi đã tải và lưu video vào thư viện cho chủ nhân.", false))
                                             saved = true
                                         } catch (error: Exception) {
                                             serverError = error.message ?: "Không thể tải hoặc lưu video."
-                                        } finally {
-                                            temp.delete()
                                         }
                                     }
 
-                                    if (!saved && !serverFileDownloaded) {
-                                        val fallbackDir = File(context.cacheDir, "muchiai_fallback_${System.currentTimeMillis()}")
+                                    if (!saved) {
+                                        val fallbackDir = File(context.cacheDir, "muchiai_fallback_\${System.currentTimeMillis()}")
                                         try {
                                             val localFile = withContext(Dispatchers.IO) {
                                                 fallbackDir.mkdirs()
@@ -243,10 +273,10 @@ fun AiScreen(vm: MainViewModel) {
                                                 fallbackDir.listFiles()
                                                     ?.filter { it.isFile && !it.name.endsWith(".part") && it.length() > 0L }
                                                     ?.maxByOrNull { it.length() }
-                                                    ?: throw IllegalStateException("Bộ tải không tạo được tệp video.")
+                                                    ?: throw IllegalStateException("Bộ tải không tạo được video.")
                                             }
                                             MediaStoreSaver(context).saveVideoToGallery(
-                                                localFile, "MuChi_${System.currentTimeMillis()}.mp4"
+                                                localFile, "MuChi_\${System.currentTimeMillis()}.mp4"
                                             )
                                             appendLine(AiChatLine("Tôi đã tải và lưu video vào thư viện cho chủ nhân.", false))
                                             saved = true
@@ -270,17 +300,6 @@ fun AiScreen(vm: MainViewModel) {
                                         } finally {
                                             fallbackDir.deleteRecursively()
                                         }
-                                    } else if (!saved && serverFileDownloaded) {
-                                        vm.reportAiIssue(
-                                            "AI tìm thấy video nhưng không lưu được",
-                                            "Đường dẫn: $sourceUrl\nLỗi lưu thư viện: $serverError"
-                                        )
-                                        appendLine(
-                                            AiChatLine(
-                                                "Tôi đã tìm thấy video nhưng chưa thể lưu vào thư viện. Tôi đã ghi nhận sự cố trong thông báo hệ thống.",
-                                                false
-                                            )
-                                        )
                                     }
                                 } else {
                                     val reply = serverReply?.message
@@ -322,5 +341,46 @@ fun AiScreen(vm: MainViewModel) {
             }
         }
         Spacer(Modifier.height(2.dp))
+    }
+}
+
+private fun isSupportedVideoLink(rawUrl: String): Boolean {
+    val uri = runCatching { android.net.Uri.parse(rawUrl) }.getOrNull() ?: return false
+    val scheme = uri.scheme?.lowercase() ?: return false
+    if (scheme != "http" && scheme != "https") return false
+    val host = uri.host?.lowercase()?.removeSuffix(".") ?: return false
+    val path = uri.path.orEmpty().lowercase()
+    val query = uri.encodedQuery.orEmpty().lowercase()
+    fun hostIs(domain: String) = host == domain || host.endsWith(".$domain")
+
+    return when {
+        hostIs("tiktok.com") -> if (host == "vm.tiktok.com" || host == "vt.tiktok.com") {
+            path.isNotBlank() && path != "/"
+        } else {
+            Regex("""/@[^/]+/video/[^/?]+|/t/[^/]+|/v/[^/]+""").containsMatchIn(path)
+        }
+        hostIs("tiktokv.com") -> path.isNotBlank() && path != "/"
+        hostIs("douyin.com") || hostIs("iesdouyin.com") -> if (host == "v.douyin.com") {
+            path.isNotBlank() && path != "/"
+        } else {
+            Regex("""/video/[^/?]+|/share/video/[^/?]+""").containsMatchIn(path)
+        }
+        hostIs("kuaishou.com") || hostIs("gifshow.com") -> if (host == "v.kuaishou.com" || host == "v.gifshow.com") {
+            path.isNotBlank() && path != "/"
+        } else {
+            Regex("""/short-video/[^/?]+|/fw/photo/[^/?]+|/photo/[^/?]+|/s/[^/?]+|/share/[^/?]+""").containsMatchIn(path)
+        }
+        host == "youtu.be" || host == "fb.watch" || host == "redd.it" || host == "b23.tv" ->
+            path.isNotBlank() && path != "/"
+        hostIs("youtube.com") ->
+            (path == "/watch" && query.split("&").any { it.startsWith("v=") }) ||
+                Regex("""/(shorts|live|embed)/[^/?]+""").containsMatchIn(path)
+        hostIs("instagram.com") -> Regex("""/(reel|p|tv)/[^/?]+""").containsMatchIn(path)
+        hostIs("facebook.com") -> Regex("""/(watch|videos|reel|share/v|share/r)(/|$)""").containsMatchIn(path)
+        hostIs("threads.net") -> Regex("""/@[^/]+/post/[^/?]+""").containsMatchIn(path)
+        hostIs("x.com") || hostIs("twitter.com") -> Regex("""/[^/]+/status/[^/?]+""").containsMatchIn(path)
+        hostIs("reddit.com") -> Regex("""/comments/[^/?]+""").containsMatchIn(path)
+        hostIs("bilibili.com") -> Regex("""/video/(bv[0-9a-z]+|av[0-9]+)""").containsMatchIn(path)
+        else -> false
     }
 }
