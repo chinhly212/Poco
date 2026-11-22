@@ -1,6 +1,8 @@
 package com.contentautomation.ui.screens
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,6 +42,7 @@ fun SystemScreen(
 ) {
     val context = LocalContext.current
     var filter by remember { mutableStateOf(JobFilter.ALL) }
+    val scanProgress by vm.scanProgress.collectAsStateWithLifecycle()
 
     val shown = remember(jobs, filter) {
         (filter.status?.let { s -> jobs.filter { it.status == s } } ?: jobs).take(MAX_VISIBLE_JOBS)
@@ -147,6 +150,23 @@ private fun JobCard(job: PipelineJob, onPauseJob: (String) -> Unit, onResumeJob:
                 GText(job.sourceVideoId, 12.sp, color = GlassColors.InkSoft, modifier = Modifier.weight(1f))
                 GText("Thử lại: ${job.retries}", 12.sp, color = GlassColors.InkSoft)
             }
+            val pipelineStages = listOf(
+                PipelineStage.DOWNLOAD,
+                PipelineStage.ANALYZE,
+                PipelineStage.SPEECH_TO_TEXT,
+                PipelineStage.TRANSLATE,
+                PipelineStage.TTS,
+                PipelineStage.MERGE,
+                PipelineStage.EXPORT,
+                PipelineStage.VERIFY
+            )
+            val stageIndex = pipelineStages.indexOf(job.stage).coerceAtLeast(0)
+            val stageProgress = if (job.status == PipelineStatus.DONE) 1f else stageIndex.toFloat() / pipelineStages.size
+            GText("Tiến độ công đoạn: ${if (job.status == PipelineStatus.DONE) pipelineStages.size else stageIndex}/${pipelineStages.size}", 10.sp, color = GlassColors.InkSoft)
+            LinearProgressIndicator(
+                progress = stageProgress,
+                modifier = Modifier.fillMaxWidth()
+            )
             if (!job.error.isNullOrBlank()) {
                 GText(job.error!!, 12.sp, color = if (job.status == PipelineStatus.DONE) GlassColors.Green else GlassColors.Red)
             }
