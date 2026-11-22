@@ -151,7 +151,7 @@ dependencies {
     // YouTube-DL Android
     // ==============================
 
-    val youtubeDlVersion = "0.17.2"
+    val youtubeDlVersion = "0.18.1"
 
     implementation(
         "io.github.junkfood02.youtubedl-android:library:$youtubeDlVersion"
