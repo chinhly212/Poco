@@ -25,9 +25,9 @@ interface SourceAdapter {
 }
 
 object SourceAdapterFactory {
-    fun create(platform: String): SourceAdapter = when (platform.uppercase()) {
-        "KUAISHOU" -> KuaishouAdapter()
-        "DOUYIN" -> DouyinAdapter()
+    fun create(platform: String, cookieDirectory: java.io.File? = null): SourceAdapter = when (platform.uppercase()) {
+        "KUAISHOU" -> KuaishouAdapter(cookieDirectory)
+        "DOUYIN" -> DouyinAdapter(cookieDirectory)
         else -> throw IllegalArgumentException("Unsupported platform: $platform")
     }
 }
