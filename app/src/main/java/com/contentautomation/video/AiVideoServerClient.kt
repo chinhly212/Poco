@@ -202,76 +202,100 @@ class AiVideoServerClient(
     suspend fun downloadVideo(sourceUrl: String, destination: File): AiVideoDownloadResult =
         withContext(Dispatchers.IO) {
             destination.parentFile?.mkdirs()
-            val requestJson = JSONObject().put("url", sourceUrl)
             val resolveRequest = Request.Builder()
                 .url("${baseUrl.trimEnd('/')}/download")
-                .post(requestJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .post(JSONObject().put("url", sourceUrl).toString()
+                    .toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .header("Accept", "application/json")
                 .build()
 
-            val payload = client.newCall(resolveRequest).execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
-                    val errorPayload = runCatching { JSONObject(body) }.getOrNull()
-                    val message = errorPayload?.optString("message")
-                        ?.takeIf { it.isNotBlank() }
-                        ?: errorPayload?.optString("detail")?.takeIf { it.isNotBlank() }
-                    val providerErrors = (errorPayload?.optJSONArray("provider_errors")
-                        ?: errorPayload?.optJSONArray("errors"))?.let { errors ->
-                        buildList {
-                            for (index in 0 until errors.length()) {
-                                errors.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+            try {
+                val payload = client.newCall(resolveRequest).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        val errorPayload = runCatching { JSONObject(body) }.getOrNull()
+                        val message = errorPayload?.optString("message")
+                            ?.takeIf { it.isNotBlank() }
+                            ?: errorPayload?.optString("detail")?.takeIf { it.isNotBlank() }
+                        val providerErrors = (errorPayload?.optJSONArray("provider_errors")
+                            ?: errorPayload?.optJSONArray("errors"))?.let { errors ->
+                            buildList {
+                                for (index in 0 until errors.length()) {
+                                    errors.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                                }
                             }
+                        }.orEmpty()
+                        val detail = buildList {
+                            message?.let(::add)
+                            addAll(providerErrors)
+                        }.joinToString("\\n").ifBlank { body.take(500) }
+                        throw IOException("Máy chủ không tìm được video: ${detail}")
+                    }
+                    JSONObject(body)
+                }
+
+                if (payload.optString("status") != "success") {
+                    throw IOException(payload.optString("message", "Máy chủ không tìm được video."))
+                }
+
+                val videoUrl = payload.optString("video_url")
+                if (!videoUrl.startsWith("https://") && !videoUrl.startsWith("http://")) {
+                    throw IOException("Máy chủ không trả về đường dẫn video hợp lệ.")
+                }
+
+                // Never fetch the CDN URL directly from Android. The server proxy
+                // handles CDN 409 responses and falls back to its server-side yt-dlp.
+                val proxyPayload = JSONObject()
+                    .put("video_url", videoUrl)
+                    .put("source_url", sourceUrl)
+                    .put("provider", payload.optString("provider", ""))
+                val proxyRequest = Request.Builder()
+                    .url("${baseUrl.trimEnd('/')}/download/proxy")
+                    .post(proxyPayload.toString()
+                        .toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .header("Accept", "video/*,application/octet-stream")
+                    .build()
+
+                val bytes = client.newCall(proxyRequest).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val bodyText = response.body?.string().orEmpty()
+                        val detail = runCatching { JSONObject(bodyText).optString("detail") }
+                            .getOrNull()?.takeIf { it.isNotBlank() }
+                            ?: bodyText.take(400).ifBlank { "HTTP ${response.code}" }
+                        throw IOException("Không thể nhận video qua máy chủ: ${detail}")
+                    }
+                    val body = response.body ?: throw IOException("Máy chủ trả dữ liệu video rỗng.")
+                    val contentType = body.contentType()?.toString()?.lowercase().orEmpty()
+                    if (contentType.contains("text/html") || contentType.contains("application/json")) {
+                        throw IOException("Máy chủ không trả dữ liệu video (${contentType}).")
+                    }
+                    val expectedBytes = body.contentLength().takeIf { it > 0L }
+                    val copied = destination.outputStream().buffered().use { output ->
+                        body.byteStream().use { input ->
+                            input.copyTo(output).also { output.flush() }
                         }
-                    }.orEmpty()
-                    val detail = buildList {
-                        message?.let(::add)
-                        addAll(providerErrors)
-                    }.joinToString("\n").ifBlank { body.take(500) }
-                    throw IOException("AI Video Server HTTP ${response.code}: ${detail}")
+                    }
+                    if (copied <= 0L) throw IOException("Video tải về bị rỗng.")
+                    if (expectedBytes != null && copied != expectedBytes) {
+                        throw IOException("Video chưa tải đủ dữ liệu: ${copied}/${expectedBytes} byte.")
+                    }
+                    copied
                 }
-                JSONObject(body)
-            }
 
-            if (payload.optString("status") != "success") {
-                throw IOException(payload.optString("message", "Máy chủ không tìm được video."))
-            }
-
-            val videoUrl = payload.optString("video_url")
-            if (!videoUrl.startsWith("https://") && !videoUrl.startsWith("http://")) {
-                throw IOException("Máy chủ không trả về đường dẫn video hợp lệ.")
-            }
-
-            val videoRequest = Request.Builder()
-                .url(videoUrl)
-                .get()
-                .header("Accept", "video/*,application/octet-stream;q=0.9,*/*;q=0.8")
-                .build()
-
-            val bytes = client.newCall(videoRequest).execute().use { response ->
-                if (!response.isSuccessful) {
-                    throw IOException("Không tải được file video: HTTP ${response.code}")
+                if (!destination.exists() || destination.length() != bytes || bytes <= 0L) {
+                    throw IOException("Không xác minh được file video sau khi tải.")
                 }
-                val body = response.body ?: throw IOException("Máy chủ video trả nội dung rỗng.")
-                val contentType = body.contentType()?.toString()?.lowercase().orEmpty()
-                if (contentType.contains("text/html") || contentType.contains("application/json")) {
-                    throw IOException("Đường dẫn trả về không phải file video ($contentType).")
-                }
-                destination.outputStream().buffered().use { output ->
-                    body.byteStream().use { input -> input.copyTo(output) }
-                }
-            }
 
-            if (bytes <= 0L || !destination.exists() || destination.length() <= 0L) {
+                AiVideoDownloadResult(
+                    provider = payload.optString("provider", "MuChi"),
+                    title = payload.optString("title").takeIf { it.isNotBlank() },
+                    bytesWritten = bytes
+                )
+            } catch (error: Exception) {
                 destination.delete()
-                throw IOException("File video tải về rỗng.")
+                if (error is IOException) throw error
+                throw IOException("Không thể tải video qua máy chủ: ${error.message ?: error.javaClass.simpleName}", error)
             }
-
-            AiVideoDownloadResult(
-                provider = payload.optString("provider", "AI Video Server"),
-                title = payload.optString("title").takeIf { it.isNotBlank() },
-                bytesWritten = bytes
-            )
         }
 
     companion object {
