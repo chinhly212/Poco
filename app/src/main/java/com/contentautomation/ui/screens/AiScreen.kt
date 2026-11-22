@@ -204,10 +204,9 @@ fun AiScreen(vm: MainViewModel) {
                                                 resolvedUrl, temp, serverReply?.provider, serverReply?.title
                                             )
                                             serverFileDownloaded = true
-                                            val uri = MediaStoreSaver(context).saveVideoToGallery(
+                                            MediaStoreSaver(context).saveVideoToGallery(
                                                 temp, "MuChi_${System.currentTimeMillis()}.mp4"
                                             )
-                                            if (uri == null) throw IllegalStateException("Không lưu được video vào thư viện.")
                                             appendLine(AiChatLine(
                                                 "Đã tải và lưu video vào Movies/MuChi. Nguồn: ${downloaded.provider}; ${downloaded.bytesWritten / 1024} KB.",
                                                 false
@@ -247,10 +246,9 @@ fun AiScreen(vm: MainViewModel) {
                                                     ?.maxByOrNull { it.length() }
                                                     ?: throw IllegalStateException("yt-dlp không tạo được file video.")
                                             }
-                                            val uri = MediaStoreSaver(context).saveVideoToGallery(
+                                            MediaStoreSaver(context).saveVideoToGallery(
                                                 localFile, "MuChi_${System.currentTimeMillis()}.mp4"
                                             )
-                                            if (uri == null) throw IllegalStateException("Tải xong nhưng không lưu được vào thư viện.")
                                             appendLine(AiChatLine(
                                                 "Đã tải và lưu video vào Movies/MuChi bằng bộ tải dự phòng trên điện thoại.",
                                                 false
