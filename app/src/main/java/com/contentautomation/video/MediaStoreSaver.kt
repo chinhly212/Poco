@@ -44,7 +44,7 @@ class MediaStoreSaver(private val context: Context) {
 
     private fun normalizeDisplayName(displayName: String): String {
         val clean = displayName
-            .substringAfterLast('\\')
+            .substringAfterLast('/')
             .substringAfterLast('\\')
             .replace(Regex("""[/:*?"<>|]"""), "_")
             .trim()
