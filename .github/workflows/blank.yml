@@ -89,10 +89,8 @@ jobs:
 
           PREVIOUS="$RUNNER_TEMP/previous-update.json"
           PREVIOUS_TAG=""
-          PREVIOUS_CODE=""
           if [ -s "$PREVIOUS" ]; then
             PREVIOUS_TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("tag",""))' "$PREVIOUS")"
-            PREVIOUS_CODE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("versionCode",""))' "$PREVIOUS")"
           fi
 
           if [ -n "$PREVIOUS_TAG" ] && [ -s "$RUNNER_TEMP/SmartAppUpdates/ApkPatchLibraryServer/build/libs/ApkPatchLibraryServer-2.0-all.jar" ]; then
@@ -143,13 +141,17 @@ jobs:
           if [ -n "$PREVIOUS_TAG" ] && git rev-parse -q --verify "refs/tags/$PREVIOUS_TAG" >/dev/null; then
             git log --no-merges --format='- %s%n%b' "$PREVIOUS_TAG"..HEAD > "$RUNNER_TEMP/release-notes.md"
           else
-            git log -1 --format='- %s%n%b' HEAD > "$RUNNER_TEMP/release-notes.md"
+            cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+          - Thêm cập nhật APK trực tiếp ngay trong ứng dụng bằng bản vá Delta.
+          - Hiển thị phiên bản mới và nội dung thay đổi khi mở ứng dụng.
+          - Kiểm tra SHA-256 và chữ ký cài đặt trước khi chuyển sang trình cài đặt Android.
+          NOTES
           fi
           if [ ! -s "$RUNNER_TEMP/release-notes.md" ]; then
             echo "- Sửa lỗi và cải thiện độ ổn định." > "$RUNNER_TEMP/release-notes.md"
           fi
 
-          export TAG VERSION_CODE VERSION_NAME PREVIOUS PREVIOUS_CODE REPOSITORY
+          export TAG VERSION_CODE VERSION_NAME PREVIOUS REPOSITORY
           python3 - <<'PY'
           import hashlib, json, os
           from pathlib import Path

@@ -30,9 +30,6 @@ android {
         versionCode = 9 + buildNumber
         versionName = "1.7.$buildNumber"
         multiDexEnabled = true
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-        }
     }
 
     externalNativeBuild {

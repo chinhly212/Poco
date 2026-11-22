@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.contentautomation.ui.AppNavHost
 import com.contentautomation.ui.AppUpdateDialog
@@ -56,14 +58,14 @@ class MainActivity : ComponentActivity() {
             val scope = rememberCoroutineScope()
             var showSplash by remember { mutableStateOf(true) }
             var updateState by remember { mutableStateOf<UpdateUiState>(UpdateUiState.Idle) }
+            var recheckAfterSkip by remember { mutableStateOf(false) }
 
             LaunchedEffect(Unit) {
                 delay(2500)
                 showSplash = false
             }
 
-            // Kiểm tra khi màn hình chính xuất hiện. Không lưu trạng thái "đã bỏ qua":
-            // lần mở app tiếp theo sẽ kiểm tra lại cho tới khi phiên bản được nâng cấp.
+            // Lần mở app đầu tiên sau splash.
             LaunchedEffect(showSplash) {
                 if (!showSplash) {
                     updateState = UpdateUiState.Checking
@@ -76,6 +78,26 @@ class MainActivity : ComponentActivity() {
                         UpdateUiState.Available(update)
                     } else {
                         UpdateUiState.Idle
+                    }
+                }
+            }
+
+            // Nếu người dùng bỏ qua rồi đưa app xuống nền và mở lại, kiểm tra lại ngay.
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                if (!showSplash && recheckAfterSkip) {
+                    recheckAfterSkip = false
+                    scope.launch {
+                        updateState = UpdateUiState.Checking
+                        val update = try {
+                            updateManager.checkForUpdate()
+                        } catch (_: Exception) {
+                            null
+                        }
+                        updateState = if (update != null) {
+                            UpdateUiState.Available(update)
+                        } else {
+                            UpdateUiState.Idle
+                        }
                     }
                 }
             }
@@ -94,7 +116,10 @@ class MainActivity : ComponentActivity() {
 
                 AppUpdateDialog(
                     state = updateState,
-                    onSkip = { updateState = UpdateUiState.Idle },
+                    onSkip = {
+                        updateState = UpdateUiState.Idle
+                        recheckAfterSkip = true
+                    },
                     onUpdate = { update ->
                         scope.launch {
                             updateState = UpdateUiState.Downloading(update)

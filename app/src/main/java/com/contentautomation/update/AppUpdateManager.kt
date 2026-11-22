@@ -1,7 +1,6 @@
 package com.contentautomation.update
 
 import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Build
 import com.cundong.utils.PatchUtils
 import com.google.gson.Gson
@@ -41,6 +40,8 @@ class AppUpdateManager(private val context: Context) {
         "https://github.com/chinhly212/Poco/releases/latest/download/update.json"
 
     suspend fun checkForUpdate(): AvailableUpdate? = withContext(Dispatchers.IO) {
+        clearTemporaryUpdateFiles()
+
         val request = Request.Builder().url(manifestUrl).get().build()
         val json = client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
@@ -93,11 +94,11 @@ class AppUpdateManager(private val context: Context) {
                 verifyTargetApk(rebuiltApk, update)
                 patchFile.delete()
                 return@withContext rebuiltApk
-            } catch (error: Exception) {
+            } catch (_: Exception) {
                 patchFile.delete()
                 rebuiltApk.delete()
                 // Nếu bản vá không dùng được, chuyển sang tải APK đầy đủ bên dưới.
-            } catch (error: LinkageError) {
+            } catch (_: LinkageError) {
                 patchFile.delete()
                 rebuiltApk.delete()
             }
@@ -108,6 +109,15 @@ class AppUpdateManager(private val context: Context) {
         download(asset.apkUrl, fullApk)
         verifyTargetApk(fullApk, update)
         fullApk
+    }
+
+    private fun clearTemporaryUpdateFiles() {
+        context.cacheDir.listFiles()
+            ?.filter {
+                it.name.startsWith("poco-update-") &&
+                    (it.extension == "apk" || it.extension == "patch")
+            }
+            ?.forEach { it.delete() }
     }
 
     private fun verifyTargetApk(file: File, update: AvailableUpdate) {
