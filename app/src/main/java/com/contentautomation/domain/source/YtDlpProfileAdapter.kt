@@ -10,13 +10,32 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import java.io.File
 
-abstract class YtDlpProfileAdapter : SourceAdapter {
+abstract class YtDlpProfileAdapter(private val cookieDirectory: File? = null) : SourceAdapter {
     protected abstract fun profileUrl(identifier: String): String
     protected abstract fun videoUrl(videoId: String): String
 
-    private fun YoutubeDLRequest.addSession(cookieHeader: String?) {
-        if (!cookieHeader.isNullOrBlank()) addOption("--add-headers", "Cookie: $cookieHeader")
+    private fun executeWithSession(request: YoutubeDLRequest, cookieHeader: String?): String {
+        if (cookieHeader.isNullOrBlank()) return YoutubeDL.getInstance().execute(request).out
+        val directory = cookieDirectory ?: File(System.getProperty("java.io.tmpdir") ?: "/data/local/tmp")
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw IllegalStateException("Không thể tạo thư mục cookie tạm an toàn.")
+        }
+        val cookieFile = File.createTempFile("muchi-ytdlp-", ".cookies", directory)
+        try {
+            val lines = cookieHeader.split(";").mapNotNull { part ->
+                val pair = part.trim().split("=", limit = 2)
+                if (pair.size != 2 || pair[0].isBlank()) null
+                else ".douyin.com\\tTRUE\\t/\\tTRUE\\t0\\t${pair[0].trim()}\\t${pair[1].trim()}"
+            }
+            if (lines.isEmpty()) throw IllegalArgumentException("Phiên đăng nhập Douyin không có cookie hợp lệ.")
+            cookieFile.writeText("# Netscape HTTP Cookie File\\n" + lines.joinToString("\\n"), Charsets.UTF_8)
+            request.addOption("--cookies", cookieFile.absolutePath)
+            return YoutubeDL.getInstance().execute(request).out
+        } finally {
+            cookieFile.delete()
+        }
     }
 
     open suspend fun verifyProfile(identifier: String, cookieHeader: String): SourceProfileInfo =
@@ -93,15 +112,14 @@ abstract class YtDlpProfileAdapter : SourceAdapter {
             require(accountIdentifier.isNotBlank()) { "ID tài khoản không được để trống." }
             try {
                 val request = YoutubeDLRequest(profileUrl(accountIdentifier)).apply {
-                    addSession(cookieHeader)
                     addOption("--flat-playlist")
                     addOption("--dump-single-json")
-                    addOption("--playlist-end", "30")
+                    addOption("--playlist-end", "100")
                     addOption("--skip-download")
                     addOption("--ignore-errors")
                     addOption("--no-warnings")
                 }
-                val output = YoutubeDL.getInstance().execute(request).out
+                val output = executeWithSession(request, cookieHeader)
                 val root = JSONObject(output.trim())
                 val entries = root.optJSONArray("entries")
                 val sourceEntries = entries ?: JSONArray().put(root)
@@ -187,7 +205,7 @@ abstract class YtDlpProfileAdapter : SourceAdapter {
         if (uploadDate.length != 8) return null
         return runCatching {
             SimpleDateFormat("yyyyMMdd", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
+                timeZone = TimeZone.getDefault()
             }.parse(uploadDate)?.time
         }.getOrNull()
     }
