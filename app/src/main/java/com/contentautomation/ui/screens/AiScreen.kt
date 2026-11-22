@@ -176,6 +176,7 @@ fun AiScreen(vm: MainViewModel) {
 
                                 if (sourceUrl != null) {
                                     var saved = false
+                                    var serverFileDownloaded = false
                                     val providerErrors = serverReply?.providerErrors.orEmpty()
                                     var serverError = buildString {
                                         append(serverReply?.message
@@ -202,6 +203,7 @@ fun AiScreen(vm: MainViewModel) {
                                             val downloaded = server.downloadResolvedVideo(
                                                 resolvedUrl, temp, serverReply?.provider, serverReply?.title
                                             )
+                                            serverFileDownloaded = true
                                             val uri = MediaStoreSaver(context).saveVideoToGallery(
                                                 temp, "MuChi_${System.currentTimeMillis()}.mp4"
                                             )
@@ -218,7 +220,7 @@ fun AiScreen(vm: MainViewModel) {
                                         }
                                     }
 
-                                    if (!saved) {
+                                    if (!saved && !serverFileDownloaded) {
                                         appendLine(AiChatLine("API máy chủ chưa tải được. Đang thử bộ tải dự phòng trên điện thoại…", false))
                                         val fallbackDir = File(context.cacheDir, "muchiai_fallback_${System.currentTimeMillis()}")
                                         try {
@@ -261,6 +263,13 @@ fun AiScreen(vm: MainViewModel) {
                                         } finally {
                                             fallbackDir.deleteRecursively()
                                         }
+                                    } else if (!saved && serverFileDownloaded) {
+                                        appendLine(
+                                            AiChatLine(
+                                                "Video đã tải về điện thoại nhưng không lưu được vào thư viện: $serverError",
+                                                false
+                                            )
+                                        )
                                     }
                                 } else {
                                     val reply = serverReply?.message
