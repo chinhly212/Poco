@@ -70,7 +70,7 @@ class KuaishouAdapter : YtDlpProfileAdapter() {
 
     private val serverClient by lazy {
         OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
+            .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(240, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .callTimeout(300, TimeUnit.SECONDS)
