@@ -28,18 +28,25 @@ class MediaStoreSaver(private val context: Context) {
                 .let { if (it.endsWith(".mp4", ignoreCase = true)) it else "$it.mp4" }
 
             val resolver = context.contentResolver
+            // Save directly in the standard Movies folder. Some Android/OriginOS
+            // MediaStore providers reject creating app-specific subfolders.
             val values = ContentValues().apply {
                 put(MediaStore.Video.Media.DISPLAY_NAME, safeName)
                 put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                put(
-                    MediaStore.Video.Media.RELATIVE_PATH,
-                    "${Environment.DIRECTORY_MOVIES}/MuChi"
-                )
+                put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES)
                 put(MediaStore.Video.Media.IS_PENDING, 1)
             }
 
-            val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
-                ?: throw IOException("Android từ chối tạo mục video trong thư viện. Hãy kiểm tra dung lượng trống.")
+            val uri = try {
+                resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+            } catch (error: Exception) {
+                throw IOException(
+                    "MediaStore không tạo được video trong thư mục Movies: ${error.javaClass.simpleName}: ${error.message ?: "không có thông tin chi tiết"}",
+                    error
+                )
+            } ?: throw IOException(
+                "MediaStore trả về URI rỗng khi tạo video trong thư mục Movies. Không phải thông báo xác nhận thiếu dung lượng."
+            )
 
             try {
                 val output = resolver.openOutputStream(uri, "w")
@@ -68,7 +75,7 @@ class MediaStoreSaver(private val context: Context) {
             } catch (error: Exception) {
                 runCatching { resolver.delete(uri, null, null) }
                 if (error is IOException) throw error
-                throw IOException("Lỗi ghi video vào Movies/MuChi: ${error.message ?: error.javaClass.simpleName}", error)
+                throw IOException("Lỗi ghi video vào thư viện Movies: ${error.message ?: error.javaClass.simpleName}", error)
             }
         }
 }
