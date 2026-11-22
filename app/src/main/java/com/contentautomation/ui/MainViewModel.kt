@@ -492,7 +492,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val normalizedIdentifier = normalizeSourceIdentifier(normalizedPlatform, rawIdentifier)
                 require(normalizedIdentifier.isNotBlank()) { "Không đọc được ID từ đường dẫn tài khoản." }
 
-                val adapter = com.contentautomation.domain.source.SourceAdapterFactory.create(normalizedPlatform)
+                val adapter = com.contentautomation.domain.source.SourceAdapterFactory.create(normalizedPlatform, application.filesDir)
                 val profile = (adapter as? com.contentautomation.domain.source.YtDlpProfileAdapter)
                     ?.verifyProfile(normalizedIdentifier, cookie)
                     ?: throw IllegalStateException("Bộ đọc hồ sơ của nền tảng chưa được hỗ trợ.")
