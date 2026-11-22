@@ -63,7 +63,7 @@ class ScanWorker(
                 ))
                 try {
                     val adapter =
-                        SourceAdapterFactory.create(account.platform)
+                        SourceAdapterFactory.create(account.platform, applicationContext.filesDir)
 
                     val sessionCookie = prefs.getSecret("platform_cookie_${account.platform.lowercase()}")
                     if (sessionCookie.isNullOrBlank()) {
