@@ -64,18 +64,19 @@ class ContentAutomationApp : Application() {
     private fun initMediaEngines() {
         applicationScope.launch(Dispatchers.IO) {
             try {
-                // Remove the previously cached yt-dlp executable. The library only copies
-                // its bundled executable when the file is absent, so an older install can
-                // otherwise keep running a binary that does not recognize --js-runtimes.
-                val cachedYtDlp = File(
-                    noBackupFilesDir,
-                    "${YoutubeDL.baseName}/${YoutubeDL.ytdlpDirName}/${YoutubeDL.ytdlpBin}"
-                )
-                if (cachedYtDlp.exists() && !cachedYtDlp.delete()) {
-                    throw IllegalStateException("Không thể cập nhật bộ yt-dlp cũ: ${cachedYtDlp.absolutePath}")
-                }
+                // Keep the cached executable so a downloaded yt-dlp update is not
+                // overwritten by the older binary bundled inside the APK on next launch.
                 YoutubeDL.getInstance().init(applicationContext)
                 FFmpeg.getInstance().init(applicationContext)
+
+                // Refresh yt-dlp from the official stable release. A network/update
+                // failure must not prevent the rest of the app from starting.
+                runCatching {
+                    val updateStatus = YoutubeDL.getInstance().updateYoutubeDL(applicationContext)
+                    Log.i("MuChiEngine", "yt-dlp update status: $updateStatus; version=${YoutubeDL.getInstance().version(applicationContext)}")
+                }.onFailure { updateError ->
+                    Log.w("MuChiEngine", "Could not update yt-dlp; keeping the bundled/cached version", updateError)
+                }
 
                 isEngineInitialized = true
                 engineInitializationError = null
