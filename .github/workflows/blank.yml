@@ -71,7 +71,7 @@ jobs:
             git clone --depth 1 https://github.com/cundong/SmartAppUpdates.git "$RUNNER_TEMP/SmartAppUpdates"
             cd "$RUNNER_TEMP/SmartAppUpdates"
             ./gradlew :server:fatJar --no-daemon
-            test -s ApkPatchLibraryServer/build/libs/ApkPatchLibraryServer-2.0-all.jar
+            test -s ApkPatchLibraryServer/build/libs/server-2.0-all.jar
           else
             echo "No previous published release. The first updater-enabled release will contain full APKs."
           fi
@@ -93,8 +93,8 @@ jobs:
             PREVIOUS_TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("tag",""))' "$PREVIOUS")"
           fi
 
-          if [ -n "$PREVIOUS_TAG" ] && [ -s "$RUNNER_TEMP/SmartAppUpdates/ApkPatchLibraryServer/build/libs/ApkPatchLibraryServer-2.0-all.jar" ]; then
-            PATCHER="$RUNNER_TEMP/SmartAppUpdates/ApkPatchLibraryServer/build/libs/ApkPatchLibraryServer-2.0-all.jar"
+          if [ -n "$PREVIOUS_TAG" ] && [ -s "$RUNNER_TEMP/SmartAppUpdates/ApkPatchLibraryServer/build/libs/server-2.0-all.jar" ]; then
+            PATCHER="$RUNNER_TEMP/SmartAppUpdates/ApkPatchLibraryServer/build/libs/server-2.0-all.jar"
             for ABI in arm64-v8a armeabi-v7a; do
               OLD="old-$ABI.apk"
               NEW="release/Poco-$ABI.apk"
