@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
 
 class ContentAutomationApp : Application() {
 
@@ -63,6 +64,16 @@ class ContentAutomationApp : Application() {
     private fun initMediaEngines() {
         applicationScope.launch(Dispatchers.IO) {
             try {
+                // Remove the previously cached yt-dlp executable. The library only copies
+                // its bundled executable when the file is absent, so an older install can
+                // otherwise keep running a binary that does not recognize --js-runtimes.
+                val cachedYtDlp = File(
+                    noBackupFilesDir,
+                    "${YoutubeDL.baseName}/${YoutubeDL.ytdlpDirName}/${YoutubeDL.ytdlpBin}"
+                )
+                if (cachedYtDlp.exists() && !cachedYtDlp.delete()) {
+                    throw IllegalStateException("Không thể cập nhật bộ yt-dlp cũ: ${cachedYtDlp.absolutePath}")
+                }
                 YoutubeDL.getInstance().init(applicationContext)
                 FFmpeg.getInstance().init(applicationContext)
 
