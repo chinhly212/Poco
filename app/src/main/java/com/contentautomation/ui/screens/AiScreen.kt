@@ -252,10 +252,10 @@ fun AiScreen(vm: MainViewModel) {
                                             saved = true
                                         } catch (localError: Exception) {
                                             val diagnostics = buildString {
-                                                append("Đường dẫn: ").append(sourceUrl).append("\\n")
-                                                append("Lỗi xử lý từ máy chủ: ").append(serverError).append("\\n")
+                                                append("Đường dẫn: ").append(sourceUrl).append("\n")
+                                                append("Lỗi xử lý từ máy chủ: ").append(serverError).append("\n")
                                                 if (providerErrors.isNotEmpty()) {
-                                                    append("Nguồn dự phòng: ").append(providerErrors.joinToString(" | ")).append("\\n")
+                                                    append("Nguồn dự phòng: ").append(providerErrors.joinToString(" | ")).append("\n")
                                                 }
                                                 append("Lỗi bộ tải trên điện thoại: ")
                                                     .append(localError.message ?: localError.javaClass.simpleName)
@@ -273,7 +273,7 @@ fun AiScreen(vm: MainViewModel) {
                                     } else if (!saved && serverFileDownloaded) {
                                         vm.reportAiIssue(
                                             "AI tìm thấy video nhưng không lưu được",
-                                            "Đường dẫn: $sourceUrl\\nLỗi lưu thư viện: $serverError"
+                                            "Đường dẫn: $sourceUrl\nLỗi lưu thư viện: $serverError"
                                         )
                                         appendLine(
                                             AiChatLine(
