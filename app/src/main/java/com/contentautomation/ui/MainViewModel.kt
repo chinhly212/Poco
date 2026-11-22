@@ -506,7 +506,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         profileAvatarUrl = profile.avatarUrl,
                         profileVideoCount = profile.videoCount,
                         profileVerifiedAt = System.currentTimeMillis(),
-                        profileFollowerCount = profile.followerCount
+                        profileFollowerCount = profile.followerCount,
+                        profileFollowingCount = profile.followingCount
                     )
                 )
                 recordError(
@@ -563,14 +564,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun normalizeSourceIdentifier(platform: String, input: String): String {
-        val value = input.trim().trimEnd('/')
-        val url = runCatching { android.net.Uri.parse(value) }.getOrNull()
-        val segments = url?.pathSegments.orEmpty()
-        val marker = if (platform == "DOUYIN") "user" else "profile"
-        val fromUrl = segments.indexOf(marker).takeIf { it >= 0 }
-            ?.let { segments.getOrNull(it + 1) }
-            ?.takeIf { it.isNotBlank() }
-        return (fromUrl ?: value).substringBefore('?').substringBefore('#').trim()
+        val value = input.trim()
+        val uri = runCatching { android.net.Uri.parse(value) }.getOrNull()
+        val scheme = uri?.scheme?.lowercase()
+        val host = uri?.host?.lowercase().orEmpty()
+        require(scheme in setOf("http", "https")) {
+            "Hãy dán liên kết trang cá nhân đầy đủ, bắt đầu bằng https://"
+        }
+        val allowed = when (platform) {
+            "DOUYIN" -> host == "douyin.com" || host.endsWith(".douyin.com") || host == "iesdouyin.com" || host.endsWith(".iesdouyin.com")
+            "KUAISHOU" -> host == "kuaishou.com" || host.endsWith(".kuaishou.com") || host == "gifshow.com" || host.endsWith(".gifshow.com")
+            else -> false
+        }
+        require(allowed) { "Liên kết này không thuộc nền tảng $platform đã chọn." }
+        return value.substringBefore("#")
     }
 
     // RETRY FAILED DOWNLOADS
