@@ -30,7 +30,7 @@ fun ApiSettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val providers = listOf(
         "gemini" to "Google Gemini",
         "openrouter" to "OpenRouter",
-        "groq" to "Groq"
+        "deepseek" to "DeepSeek"
     )
     val inputs = remember { mutableStateMapOf<String, String>() }
     val connectionStates by vm.apiConnectionStates.collectAsStateWithLifecycle()
@@ -87,7 +87,7 @@ fun ApiSettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
         }
         Text(
-            "Khi gửi tin nhắn trong tab AI, MuChi sẽ dùng các khóa đã lưu để gọi Gemini, OpenRouter hoặc Groq qua HTTPS. Không đưa API key vào GitHub."
+            "Khi gửi tin nhắn trong tab AI, MuChi sẽ dùng các khóa đã lưu để gọi Gemini, OpenRouter hoặc DeepSeek qua HTTPS. Không đưa API key vào GitHub."
         )
     }
 }
