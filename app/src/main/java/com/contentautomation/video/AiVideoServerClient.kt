@@ -28,7 +28,8 @@ data class AiVideoChatResult(
     val message: String,
     val videoUrl: String? = null,
     val provider: String? = null,
-    val title: String? = null
+    val title: String? = null,
+    val providerErrors: List<String> = emptyList()
 )
 
 /**
@@ -119,7 +120,14 @@ class AiVideoServerClient(
                 message = payload.optString("message", "Máy chủ không trả lời."),
                 videoUrl = data?.optString("video_url")?.takeIf { it.isNotBlank() },
                 provider = data?.optString("provider")?.takeIf { it.isNotBlank() },
-                title = data?.optString("title")?.takeIf { it.isNotBlank() }
+                title = data?.optString("title")?.takeIf { it.isNotBlank() },
+                providerErrors = payload.optJSONArray("errors")?.let { errors ->
+                    buildList {
+                        for (index in 0 until errors.length()) {
+                            errors.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                    }
+                }.orEmpty()
             )
         }
     }

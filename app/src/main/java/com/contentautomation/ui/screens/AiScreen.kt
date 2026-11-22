@@ -176,9 +176,25 @@ fun AiScreen(vm: MainViewModel) {
 
                                 if (sourceUrl != null) {
                                     var saved = false
-                                    var serverError = serverReply?.message
-                                        ?: response.exceptionOrNull()?.message
-                                        ?: "Máy chủ chưa trả đường dẫn video."
+                                    val providerErrors = serverReply?.providerErrors.orEmpty()
+                                    var serverError = buildString {
+                                        append(serverReply?.message
+                                            ?: response.exceptionOrNull()?.message
+                                            ?: "Máy chủ chưa trả đường dẫn video.")
+                                        if (providerErrors.isNotEmpty()) {
+                                            append("\n")
+                                            append(providerErrors.joinToString("\n"))
+                                        }
+                                    }
+                                    if (providerErrors.isNotEmpty()) {
+                                        appendLine(
+                                            AiChatLine(
+                                                "Chi tiết các nguồn tải trên máy chủ:\n" +
+                                                    providerErrors.joinToString("\n"),
+                                                false
+                                            )
+                                        )
+                                    }
                                     if (resolvedUrl != null) {
                                         appendLine(AiChatLine("Máy chủ đã tìm thấy video qua ${serverReply?.provider ?: "API"}. Đang tải…", false))
                                         val temp = File(context.cacheDir, "muchiai_server_${System.currentTimeMillis()}.mp4")
