@@ -11,16 +11,18 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build, patch and publish Android update
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -28,12 +30,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
+      - name: Setup Android SDK, NDK and CMake
         uses: android-actions/setup-android@v4
         with:
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
-          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+          packages: 'platform-tools platforms;android-34 platforms;android-36 build-tools;34.0.0 ndk;29.0.14206865 cmake;3.31.6'
 
       - name: Restore release signing keystore
         env:
@@ -48,14 +50,12 @@ jobs:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
-          echo "Checking keystore file and alias..."
           keytool -list -keystore app/nichi-release.jks -storepass "$SIGNING_STORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS"
-          echo "Checking private-key password..."
           keytool -certreq -keystore app/nichi-release.jks -storepass "$SIGNING_STORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" -keypass "$SIGNING_KEY_PASSWORD" -file /tmp/nichi-signing-check.csr
           rm -f /tmp/nichi-signing-check.csr
           echo "Signing keystore verification passed."
 
-      - name: Build signed release APK with Gradle 8.9
+      - name: Build signed APKs
         uses: gradle/gradle-build-action@v3
         env:
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
@@ -65,13 +65,154 @@ jobs:
           gradle-version: '8.9'
           arguments: assembleRelease --no-daemon -PbuildNumber=${{ github.run_number }}
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Build BSDIFF patch generator when a previous release exists
+        run: |
+          if curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/update.json" -o "$RUNNER_TEMP/previous-update.json"; then
+            git clone --depth 1 https://github.com/cundong/SmartAppUpdates.git "$RUNNER_TEMP/SmartAppUpdates"
+            cd "$RUNNER_TEMP/SmartAppUpdates"
+            ./gradlew :server:fatJar --no-daemon
+            test -s ApkPatchLibraryServer/build/libs/ApkPatchLibraryServer-2.0-all.jar
+          else
+            echo "No previous published release. The first updater-enabled release will contain full APKs."
+          fi
+
+      - name: Prepare APKs, verified delta patches and update manifest
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+
+          cp app/build/outputs/apk/release/app-arm64-v8a-release.apk release/Poco-arm64-v8a.apk
+          cp app/build/outputs/apk/release/app-armeabi-v7a-release.apk release/Poco-armeabi-v7a.apk
+
+          PREVIOUS="$RUNNER_TEMP/previous-update.json"
+          PREVIOUS_TAG=""
+          PREVIOUS_CODE=""
+          if [ -s "$PREVIOUS" ]; then
+            PREVIOUS_TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("tag",""))' "$PREVIOUS")"
+            PREVIOUS_CODE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("versionCode",""))' "$PREVIOUS")"
+          fi
+
+          if [ -n "$PREVIOUS_TAG" ] && [ -s "$RUNNER_TEMP/SmartAppUpdates/ApkPatchLibraryServer/build/libs/ApkPatchLibraryServer-2.0-all.jar" ]; then
+            PATCHER="$RUNNER_TEMP/SmartAppUpdates/ApkPatchLibraryServer/build/libs/ApkPatchLibraryServer-2.0-all.jar"
+            for ABI in arm64-v8a armeabi-v7a; do
+              OLD="old-$ABI.apk"
+              NEW="release/Poco-$ABI.apk"
+              PATCH="release/Poco-$ABI.patch"
+              REBUILT="rebuilt-$ABI.apk"
+              OLD_URL="https://github.com/$REPOSITORY/releases/download/$PREVIOUS_TAG/Poco-$ABI.apk"
+              EXPECTED_OLD_SHA="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("assets",{}).get(sys.argv[2],{}).get("apkSha256",""))' "$PREVIOUS" "$ABI")"
+
+              if [ -z "$EXPECTED_OLD_SHA" ] || ! curl -fsSL "$OLD_URL" -o "$OLD"; then
+                echo "No matching base APK for $ABI; full APK will be used."
+                continue
+              fi
+
+              ACTUAL_OLD_SHA="$(sha256sum "$OLD" | cut -d' ' -f1)"
+              if [ "$ACTUAL_OLD_SHA" != "$EXPECTED_OLD_SHA" ]; then
+                echo "Base APK hash mismatch for $ABI; full APK will be used."
+                continue
+              fi
+
+              if java -jar "$PATCHER" diff "$OLD" "$NEW" "$PATCH" &&
+                 java -jar "$PATCHER" patch "$OLD" "$REBUILT" "$PATCH" &&
+                 cmp -s "$NEW" "$REBUILT"; then
+                PATCH_SIZE="$(stat -c%s "$PATCH")"
+                APK_SIZE="$(stat -c%s "$NEW")"
+                if [ "$PATCH_SIZE" -lt "$APK_SIZE" ]; then
+                  echo "Verified $ABI delta: $PATCH_SIZE bytes vs $APK_SIZE byte APK."
+                else
+                  rm -f "$PATCH"
+                  echo "Delta is not smaller for $ABI; full APK will be used."
+                fi
+              else
+                rm -f "$PATCH"
+                echo "Delta verification failed for $ABI; full APK will be used."
+              fi
+              rm -f "$OLD" "$REBUILT"
+            done
+          fi
+
+          TAG="v1.7.$BUILD_NUMBER"
+          VERSION_CODE=$((9 + BUILD_NUMBER))
+          VERSION_NAME="1.7.$BUILD_NUMBER"
+
+          git fetch --tags --force
+          if [ -n "$PREVIOUS_TAG" ] && git rev-parse -q --verify "refs/tags/$PREVIOUS_TAG" >/dev/null; then
+            git log --no-merges --format='- %s%n%b' "$PREVIOUS_TAG"..HEAD > "$RUNNER_TEMP/release-notes.md"
+          else
+            git log -1 --format='- %s%n%b' HEAD > "$RUNNER_TEMP/release-notes.md"
+          fi
+          if [ ! -s "$RUNNER_TEMP/release-notes.md" ]; then
+            echo "- Sửa lỗi và cải thiện độ ổn định." > "$RUNNER_TEMP/release-notes.md"
+          fi
+
+          export TAG VERSION_CODE VERSION_NAME PREVIOUS PREVIOUS_CODE REPOSITORY
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          tag = os.environ["TAG"]
+          version_code = int(os.environ["VERSION_CODE"])
+          version_name = os.environ["VERSION_NAME"]
+          repository = os.environ["REPOSITORY"]
+          previous_path = Path(os.environ["PREVIOUS"])
+          previous = json.loads(previous_path.read_text()) if previous_path.exists() else {}
+          notes_path = Path(os.environ["RUNNER_TEMP"]) / "release-notes.md"
+          notes = notes_path.read_text(encoding="utf-8").strip()
+
+          def sha256(path):
+              digest = hashlib.sha256()
+              with open(path, "rb") as stream:
+                  for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          assets = {}
+          for abi in ("arm64-v8a", "armeabi-v7a"):
+              apk_name = f"Poco-{abi}.apk"
+              apk_path = Path("release") / apk_name
+              patch_path = Path("release") / f"Poco-{abi}.patch"
+              previous_asset = previous.get("assets", {}).get(abi, {})
+              has_patch = patch_path.is_file() and bool(previous_asset.get("apkSha256"))
+              assets[abi] = {
+                  "apkUrl": f"https://github.com/{repository}/releases/download/{tag}/{apk_name}",
+                  "apkSha256": sha256(apk_path),
+                  "patchUrl": (
+                      f"https://github.com/{repository}/releases/download/{tag}/Poco-{abi}.patch"
+                      if has_patch else None
+                  ),
+                  "patchSha256": sha256(patch_path) if has_patch else None,
+                  "baseVersionCode": int(previous.get("versionCode")) if has_patch else None,
+                  "baseApkSha256": previous_asset.get("apkSha256") if has_patch else None
+              }
+
+          manifest = {
+              "tag": tag,
+              "versionCode": version_code,
+              "versionName": version_name,
+              "releaseNotes": notes,
+              "assets": assets
+          }
+          Path("release/update.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8"
+          )
+          PY
+
+      - name: Publish versioned release and update files
+        uses: softprops/action-gh-release@v2
         with:
-          name: Poco-APK
-          path: app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
-          retention-days: 14
+          tag_name: v1.7.${{ github.run_number }}
+          name: Poco 1.7.${{ github.run_number }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          files: release/*
+          make_latest: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Remove restored keystore
         if: always()

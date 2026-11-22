@@ -9,6 +9,7 @@ plugins {
 android {
     namespace = "com.contentautomation"
     compileSdk = 34
+    ndkVersion = "29.0.14206865"
 
     // Tạo APK riêng cho từng kiến trúc ARM để tránh gói universal quá lớn.
     splits {
@@ -29,6 +30,16 @@ android {
         versionCode = 9 + buildNumber
         versionName = "1.7.$buildNumber"
         multiDexEnabled = true
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.31.6"
+        }
     }
 
     signingConfigs {

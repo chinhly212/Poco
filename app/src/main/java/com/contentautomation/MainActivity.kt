@@ -1,48 +1,161 @@
 package com.contentautomation
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.contentautomation.ui.AppNavHost
+import com.contentautomation.ui.AppUpdateDialog
 import com.contentautomation.ui.MainViewModel
+import com.contentautomation.ui.UpdateUiState
+import com.contentautomation.update.AppUpdateManager
+import com.contentautomation.update.AvailableUpdate
+import kotlinx.coroutines.launch
+import java.io.File
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
+    private var pendingInstallFile: File? = null
+
+    private val unknownSourcesLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            val file = pendingInstallFile
+            pendingInstallFile = null
+            if (file != null &&
+                (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+                    packageManager.canRequestPackageInstalls())
+            ) {
+                installApk(file)
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContent {
             val vm: MainViewModel = viewModel()
+            val updateManager = remember { AppUpdateManager(applicationContext) }
+            val scope = rememberCoroutineScope()
             var showSplash by remember { mutableStateOf(true) }
+            var updateState by remember { mutableStateOf<UpdateUiState>(UpdateUiState.Idle) }
 
             LaunchedEffect(Unit) {
                 delay(2500)
                 showSplash = false
             }
 
-            if (showSplash) {
-                Box(modifier = Modifier.fillMaxSize()) {
+            // Kiểm tra khi màn hình chính xuất hiện. Không lưu trạng thái "đã bỏ qua":
+            // lần mở app tiếp theo sẽ kiểm tra lại cho tới khi phiên bản được nâng cấp.
+            LaunchedEffect(showSplash) {
+                if (!showSplash) {
+                    updateState = UpdateUiState.Checking
+                    val update = try {
+                        updateManager.checkForUpdate()
+                    } catch (_: Exception) {
+                        null
+                    }
+                    updateState = if (update != null) {
+                        UpdateUiState.Available(update)
+                    } else {
+                        UpdateUiState.Idle
+                    }
+                }
+            }
+
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (showSplash) {
                     Image(
-                        painter = painterResource(
-                            id = R.drawable.muchi_splash
-                        ),
+                        painter = painterResource(id = R.drawable.muchi_splash),
                         contentDescription = "Mu Chi",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
+                } else {
+                    AppNavHost(vm)
                 }
-            } else {
-                AppNavHost(vm)
+
+                AppUpdateDialog(
+                    state = updateState,
+                    onSkip = { updateState = UpdateUiState.Idle },
+                    onUpdate = { update ->
+                        scope.launch {
+                            updateState = UpdateUiState.Downloading(update)
+                            try {
+                                val apk = updateManager.downloadAndPrepare(update)
+                                updateState = UpdateUiState.Idle
+                                installOrRequestPermission(apk)
+                            } catch (error: Exception) {
+                                updateState = UpdateUiState.Failed(
+                                    update,
+                                    error.message ?: "Không thể hoàn tất cập nhật."
+                                )
+                            }
+                        }
+                    },
+                    onRetry = { update ->
+                        scope.launch {
+                            updateState = UpdateUiState.Downloading(update)
+                            try {
+                                val apk = updateManager.downloadAndPrepare(update)
+                                updateState = UpdateUiState.Idle
+                                installOrRequestPermission(apk)
+                            } catch (error: Exception) {
+                                updateState = UpdateUiState.Failed(
+                                    update,
+                                    error.message ?: "Không thể hoàn tất cập nhật."
+                                )
+                            }
+                        }
+                    }
+                )
             }
         }
+    }
+
+    private fun installOrRequestPermission(apk: File) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            pendingInstallFile = apk
+            val intent = Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:$packageName")
+            )
+            unknownSourcesLauncher.launch(intent)
+        } else {
+            installApk(apk)
+        }
+    }
+
+    private fun installApk(apk: File) {
+        val uri = FileProvider.getUriForFile(
+            this,
+            "$packageName.fileprovider",
+            apk
+        )
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
     }
 }
