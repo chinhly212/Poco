@@ -7,6 +7,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import org.json.JSONArray
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -22,6 +23,8 @@ data class AiServerHealth(
     val aiReady: Boolean,
     val configuredProviders: List<String>
 )
+
+data class AiChatTurn(val role: String, val content: String)
 
 data class AiVideoChatResult(
     val type: String,
@@ -101,8 +104,24 @@ class AiVideoServerClient(
         }
     }
 
-    suspend fun sendChat(message: String, apiKeys: Map<String, String> = emptyMap()): AiVideoChatResult = withContext(Dispatchers.IO) {
-        val json = JSONObject().put("message", message)
+    suspend fun sendChat(
+        message: String,
+        apiKeys: Map<String, String> = emptyMap(),
+        history: List<AiChatTurn> = emptyList()
+    ): AiVideoChatResult = withContext(Dispatchers.IO) {
+        val historyJson = JSONArray()
+        history.takeLast(12).forEach { turn ->
+            if (turn.role in setOf("user", "assistant") && turn.content.isNotBlank()) {
+                historyJson.put(
+                    JSONObject()
+                        .put("role", turn.role)
+                        .put("content", turn.content.take(2000))
+                )
+            }
+        }
+        val json = JSONObject()
+            .put("message", message)
+            .put("history", historyJson)
         val builder = Request.Builder()
             .url("${baseUrl.trimEnd('/')}/chat")
             .post(json.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
