@@ -141,25 +141,25 @@ class PipelineWorker(
                     if (!optimized.exists() || optimized.length() <= 0L) {
                         throw IllegalStateException("Không tìm thấy video đã tối ưu để nhận diện lời nói.")
                     }
-                    val groqKey = app.prefs.getSecret("ai_api_groq")
+                    val geminiKey = app.prefs.getSecret("ai_api_gemini")
                     val metadataText = listOfNotNull(
                         video.title?.takeIf { it.isNotBlank() },
                         video.descriptionZh?.takeIf { it.isNotBlank() }
                     ).joinToString("\n")
 
-                    val transcript = if (!groqKey.isNullOrBlank()) {
-                        processor.transcribeChinese(optimized, groqKey)
+                    val transcript = if (!geminiKey.isNullOrBlank()) {
+                        processor.transcribeChinese(optimized, geminiKey)
                     } else {
                         metadataText
                     }
                     if (transcript.isBlank()) {
-                        throw IllegalStateException("Chưa có Groq API để nhận diện lời nói và tài khoản nguồn cũng không có tiêu đề/mô tả. Hãy kết nối Groq trong Cài đặt → API.")
+                        throw IllegalStateException("Chưa có Gemini API để nhận diện lời nói và tài khoản nguồn cũng không có tiêu đề/mô tả. Hãy kết nối Gemini trong Cài đặt → API.")
                     }
                     File(workDir, "transcript-zh.txt").writeText(transcript, Charsets.UTF_8)
-                    val statusMessage = if (groqKey.isNullOrBlank()) {
-                        "Chưa cấu hình Groq: dùng tiêu đề/mô tả nguồn thay cho lời thoại."
+                    val statusMessage = if (geminiKey.isNullOrBlank()) {
+                        "Chưa cấu hình Gemini: dùng tiêu đề/mô tả nguồn thay cho lời thoại."
                     } else {
-                        "Đã nhận diện lời nói bằng Groq Whisper."
+                        "Đã nhận diện lời nói bằng Gemini."
                     }
                     next(PipelineStage.TRANSLATE, statusMessage)
                 }
@@ -179,7 +179,7 @@ class PipelineWorker(
                         throw IllegalStateException("Không có lời thoại hoặc nội dung nguồn để dịch sang tiếng Việt.")
                     }
 
-                    val keys = listOf("gemini", "openrouter", "groq").mapNotNull { provider ->
+                    val keys = listOf("gemini", "openrouter", "deepseek").mapNotNull { provider ->
                         app.prefs.getSecret("ai_api_$provider")
                             ?.takeIf { it.isNotBlank() }
                             ?.let { provider to it }
