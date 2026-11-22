@@ -140,10 +140,19 @@ class AiVideoServerClient(
         title: String?
     ): AiVideoDownloadResult = withContext(Dispatchers.IO) {
         destination.parentFile?.mkdirs()
-        val request = Request.Builder().url(videoUrl).get()
+        val isKuaishou = provider?.contains("Kuaishou", ignoreCase = true) == true
+        val requestBuilder = Request.Builder().url(videoUrl).get()
             .header("Accept", "video/*,application/octet-stream;q=0.9,*/*;q=0.8")
-            .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
-            .build()
+            .header(
+                "User-Agent",
+                if (isKuaishou) {
+                    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+                } else {
+                    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
+                }
+            )
+        if (isKuaishou) requestBuilder.header("Referer", "https://www.kuaishou.com/")
+        val request = requestBuilder.build()
         val bytes = client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("Không tải được file video: HTTP ${response.code}")
             val body = response.body ?: throw IOException("Máy chủ video trả nội dung rỗng.")
