@@ -49,6 +49,19 @@ fun SystemScreen(
     }
 
     ScreenColumn {
+        GlassCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    GText("TIẾN TRÌNH QUÉT KÊNH", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft, modifier = Modifier.weight(1f))
+                    GText("${scanProgress.progress}%", 12.sp, weight = FontWeight.Bold, color = GlassColors.Blue)
+                }
+                LinearProgressIndicator(
+                    progress = scanProgress.progress / 100f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                GText(scanProgress.message, 12.sp, color = GlassColors.InkSoft)
+            }
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GlassButton("Quét ngay", onClick = onScanNow, primary = true, modifier = Modifier.weight(1f))
             GlassButton("Tiếp tục tất cả", onClick = {
