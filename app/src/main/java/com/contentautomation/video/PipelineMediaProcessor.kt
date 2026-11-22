@@ -24,8 +24,8 @@ import kotlin.coroutines.resume
 
 /**
  * Real translation, Vietnamese speech synthesis and video/audio muxing for MuChi.
- * Chinese dialogue is transcribed with Groq Whisper when a Groq key is configured.
- * If Groq is not configured, the pipeline can use source title/description instead.
+ * Chinese dialogue is transcribed with Gemini using the saved Gemini API key.
+ * Translation is performed directly by DeepSeek using its saved API key.
  */
 class PipelineMediaProcessor(private val context: Context) {
     private val api = AiVideoServerClient()
@@ -37,7 +37,7 @@ class PipelineMediaProcessor(private val context: Context) {
         .build()
 
     /**
-     * Extracts a small mono audio track and transcribes Chinese speech with Groq Whisper.
+     * Extracts a small mono audio track and transcribes Chinese speech with Gemini.
      * The API key is passed per request and is never written to logs or disk.
      */
     suspend fun transcribeChinese(video: File, geminiApiKey: String): String =
