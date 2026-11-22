@@ -25,6 +25,16 @@ class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter
     override fun videoUrl(videoId: String): String =
         "https://www.douyin.com/video/$videoId"
 
+    override suspend fun getLatestVideos(
+        accountIdentifier: String,
+        cookieHeader: String?
+    ): List<SourceVideoItem> {
+        if (!accountIdentifier.startsWith("MS4wLjAB")) {
+            throw SourceUnavailableException("Mã hồ sơ Douyin chưa được xác minh. Hãy xóa kênh và thêm lại bằng link trang cá nhân.")
+        }
+        return super.getLatestVideos(accountIdentifier, cookieHeader)
+    }
+
     override suspend fun verifyProfile(
         identifier: String,
         cookieHeader: String
@@ -53,6 +63,9 @@ class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter
             val host = finalUri.host.orEmpty().lowercase()
             if (!(host == "douyin.com" || host.endsWith(".douyin.com") || host == "iesdouyin.com" || host.endsWith(".iesdouyin.com"))) {
                 throw SourceUnavailableException("Liên kết không dẫn tới trang cá nhân Douyin.")
+            }
+            if (!finalUri.pathSegments.contains("user")) {
+                throw SourceUnavailableException("Liên kết bạn dán không phải trang cá nhân Douyin. Hãy sao chép link hồ sơ của người dùng.")
             }
 
             fun stringField(vararg keys: String): String? {
