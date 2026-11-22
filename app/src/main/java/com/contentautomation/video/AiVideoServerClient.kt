@@ -61,7 +61,7 @@ class AiVideoServerClient(
                 } else {
                     if (json.optBoolean("gemini_configured")) add("Gemini")
                     if (json.optBoolean("openrouter_configured")) add("OpenRouter")
-                    if (json.optBoolean("groq_configured")) add("Groq")
+                    if (json.optBoolean("deepseek_configured")) add("DeepSeek")
                 }
             }
             AiServerHealth(
@@ -107,7 +107,7 @@ class AiVideoServerClient(
             .post(json.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
         apiKeys["gemini"]?.takeIf { it.isNotBlank() }?.let { builder.header("X-Gemini-Api-Key", it) }
         apiKeys["openrouter"]?.takeIf { it.isNotBlank() }?.let { builder.header("X-OpenRouter-Api-Key", it) }
-        apiKeys["groq"]?.takeIf { it.isNotBlank() }?.let { builder.header("X-Groq-Api-Key", it) }
+        apiKeys["deepseek"]?.takeIf { it.isNotBlank() }?.let { builder.header("X-DeepSeek-Api-Key", it) }
         val request = builder.build()
         client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
