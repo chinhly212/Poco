@@ -462,10 +462,6 @@ private fun AddAccountDialog(
     }
     var platformMenuExpanded by remember { mutableStateOf(false) }
 
-    var accountName by remember {
-        mutableStateOf("")
-    }
-
     var identifier by remember {
         mutableStateOf("")
     }
@@ -509,23 +505,12 @@ private fun AddAccountDialog(
                 }
 
                 OutlinedTextField(
-                    value = accountName,
-                    onValueChange = {
-                        accountName = it
-                    },
-                    label = {
-                        Text("Tên tài khoản")
-                    },
-                    singleLine = true
-                )
-
-                OutlinedTextField(
                     value = identifier,
                     onValueChange = {
                         identifier = it
                     },
                     label = {
-                        Text("ID hoặc đường dẫn")
+                        Text("Link trang cá nhân")
                     },
                     singleLine = true
                 )
@@ -540,7 +525,7 @@ private fun AddAccountDialog(
                 onClick = {
                     onAdd(
                         platform.trim(),
-                        accountName.trim(),
+                        "",
                         identifier.trim()
                     )
                 }
