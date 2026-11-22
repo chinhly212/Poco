@@ -121,7 +121,8 @@ class AiVideoServerClient(
                 videoUrl = data?.optString("video_url")?.takeIf { it.isNotBlank() },
                 provider = data?.optString("provider")?.takeIf { it.isNotBlank() },
                 title = data?.optString("title")?.takeIf { it.isNotBlank() },
-                providerErrors = payload.optJSONArray("errors")?.let { errors ->
+                providerErrors = (payload.optJSONArray("errors")
+                    ?: payload.optJSONArray("provider_errors"))?.let { errors ->
                     buildList {
                         for (index in 0 until errors.length()) {
                             errors.optString(index).takeIf { it.isNotBlank() }?.let(::add)
@@ -174,8 +175,23 @@ class AiVideoServerClient(
             val payload = client.newCall(resolveRequest).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    val detail = runCatching { JSONObject(body).optString("message") }.getOrNull()
-                    throw IOException("AI Video Server HTTP ${response.code}: ${detail ?: body.take(300)}")
+                    val errorPayload = runCatching { JSONObject(body) }.getOrNull()
+                    val message = errorPayload?.optString("message")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: errorPayload?.optString("detail")?.takeIf { it.isNotBlank() }
+                    val providerErrors = (errorPayload?.optJSONArray("provider_errors")
+                        ?: errorPayload?.optJSONArray("errors"))?.let { errors ->
+                        buildList {
+                            for (index in 0 until errors.length()) {
+                                errors.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                            }
+                        }
+                    }.orEmpty()
+                    val detail = buildList {
+                        message?.let(::add)
+                        addAll(providerErrors)
+                    }.joinToString("\n").ifBlank { body.take(500) }
+                    throw IOException("AI Video Server HTTP ${response.code}: ${detail}")
                 }
                 JSONObject(body)
             }
