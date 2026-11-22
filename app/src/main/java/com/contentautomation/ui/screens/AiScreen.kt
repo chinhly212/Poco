@@ -162,10 +162,10 @@ fun AiScreen(vm: MainViewModel) {
                 onClick = {
                     val prompt = input.trim()
                     if (prompt.isNotEmpty()) {
-                        appendLine(AiChatLine(prompt, true))
                         input = ""
                         busy = true
                         scope.launch {
+                            appendLine(AiChatLine(prompt, true))
                             val sourceUrl = Regex("https?://[^\\s<>]+")
                                 .find(prompt)?.value?.trimEnd('.', ',', ')', ']', '}')
                             try {
