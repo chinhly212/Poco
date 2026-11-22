@@ -37,6 +37,7 @@ import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.AiChatMessage
 import com.contentautomation.ui.MainViewModel
 import com.contentautomation.video.AiVideoServerClient
+import com.contentautomation.video.AiChatTurn
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import com.contentautomation.video.MediaStoreSaver
@@ -179,7 +180,12 @@ fun AiScreen(vm: MainViewModel) {
                             val sourceUrl = Regex("https?://[^\\s<>]+")
                                 .find(prompt)?.value?.trimEnd('.', ',', ')', ']', '}')
                             try {
-                                val response = runCatching { server.sendChat(prompt, vm.getSavedApiKeys()) }
+                                val chatHistory = lines.dropLast(1).takeLast(12).map {
+                                    AiChatTurn(if (it.fromUser) "user" else "assistant", it.text)
+                                }
+                                val response = runCatching {
+                                    server.sendChat(prompt, vm.getSavedApiKeys(), chatHistory)
+                                }
                                 val serverReply = response.getOrNull()
                                 val resolvedUrl = serverReply?.videoUrl
                                     ?.takeIf { serverReply.type == "video" && it.isNotBlank() }
