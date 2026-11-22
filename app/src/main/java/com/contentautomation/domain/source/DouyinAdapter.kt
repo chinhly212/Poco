@@ -7,7 +7,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
-class DouyinAdapter : YtDlpProfileAdapter() {
+class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter(cookieDirectory) {
 
     private val profileClient by lazy {
         OkHttpClient.Builder()
