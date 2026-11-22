@@ -22,6 +22,52 @@ class KuaishouAdapter : YtDlpProfileAdapter() {
     override fun videoUrl(videoId: String): String =
         "https://www.kuaishou.com/short-video/$videoId"
 
+    override suspend fun verifyProfile(
+        identifier: String,
+        cookieHeader: String
+    ): SourceProfileInfo = withContext(Dispatchers.IO) {
+        require(identifier.isNotBlank()) { "ID tài khoản Kuaishou không được để trống." }
+        require(cookieHeader.isNotBlank()) { "Chưa có phiên đăng nhập Kuaishou. Hãy đăng nhập lại." }
+        val payload = JSONObject()
+            .put("url", profileUrl(identifier))
+            .put("cookie", cookieHeader)
+            .put("max_pages", 1)
+        val request = Request.Builder()
+            .url("$SERVER_BASE/kuaishou/profile/videos")
+            .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .header("Accept", "application/json")
+            .build()
+        try {
+            serverClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                val root = runCatching { JSONObject(body) }.getOrNull()
+                if (!response.isSuccessful) {
+                    val detail = root?.optString("detail")?.takeIf { it.isNotBlank() }
+                        ?: "Máy chủ Kuaishou trả HTTP ${response.code} khi xác minh hồ sơ."
+                    throw SourceUnavailableException(detail)
+                }
+                val profile = root?.optJSONObject("profile")
+                    ?: throw SourceUnavailableException("Máy chủ không trả dữ liệu hồ sơ Kuaishou.")
+                val displayName = profile.optString("display_name").takeIf { it.isNotBlank() && it != "null" }
+                    ?: throw SourceUnavailableException("Kuaishou không trả tên hồ sơ. Có thể ID sai, phiên đăng nhập hết hạn hoặc hồ sơ không có video công khai.")
+                SourceProfileInfo(
+                    displayName = displayName,
+                    identifier = profile.optString("user_id").takeIf { it.isNotBlank() && it != "null" } ?: identifier,
+                    description = profile.optString("description").takeIf { it.isNotBlank() && it != "null" },
+                    avatarUrl = profile.optString("avatar_url").takeIf { it.startsWith("http") },
+                    videoCount = root.optInt("video_count").takeIf { it >= 0 },
+                    followerCount = profile.optLong("follower_count").takeIf { it > 0L }
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SourceUnavailableException) {
+            throw e
+        } catch (e: Exception) {
+            throw SourceUnavailableException("Không xác minh được hồ sơ Kuaishou qua máy chủ: ${e.message ?: "lỗi kết nối"}", e)
+        }
+    }
+
     private val serverClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
