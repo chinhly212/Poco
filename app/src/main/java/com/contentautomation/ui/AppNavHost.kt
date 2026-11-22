@@ -458,7 +458,7 @@ private fun AddAccountDialog(
 ) {
 
     var platform by remember {
-        mutableStateOf("Douyin")
+        mutableStateOf("")
     }
     var platformMenuExpanded by remember { mutableStateOf(false) }
 
@@ -488,7 +488,7 @@ private fun AddAccountDialog(
                         value = platform,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Nền tảng") },
+                        label = { Text("Chọn nền tảng") },
                         modifier = Modifier.menuAnchor(),
                         singleLine = true
                     )
