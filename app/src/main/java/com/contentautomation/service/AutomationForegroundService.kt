@@ -9,14 +9,18 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 
 import androidx.core.app.NotificationCompat
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 
 import com.contentautomation.ContentAutomationApp
 import com.contentautomation.MainActivity
+import com.contentautomation.data.db.entity.PipelineStatus
+import com.contentautomation.work.PipelineWorker
 import com.contentautomation.work.ScanWorker
 
 import kotlinx.coroutines.CoroutineScope
@@ -61,15 +65,18 @@ class AutomationForegroundService : Service() {
                 val app =
                     applicationContext as ContentAutomationApp
 
+                // Khôi phục các pipeline đang chờ sau khi Android dừng tiến trình.
+                // Chỉ khôi phục PENDING; PAUSED là trạng thái người dùng chủ động
+                // tạm dừng (ví dụ đang chờ chọn nhạc TikTok) nên tuyệt đối không tự chạy.
+                restorePendingPipelines(app)
+
                 while (isActive) {
 
                     try {
-                        // Tạo yêu cầu quét
                         val request =
                             OneTimeWorkRequestBuilder<ScanWorker>()
                                 .build()
 
-                        // Không tạo nhiều công việc quét trùng nhau
                         WorkManager.getInstance(applicationContext)
                             .enqueueUniqueWork(
                                 SCAN_WORK_NAME,
@@ -77,18 +84,16 @@ class AutomationForegroundService : Service() {
                                 request
                             )
 
-                        // Đọc chu kỳ quét từ DataStore
                         val intervalSec =
                             app.prefs.scanIntervalSeconds.first()
 
-                        // Tối thiểu 60 giây
                         val safeInterval =
                             intervalSec.coerceAtLeast(60)
 
                         delay(safeInterval * 1000L)
 
                     } catch (e: Exception) {
-
+                        Log.e(TAG, "Lỗi trong chu kỳ quét tự động", e)
                         delay(60_000L)
                     }
                 }
@@ -96,6 +101,43 @@ class AutomationForegroundService : Service() {
         }
 
         return START_STICKY
+    }
+
+    private suspend fun restorePendingPipelines(app: ContentAutomationApp) {
+        try {
+            val pendingJobs = app.database.pipelineJobDao()
+                .observeAll()
+                .first()
+                .filter { it.status == PipelineStatus.PENDING }
+
+            val workManager = WorkManager.getInstance(applicationContext)
+            var restored = 0
+
+            for (job in pendingJobs) {
+                val uniqueName = "pipeline_${job.id}"
+                val existingWork = workManager
+                    .getWorkInfosForUniqueWork(uniqueName)
+                    .get()
+
+                val alreadyScheduled = existingWork.any { info ->
+                    info.state == WorkInfo.State.ENQUEUED ||
+                        info.state == WorkInfo.State.RUNNING ||
+                        info.state == WorkInfo.State.BLOCKED
+                }
+
+                if (!alreadyScheduled) {
+                    PipelineWorker.enqueue(applicationContext, job.id)
+                    restored++
+                }
+            }
+
+            Log.i(
+                TAG,
+                "Khôi phục pipeline: ${restored}/${pendingJobs.size} công việc đang chờ; không tự chạy công việc PAUSED."
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Không thể khôi phục pipeline đang chờ", e)
+        }
     }
 
     override fun onDestroy() {
@@ -143,6 +185,8 @@ class AutomationForegroundService : Service() {
     }
 
     companion object {
+
+        private const val TAG = "AutomationService"
 
         const val CHANNEL_ID = "automation_channel"
         const val NOTIF_ID = 0x101
