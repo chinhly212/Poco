@@ -78,17 +78,11 @@ fun PlatformWebLoginDialog(
                         ?.map { it.trim() }
                         .orEmpty()
                 }.filter { it.contains("=") }
-                val authCookieNames = if (normalized == "KUAISHOU") {
-                    setOf("kuaishou.server.web_st", "kuaishou.server.web_ph", "userId")
-                } else {
-                    setOf("sessionid", "sessionid_ss", "sid_tt")
-                }
-                val hasAuthCookie = cookieParts.any {
-                    it.substringBefore("=").trim() in authCookieNames
-                }
-                val cookies = if (hasAuthCookie) cookieParts
+                // Cookie names vary by Kuaishou login flow and region. Do not
+                // reject a valid session because it lacks a hard-coded cookie name.
+                val cookies = cookieParts
                     .distinctBy { it.substringBefore("=") }
-                    .joinToString("; ") else ""
+                    .joinToString("; ")
                 onSaveSession(cookies)
             }) {
                 Text("Đã đăng nhập – lưu phiên")
