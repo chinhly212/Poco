@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.os.Build
 import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -37,15 +38,34 @@ class MediaStoreSaver(private val context: Context) {
                 put(MediaStore.Video.Media.IS_PENDING, 1)
             }
 
-            val uri = try {
-                resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
-            } catch (error: Exception) {
-                throw IOException(
-                    "MediaStore không tạo được video trong thư mục Movies: ${error.javaClass.simpleName}: ${error.message ?: "không có thông tin chi tiết"}",
-                    error
-                )
-            } ?: throw IOException(
-                "MediaStore trả về URI rỗng khi tạo video trong thư mục Movies. Không phải thông báo xác nhận thiếu dung lượng."
+            // Try the primary external volume first, then the legacy video
+            // collection, and finally the generic Files collection. Some OEM
+            // MediaStore providers expose only one of these insert endpoints.
+            val insertTargets = mutableListOf<Pair<Uri, ContentValues>>()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                insertTargets += MediaStore.Video.Media.getContentUri(
+                    MediaStore.VOLUME_EXTERNAL_PRIMARY
+                ) to ContentValues(values)
+            }
+            insertTargets += MediaStore.Video.Media.EXTERNAL_CONTENT_URI to ContentValues(values)
+            val filesValues = ContentValues(values).apply {
+                put(MediaStore.Files.FileColumns.MEDIA_TYPE, MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO)
+            }
+            insertTargets += MediaStore.Files.getContentUri("external") to filesValues
+
+            val insertErrors = mutableListOf<String>()
+            var createdUri: Uri? = null
+            for ((collectionUri, insertValues) in insertTargets) {
+                try {
+                    createdUri = resolver.insert(collectionUri, insertValues)
+                    if (createdUri != null) break
+                    insertErrors += "$collectionUri: MediaStore trả URI rỗng"
+                } catch (error: Exception) {
+                    insertErrors += "$collectionUri: ${error.javaClass.simpleName}: ${error.message ?: "không có thông tin"}"
+                }
+            }
+            val uri = createdUri ?: throw IOException(
+                "Android từ chối tạo video trong Movies qua tất cả bộ sưu tập MediaStore. Chi tiết: ${insertErrors.joinToString(" | ")}"
             )
 
             try {
