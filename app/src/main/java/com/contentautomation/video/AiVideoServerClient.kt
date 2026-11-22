@@ -152,14 +152,14 @@ class AiVideoServerClient(
         }
     }
 
-    suspend fun downloadResolvedVideo(
+    suspend fun downloadResolvedVideoToGallery(
         videoUrl: String,
-        destination: File,
+        saver: MediaStoreSaver,
+        displayName: String,
         provider: String?,
         title: String?,
         sourceUrl: String
     ): AiVideoDownloadResult = withContext(Dispatchers.IO) {
-        destination.parentFile?.mkdirs()
         val requestJson = JSONObject()
             .put("video_url", videoUrl)
             .put("source_url", sourceUrl)
@@ -170,29 +170,34 @@ class AiVideoServerClient(
             .header("Accept", "video/*,application/octet-stream")
             .build()
 
-        val bytes = client.newCall(request).execute().use { response ->
+        client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 val bodyText = response.body?.string().orEmpty()
                 val detail = runCatching { JSONObject(bodyText).optString("detail") }
                     .getOrNull()?.takeIf { it.isNotBlank() }
                     ?: bodyText.take(300).ifBlank { "HTTP ${response.code}" }
-                throw IOException("Máy chủ proxy không tải được file video: HTTP ${response.code}: $detail")
+                throw IOException("Không thể nhận video từ nguồn tải: ${detail.take(240)}")
             }
-            val body = response.body ?: throw IOException("Máy chủ proxy trả nội dung rỗng.")
+            val body = response.body ?: throw IOException("Nguồn video trả dữ liệu rỗng.")
             val type = body.contentType()?.toString()?.lowercase().orEmpty()
             if (type.contains("text/html") || type.contains("application/json")) {
-                throw IOException("Máy chủ proxy trả nội dung không phải video ($type).")
+                throw IOException("Nguồn tải không trả dữ liệu video.")
             }
-            destination.outputStream().buffered().use { output ->
-                body.byteStream().use { input -> input.copyTo(output) }
-            }
+            val expectedBytes = body.contentLength().takeIf { it > 0L }
+            val savedUri = saver.saveVideoFromStream(
+                body.byteStream(),
+                displayName,
+                expectedBytes
+            )
+            val savedBytes = expectedBytes ?: -1L
+            AiVideoDownloadResult(
+                provider = provider ?: "MuChi",
+                title = title,
+                bytesWritten = savedBytes
+            )
         }
-        if (bytes <= 0L || !destination.exists() || destination.length() <= 0L) {
-            destination.delete()
-            throw IOException("File video tải qua máy chủ proxy bị rỗng.")
-        }
-        AiVideoDownloadResult(provider ?: "AI Video Server", title, bytes)
     }
+
 
     suspend fun downloadVideo(sourceUrl: String, destination: File): AiVideoDownloadResult =
         withContext(Dispatchers.IO) {
