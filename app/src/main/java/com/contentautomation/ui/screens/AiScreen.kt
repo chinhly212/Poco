@@ -359,7 +359,6 @@ private fun isSupportedVideoLink(rawUrl: String): Boolean {
         } else {
             Regex("""/@[^/]+/video/[^/?]+|/t/[^/]+|/v/[^/]+""").containsMatchIn(path)
         }
-        hostIs("tiktokv.com") -> path.isNotBlank() && path != "/"
         hostIs("douyin.com") || hostIs("iesdouyin.com") -> if (host == "v.douyin.com") {
             path.isNotBlank() && path != "/"
         } else {
