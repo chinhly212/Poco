@@ -24,36 +24,63 @@ abstract class YtDlpProfileAdapter : SourceAdapter {
             require(identifier.isNotBlank()) { "ID tài khoản không được để trống." }
             require(cookieHeader.isNotBlank()) { "Chưa đăng nhập nền tảng. Hãy đăng nhập trước." }
             try {
-                val output = YoutubeDL.getInstance().execute(
-                    YoutubeDLRequest(profileUrl(identifier)).apply {
-                        addSession(cookieHeader)
-                        addOption("--flat-playlist")
-                        addOption("--dump-single-json")
-                        addOption("--playlist-end", "1")
-                        addOption("--skip-download")
-                        addOption("--ignore-errors")
-                        addOption("--no-warnings")
+                // Do not send profile URLs to yt-dlp: many Douyin profile identifiers
+                // are web handles rather than extractor-supported sec_uid values.
+                // Read the official profile page directly and inspect its embedded state.
+                val url = profileUrl(identifier)
+                val request = okhttp3.Request.Builder()
+                    .url(url)
+                    .header("Cookie", cookieHeader)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36")
+                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                    .build()
+                val html = okhttp3.OkHttpClient.Builder()
+                    .followRedirects(true)
+                    .followSslRedirects(true)
+                    .build()
+                    .newCall(request)
+                    .execute()
+                    .use { response ->
+                        if (!response.isSuccessful) {
+                            throw IllegalStateException("Trang hồ sơ trả về HTTP ${response.code}.")
+                        }
+                        response.body?.string().orEmpty()
                     }
-                ).out
-                val root = JSONObject(output.trim())
-                val entries = root.optJSONArray("entries")
-                val title = firstText(root, "uploader", "channel", "creator", "title")
-                val resolvedId = firstText(root, "channel_id", "uploader_id", "id") ?: identifier
-                val avatar = firstText(root, "avatar", "channel_thumbnail", "uploader_thumbnail")
-                val description = firstText(root, "description", "channel_description", "bio")
-                val count = root.optInt("playlist_count", -1).takeIf { it >= 0 }
-                    ?: root.optInt("video_count", -1).takeIf { it >= 0 }
-                    ?: entries?.length()
-                val followers = root.optLong("follower_count", -1L).takeIf { it >= 0L }
-                    ?: root.optLong("followers", -1L).takeIf { it >= 0L }
-                    ?: root.optLong("fans", -1L).takeIf { it >= 0L }
-                val hasEvidence = !title.isNullOrBlank() ||
-                    !firstText(root, "channel_id", "uploader_id").isNullOrBlank() ||
-                    (entries != null && entries.length() > 0)
-                if (!hasEvidence) {
-                    throw IllegalStateException("Trang không trả thông tin hồ sơ. ID có thể sai, phiên đăng nhập hết hạn hoặc nền tảng yêu cầu xác minh.")
+                if (html.isBlank()) throw IllegalStateException("Trang hồ sơ trả về nội dung rỗng.")
+                fun findValue(vararg keys: String): String? {
+                    for (key in keys) {
+                        val escaped = Regex.escape(key)
+                        val match = Regex("[\\\"]?$escaped[\\\"]?\\s*:\\s*[\\\"]([^\\\"]{1,500})[\\\"]", RegexOption.IGNORE_CASE)
+                            .find(html) ?: continue
+                        val value = match.groupValues[1]
+                            .replace("\\\\u002F", "/")
+                            .replace("\\\\u0026", "&")
+                            .trim()
+                        if (value.isNotBlank() && value != "null") return value
+                    }
+                    return null
                 }
-                SourceProfileInfo(title ?: identifier, resolvedId, description, avatar, count, followers)
+                val nickname = findValue("nickname", "user_name", "name", "author_name")
+                val resolvedId = findValue("sec_uid", "secUid", "user_id", "userId", "uid")
+                val avatar = findValue("avatar_larger", "avatar_url", "avatar")
+                val description = findValue("signature", "desc", "description")
+                val hasProfileEvidence = !resolvedId.isNullOrBlank() || !nickname.isNullOrBlank()
+                if (!hasProfileEvidence) {
+                    val loginRequired = html.contains("login", ignoreCase = true) ||
+                        html.contains("passport", ignoreCase = true)
+                    throw IllegalStateException(
+                        if (loginRequired) "Trang chưa cung cấp dữ liệu hồ sơ. Phiên đăng nhập có thể chưa được lưu hoặc nền tảng yêu cầu xác minh."
+                        else "Không tìm thấy dữ liệu hồ sơ trong trang. Hãy nhập ID hồ sơ chính xác, không nhập tên hiển thị."
+                    )
+                }
+                SourceProfileInfo(
+                    displayName = nickname ?: identifier,
+                    identifier = resolvedId ?: identifier,
+                    description = description,
+                    avatarUrl = avatar,
+                    videoCount = findValue("aweme_count", "video_count")?.toIntOrNull(),
+                    followerCount = findValue("follower_count", "followerCount", "fans")?.toLongOrNull()
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
