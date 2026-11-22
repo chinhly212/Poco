@@ -237,7 +237,7 @@ fun AiScreen(vm: MainViewModel) {
                                             server.downloadResolvedVideoToGallery(
                                                 resolvedUrl,
                                                 MediaStoreSaver(context),
-                                                "MuChi_\${System.currentTimeMillis()}.mp4",
+                                                "MuChi_${System.currentTimeMillis()}.mp4",
                                                 serverReply?.provider,
                                                 serverReply?.title,
                                                 sourceUrl
@@ -250,7 +250,7 @@ fun AiScreen(vm: MainViewModel) {
                                     }
 
                                     if (!saved) {
-                                        val fallbackDir = File(context.cacheDir, "muchiai_fallback_\${System.currentTimeMillis()}")
+                                        val fallbackDir = File(context.cacheDir, "muchiai_fallback_${System.currentTimeMillis()}")
                                         try {
                                             val localFile = withContext(Dispatchers.IO) {
                                                 fallbackDir.mkdirs()
@@ -276,7 +276,7 @@ fun AiScreen(vm: MainViewModel) {
                                                     ?: throw IllegalStateException("Bộ tải không tạo được video.")
                                             }
                                             MediaStoreSaver(context).saveVideoToGallery(
-                                                localFile, "MuChi_\${System.currentTimeMillis()}.mp4"
+                                                localFile, "MuChi_${System.currentTimeMillis()}.mp4"
                                             )
                                             appendLine(AiChatLine("Tôi đã tải và lưu video vào thư viện cho chủ nhân.", false))
                                             saved = true
