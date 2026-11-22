@@ -201,6 +201,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun reportAiIssue(title: String, diagnostic: String) {
+        val safeDiagnostic = diagnostic.take(2500).ifBlank { "Không có thông tin chi tiết." }
+        recordError(
+            ErrorKind.VideoUnavailable,
+            title,
+            safeDiagnostic,
+            "Đã hiểu"
+        )
+    }
+
     fun clearErrors() {
         _uiErrors.value = emptyList()
         viewModelScope.launch {
