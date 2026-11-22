@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import com.contentautomation.ContentAutomationApp
+import com.contentautomation.data.db.entity.AiChatMessage
 import com.contentautomation.ui.MainViewModel
 import com.contentautomation.video.AiVideoServerClient
 import com.yausername.youtubedl_android.YoutubeDL
@@ -50,13 +51,24 @@ fun AiScreen(vm: MainViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val server = remember { AiVideoServerClient() }
+    val app = context.applicationContext as ContentAutomationApp
+    val chatDao = remember { app.database.aiChatDao() }
     val lines = remember { mutableStateListOf<AiChatLine>() }
+
+    suspend fun appendLine(line: AiChatLine) {
+        chatDao.insert(AiChatMessage(message = line.text, fromUser = line.fromUser))
+        lines.add(line)
+    }
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var serverOnline by remember { mutableStateOf<Boolean?>(null) }
     var serverStatusLine by remember { mutableStateOf("Đang kết nối máy chủ…") }
 
     LaunchedEffect(Unit) {
+        val savedMessages = runCatching { chatDao.getAll() }.getOrElse { emptyList() }
+        lines.clear()
+        lines.addAll(savedMessages.map { AiChatLine(it.message, it.fromUser) })
+
         runCatching { server.getHealth() }
             .onSuccess { health ->
                 serverOnline = true
@@ -71,7 +83,7 @@ fun AiScreen(vm: MainViewModel) {
                 serverStatusLine = error.message ?: "Không kết nối được máy chủ"
             }
         if (lines.isEmpty()) {
-            lines.add(
+            appendLine(
                 AiChatLine(
                     "Xin chào! Tôi là trợ lý MuChi. Bạn có thể trò chuyện, hỏi AI hoặc gửi link video để tôi tự tìm nguồn tải và lưu vào điện thoại.",
                     false
@@ -150,7 +162,7 @@ fun AiScreen(vm: MainViewModel) {
                 onClick = {
                     val prompt = input.trim()
                     if (prompt.isNotEmpty()) {
-                        lines.add(AiChatLine(prompt, true))
+                        appendLine(AiChatLine(prompt, true))
                         input = ""
                         busy = true
                         scope.launch {
@@ -168,7 +180,7 @@ fun AiScreen(vm: MainViewModel) {
                                         ?: response.exceptionOrNull()?.message
                                         ?: "Máy chủ chưa trả đường dẫn video."
                                     if (resolvedUrl != null) {
-                                        lines.add(AiChatLine("Máy chủ đã tìm thấy video qua ${serverReply?.provider ?: "API"}. Đang tải…", false))
+                                        appendLine(AiChatLine("Máy chủ đã tìm thấy video qua ${serverReply?.provider ?: "API"}. Đang tải…", false))
                                         val temp = File(context.cacheDir, "muchiai_server_${System.currentTimeMillis()}.mp4")
                                         try {
                                             val downloaded = server.downloadResolvedVideo(
@@ -178,7 +190,7 @@ fun AiScreen(vm: MainViewModel) {
                                                 temp, "MuChi_${System.currentTimeMillis()}.mp4"
                                             )
                                             if (uri == null) throw IllegalStateException("Không lưu được video vào thư viện.")
-                                            lines.add(AiChatLine(
+                                            appendLine(AiChatLine(
                                                 "Đã tải và lưu video vào Movies/MuChi. Nguồn: ${downloaded.provider}; ${downloaded.bytesWritten / 1024} KB.",
                                                 false
                                             ))
@@ -191,7 +203,7 @@ fun AiScreen(vm: MainViewModel) {
                                     }
 
                                     if (!saved) {
-                                        lines.add(AiChatLine("API máy chủ chưa tải được. Đang thử bộ tải dự phòng trên điện thoại…", false))
+                                        appendLine(AiChatLine("API máy chủ chưa tải được. Đang thử bộ tải dự phòng trên điện thoại…", false))
                                         val fallbackDir = File(context.cacheDir, "muchiai_fallback_${System.currentTimeMillis()}")
                                         try {
                                             val localFile = withContext(Dispatchers.IO) {
@@ -221,12 +233,12 @@ fun AiScreen(vm: MainViewModel) {
                                                 localFile, "MuChi_${System.currentTimeMillis()}.mp4"
                                             )
                                             if (uri == null) throw IllegalStateException("Tải xong nhưng không lưu được vào thư viện.")
-                                            lines.add(AiChatLine(
+                                            appendLine(AiChatLine(
                                                 "Đã tải và lưu video vào Movies/MuChi bằng bộ tải dự phòng trên điện thoại.",
                                                 false
                                             ))
                                         } catch (localError: Exception) {
-                                            lines.add(AiChatLine(
+                                            appendLine(AiChatLine(
                                                 "Chưa tải được video. Lỗi máy chủ: $serverError. Lỗi bộ tải trên điện thoại: ${localError.message ?: "không xác định"}.",
                                                 false
                                             ))
@@ -237,10 +249,10 @@ fun AiScreen(vm: MainViewModel) {
                                 } else {
                                     val reply = serverReply?.message
                                         ?: "Không thể kết nối máy chủ AI: ${response.exceptionOrNull()?.message ?: "lỗi không xác định"}"
-                                    lines.add(AiChatLine(reply, false))
+                                    appendLine(AiChatLine(reply, false))
                                 }
                             } catch (error: Exception) {
-                                lines.add(AiChatLine("Không xử lý được yêu cầu: ${error.message ?: "Lỗi không xác định"}", false))
+                                appendLine(AiChatLine("Không xử lý được yêu cầu: ${error.message ?: "Lỗi không xác định"}", false))
                             } finally {
                                 busy = false
                             }
