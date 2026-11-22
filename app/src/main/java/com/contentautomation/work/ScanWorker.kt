@@ -197,7 +197,8 @@ class ScanWorker(
                     "discovered_videos" to discovered,
                     "queued_jobs" to queued,
                     "failed_accounts" to failed,
-                    "skipped_not_today" to skippedNotToday
+                    "skipped_not_today" to skippedNotToday,
+                    "summary" to summary
                 )
             )
         }
