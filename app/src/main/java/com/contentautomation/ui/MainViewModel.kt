@@ -5,6 +5,9 @@ import android.os.Environment
 import android.os.StatFs
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.Observer
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import androidx.lifecycle.viewModelScope
 import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.*
@@ -38,9 +41,53 @@ data class ApiConnectionStatus(
     val message: String = ""
 )
 
+data class ScanProgressUiState(
+    val active: Boolean = false,
+    val progress: Int = 0,
+    val message: String = "Chưa chạy quét kênh."
+)
+
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val application = app as ContentAutomationApp
+
+    private val _scanProgress = MutableStateFlow(ScanProgressUiState())
+    val scanProgress = _scanProgress.asStateFlow()
+
+    private val scanWorkObserver = Observer<List<WorkInfo>> { infos ->
+        val info = infos.firstOrNull()
+        if (info == null) {
+            _scanProgress.value = ScanProgressUiState()
+        } else {
+            val progress = info.progress.getInt("progress", 0).coerceIn(0, 100)
+            val output = info.outputData
+            val message = when (info.state) {
+                WorkInfo.State.RUNNING -> info.progress.getString("message") ?: "Đang quét các kênh..."
+                WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> "Đang chờ bắt đầu quét..."
+                WorkInfo.State.SUCCEEDED -> "Hoàn tất: ${output.getInt("scanned_accounts", 0)} kênh · ${output.getInt("discovered_videos", 0)} video mới · ${output.getInt("queued_jobs", 0)} công việc."
+                WorkInfo.State.FAILED -> "Lượt quét thất bại. Xem thông báo hệ thống để biết nguyên nhân."
+                WorkInfo.State.CANCELLED -> "Lượt quét đã bị hủy."
+            }
+            _scanProgress.value = ScanProgressUiState(
+                active = info.state == WorkInfo.State.RUNNING || info.state == WorkInfo.State.ENQUEUED || info.state == WorkInfo.State.BLOCKED,
+                progress = if (info.state == WorkInfo.State.SUCCEEDED) 100 else progress,
+                message = message
+            )
+        }
+    }
+
+    init {
+        WorkManager.getInstance(app)
+            .getWorkInfosForUniqueWorkLiveData(AutomationForegroundService.SCAN_WORK_NAME)
+            .observeForever(scanWorkObserver)
+    }
+
+    override fun onCleared() {
+        WorkManager.getInstance(application)
+            .getWorkInfosForUniqueWorkLiveData(AutomationForegroundService.SCAN_WORK_NAME)
+            .removeObserver(scanWorkObserver)
+        super.onCleared()
+    }
 
     private val driveClient = GoogleDriveClient(app)
     private val _driveState = MutableStateFlow(
