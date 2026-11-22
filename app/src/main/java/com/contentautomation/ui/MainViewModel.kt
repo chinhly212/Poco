@@ -221,7 +221,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _apiConnectionStates = MutableStateFlow<Map<String, ApiConnectionStatus>>(emptyMap())
     val apiConnectionStates = _apiConnectionStates.asStateFlow()
 
-    fun getSavedApiKeys(): Map<String, String> = listOf("gemini", "openrouter", "groq")
+    fun getSavedApiKeys(): Map<String, String> = listOf("gemini", "openrouter", "deepseek")
         .mapNotNull { provider ->
             application.prefs.getSecret("ai_api_$provider")?.takeIf { it.isNotBlank() }
                 ?.let { provider to it }
@@ -235,7 +235,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val label = when (normalized) {
             "gemini" -> "Google Gemini"
             "openrouter" -> "OpenRouter"
-            "groq" -> "Groq"
+            "deepseek" -> "DeepSeek"
             else -> normalized
         }
         viewModelScope.launch {
@@ -243,7 +243,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 it + (normalized to ApiConnectionStatus(checking = true, message = "Đang kiểm tra trực tiếp với nhà cung cấp…"))
             }
             try {
-                require(normalized in setOf("gemini", "openrouter", "groq")) {
+                require(normalized in setOf("gemini", "openrouter", "deepseek")) {
                     "Nhà cung cấp API chưa được hỗ trợ."
                 }
                 require(apiKey.isNotBlank()) { "API key không được để trống." }
