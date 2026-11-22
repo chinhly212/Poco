@@ -19,7 +19,7 @@ abstract class YtDlpProfileAdapter : SourceAdapter {
         if (!cookieHeader.isNullOrBlank()) addOption("--add-headers", "Cookie: $cookieHeader")
     }
 
-    suspend fun verifyProfile(identifier: String, cookieHeader: String): SourceProfileInfo =
+    open suspend fun verifyProfile(identifier: String, cookieHeader: String): SourceProfileInfo =
         withContext(Dispatchers.IO) {
             require(identifier.isNotBlank()) { "ID tài khoản không được để trống." }
             require(cookieHeader.isNotBlank()) { "Chưa đăng nhập nền tảng. Hãy đăng nhập trước." }
