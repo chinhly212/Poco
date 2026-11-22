@@ -16,7 +16,7 @@ import java.time.ZoneId
  * Kuaishou creator-feed scanning is performed by the user's AI Video Server.
  * The server uses the non-commercial MediaCrawler-derived signing flow.
  */
-class KuaishouAdapter : YtDlpProfileAdapter() {
+class KuaishouAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter(cookieDirectory) {
     override fun profileUrl(identifier: String): String =
         if (identifier.startsWith("http://") || identifier.startsWith("https://")) identifier
         else "https://www.kuaishou.com/profile/$identifier"
@@ -57,9 +57,9 @@ class KuaishouAdapter : YtDlpProfileAdapter() {
                     identifier = profile.optString("profile_id").takeIf { it.isNotBlank() && it != "null" } ?: identifier,
                     description = profile.optString("description").takeIf { it.isNotBlank() && it != "null" },
                     avatarUrl = profile.optString("avatar_url").takeIf { it.startsWith("http") },
-                    videoCount = profile.optInt("video_count").takeIf { it >= 0 } ?: root.optInt("video_count").takeIf { it >= 0 },
+                    videoCount = profile.optInt("video_count", -1).takeIf { it >= 0 } ?: root.optInt("video_count", -1).takeIf { it >= 0 },
                     followerCount = profile.optLong("follower_count").takeIf { it > 0L },
-                    followingCount = profile.optLong("following_count").takeIf { it >= 0L }
+                    followingCount = profile.optLong("following_count", -1L).takeIf { it >= 0L }
                 )
             }
         } catch (e: CancellationException) {
