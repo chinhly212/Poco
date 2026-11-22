@@ -73,7 +73,7 @@ class MediaStoreSaver(private val context: Context) {
                 "${candidate.nameWithoutExtension}_${System.currentTimeMillis()}.mp4"
             )
         }
-        try {
+        return try {
             val copied = FileOutputStream(outputFile).use { output ->
                 inputStream.use { source -> source.copyTo(output).also { output.flush() } }
             }
@@ -130,7 +130,7 @@ class MediaStoreSaver(private val context: Context) {
             throw IOException("Android không tạo được mục video trong thư viện. ${insertErrors.joinToString(" | ")}")
         }
 
-        try {
+        return try {
             val output = resolver.openOutputStream(uri, "w")
                 ?: throw IOException("Android không mở được luồng ghi vào thư viện.")
             val copied = output.use { destination ->
