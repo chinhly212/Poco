@@ -44,7 +44,7 @@ class AiVideoServerClient(
     private val baseUrl: String = DEFAULT_BASE_URL
 ) {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
+        .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(180, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .callTimeout(240, TimeUnit.SECONDS)
