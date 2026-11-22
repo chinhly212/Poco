@@ -133,7 +133,7 @@ fun SettingsScreen(
                                 onCheckedChange = { onSetAccountEnabled(account.id, it) }
                             )
                         }
-                        GText(account.accountIdentifier, 12.sp, color = GlassColors.InkSoft)
+                        GText("ID tài khoản: ${account.accountIdentifier}", 12.sp, color = GlassColors.InkSoft)
                         if (account.profileVerifiedAt != null) {
                             account.profileAvatarUrl?.takeIf { it.startsWith("https://") }?.let { avatar ->
                                 coil.compose.AsyncImage(
@@ -152,7 +152,7 @@ fun SettingsScreen(
                                 GText("Đang theo dõi: $it", 11.sp, color = GlassColors.Blue)
                             }
                             account.profileVideoCount?.let {
-                                GText("Số video: $it", 11.sp, color = GlassColors.Blue)
+                                GText("Tổng số video: $it", 11.sp, color = GlassColors.Blue)
                             }
                             GText("Đã xác minh hồ sơ", 10.sp, color = GlassColors.Green)
                         }
