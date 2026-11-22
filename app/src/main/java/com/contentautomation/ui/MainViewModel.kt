@@ -55,7 +55,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val scanProgress = _scanProgress.asStateFlow()
 
     private val scanWorkObserver = Observer<List<WorkInfo>> { infos ->
-        val info = infos.firstOrNull()
+        val info = infos.lastOrNull()
         if (info == null) {
             _scanProgress.value = ScanProgressUiState()
         } else {
