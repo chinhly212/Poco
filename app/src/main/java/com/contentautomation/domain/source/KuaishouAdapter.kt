@@ -9,6 +9,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * Kuaishou creator-feed scanning is performed by the user's AI Video Server.
@@ -52,11 +54,12 @@ class KuaishouAdapter : YtDlpProfileAdapter() {
                     ?: throw SourceUnavailableException("Kuaishou không trả tên hồ sơ. Có thể ID sai, phiên đăng nhập hết hạn hoặc hồ sơ không có video công khai.")
                 SourceProfileInfo(
                     displayName = displayName,
-                    identifier = profile.optString("user_id").takeIf { it.isNotBlank() && it != "null" } ?: identifier,
+                    identifier = profile.optString("profile_id").takeIf { it.isNotBlank() && it != "null" } ?: identifier,
                     description = profile.optString("description").takeIf { it.isNotBlank() && it != "null" },
                     avatarUrl = profile.optString("avatar_url").takeIf { it.startsWith("http") },
-                    videoCount = root.optInt("video_count").takeIf { it >= 0 },
-                    followerCount = profile.optLong("follower_count").takeIf { it > 0L }
+                    videoCount = profile.optInt("video_count").takeIf { it >= 0 } ?: root.optInt("video_count").takeIf { it >= 0 },
+                    followerCount = profile.optLong("follower_count").takeIf { it > 0L },
+                    followingCount = profile.optLong("following_count").takeIf { it >= 0L }
                 )
             }
         } catch (e: CancellationException) {
@@ -91,6 +94,7 @@ class KuaishouAdapter : YtDlpProfileAdapter() {
             .put("url", profile)
             .put("cookie", cookieHeader)
             .put("max_pages", 10)
+            .put("since_timestamp", LocalDate.now(ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
         val request = Request.Builder()
             .url("$SERVER_BASE/kuaishou/profile/videos")
             .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
