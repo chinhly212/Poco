@@ -18,6 +18,7 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import kotlin.coroutines.resume
 
@@ -39,9 +40,9 @@ class PipelineMediaProcessor(private val context: Context) {
      * Extracts a small mono audio track and transcribes Chinese speech with Groq Whisper.
      * The API key is passed per request and is never written to logs or disk.
      */
-    suspend fun transcribeChinese(video: File, groqApiKey: String): String =
+    suspend fun transcribeChinese(video: File, geminiApiKey: String): String =
         withContext(Dispatchers.IO) {
-            require(groqApiKey.isNotBlank()) { "Chưa có Groq API key để nhận diện lời nói." }
+            require(geminiApiKey.isNotBlank()) { "Chưa có Gemini API key để nhận diện lời nói." }
             require(video.exists() && video.length() > 0L) { "Không tìm thấy video để nhận diện lời nói." }
 
             val audio = File(video.parentFile, "source-audio.m4a")
@@ -55,32 +56,40 @@ class PipelineMediaProcessor(private val context: Context) {
                     !audio.exists() || audio.length() <= 0L) {
                     throw IllegalStateException("Không tách được âm thanh để nhận diện: ${(extractSession.failStackTrace ?: "").take(300)}")
                 }
-                if (audio.length() > 24L * 1024L * 1024L) {
-                    throw IllegalStateException("Âm thanh sau khi tách vẫn vượt 24 MB. Hãy dùng video ngắn hơn.")
+                if (audio.length() > 18L * 1024L * 1024L) {
+                    throw IllegalStateException("Âm thanh vượt giới hạn gửi trực tiếp Gemini. Hãy dùng video ngắn hơn.")
                 }
 
-                val multipart = MultipartBody.Builder()
-                    .setType(MultipartBody.FORM)
-                    .addFormDataPart("model", "whisper-large-v3-turbo")
-                    .addFormDataPart("language", "zh")
-                    .addFormDataPart("response_format", "json")
-                    .addFormDataPart("file", audio.name, audio.asRequestBody("audio/mp4".toMediaType()))
-                    .build()
+                val encodedAudio = android.util.Base64.encodeToString(audio.readBytes(), android.util.Base64.NO_WRAP)
+                val payload = JSONObject()
+                    .put("contents", org.json.JSONArray().put(
+                        JSONObject().put("parts", org.json.JSONArray()
+                            .put(JSONObject().put("text", "Nghe âm thanh và chép lại chính xác toàn bộ lời nói tiếng Trung bằng chữ giản thể. Không dịch, không tóm tắt, không thêm mô tả. Nếu có nhiều người nói, giữ nội dung theo thứ tự."))
+                            .put(JSONObject().put("inline_data", JSONObject()
+                                .put("mime_type", "audio/mp4")
+                                .put("data", encodedAudio)))
+                    ))
+                    .put("generationConfig", JSONObject().put("temperature", 0))
                 val request = Request.Builder()
-                    .url("https://api.groq.com/openai/v1/audio/transcriptions")
-                    .header("Authorization", "Bearer $groqApiKey")
-                    .post(multipart)
+                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent")
+                    .header("x-goog-api-key", geminiApiKey)
+                    .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                     .build()
 
                 transcriptionClient.newCall(request).execute().use { response ->
                     val body = response.body?.string().orEmpty()
                     if (!response.isSuccessful) {
-                        val detail = runCatching { JSONObject(body).optJSONObject("error")?.optString("message") }
-                            .getOrNull()?.takeIf { it.isNotBlank() }
-                        throw IllegalStateException("Groq Whisper HTTP ${response.code}: ${detail ?: body.take(300)}")
+                        val detail = runCatching {
+                            JSONObject(body).optJSONObject("error")?.optString("message")
+                        }.getOrNull()?.takeIf { it.isNotBlank() }
+                        throw IllegalStateException("Gemini nhận diện HTTP ${response.code}: ${detail ?: body.take(300)}")
                     }
-                    val transcript = JSONObject(body).optString("text").trim()
-                    require(transcript.isNotBlank()) { "Groq Whisper không nhận diện được lời nói trong video." }
+                    val candidates = JSONObject(body).optJSONArray("candidates")
+                    val parts = candidates?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
+                    val transcript = (0 until (parts?.length() ?: 0))
+                        .mapNotNull { parts?.optJSONObject(it)?.optString("text") }
+                        .joinToString("\n").trim()
+                    require(transcript.isNotBlank()) { "Gemini không nhận diện được lời nói trong video." }
                     transcript
                 }
             } finally {
@@ -91,29 +100,35 @@ class PipelineMediaProcessor(private val context: Context) {
     suspend fun translateToVietnamese(
         sourceText: String,
         apiKeys: Map<String, String>
-    ): String {
+    ): String = withContext(Dispatchers.IO) {
         val input = sourceText.trim().take(7000)
-        require(input.isNotBlank()) { "Video không có tiêu đề hoặc mô tả để dịch." }
-        require(apiKeys.values.any { it.isNotBlank() }) {
-            "Chưa có API AI đã lưu. Hãy vào Cài đặt → API, kết nối Gemini, OpenRouter hoặc Groq trước."
+        require(input.isNotBlank()) { "Nội dung nguồn đang trống." }
+        val deepSeekKey = apiKeys["deepseek"]?.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("Chưa có DeepSeek API key. Vào Cài đặt → API để kết nối DeepSeek.")
+        val requestBody = JSONObject()
+            .put("model", "deepseek-chat")
+            .put("temperature", 0.2)
+            .put("messages", org.json.JSONArray()
+                .put(JSONObject().put("role", "system").put("content",
+                    "Bạn là dịch giả Trung-Việt chuyên nghiệp. Dịch tự nhiên, đúng ngữ cảnh. Chỉ trả về bản dịch tiếng Việt, không giải thích. Giữ nguyên tên riêng và con số."))
+                .put(JSONObject().put("role", "user").put("content", input)))
+        val request = Request.Builder()
+            .url("https://api.deepseek.com/chat/completions")
+            .header("Authorization", "Bearer $deepSeekKey")
+            .post(requestBody.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        transcriptionClient.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                val detail = runCatching { JSONObject(body).optJSONObject("error")?.optString("message") }
+                    .getOrNull()?.takeIf { it.isNotBlank() }
+                throw IllegalStateException("DeepSeek dịch HTTP ${response.code}: ${detail ?: body.take(300)}")
+            }
+            val result = JSONObject(body).optJSONArray("choices")
+                ?.optJSONObject(0)?.optJSONObject("message")?.optString("content").orEmpty().trim()
+            require(result.isNotBlank()) { "DeepSeek không trả về bản dịch." }
+            result
         }
-
-        val prompt = """
-            Dịch nội dung tiếng Trung sau sang tiếng Việt tự nhiên, đúng nghĩa.
-            Chỉ trả về bản dịch tiếng Việt, không giải thích, không thêm lời dẫn.
-            Giữ nguyên tên riêng và con số.
-            
-            Nội dung:
-            $input
-        """.trimIndent()
-
-        val result = api.sendChat(prompt, apiKeys).message.trim()
-        require(result.isNotBlank()) { "AI không trả về bản dịch." }
-        require(!result.contains("Chưa cấu hình API mô hình AI", ignoreCase = true) &&
-            !result.contains("Các mô hình AI hiện không phản hồi", ignoreCase = true)) {
-            "Máy chủ AI không gọi được nhà cung cấp. Hãy kiểm tra API trong Cài đặt."
-        }
-        return result
     }
 
     suspend fun synthesizeVietnamese(text: String, output: File) {
