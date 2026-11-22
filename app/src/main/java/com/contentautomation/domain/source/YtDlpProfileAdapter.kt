@@ -27,10 +27,10 @@ abstract class YtDlpProfileAdapter(private val cookieDirectory: File? = null) : 
             val lines = cookieHeader.split(";").mapNotNull { part ->
                 val pair = part.trim().split("=", limit = 2)
                 if (pair.size != 2 || pair[0].isBlank()) null
-                else ".douyin.com\tTRUE\\t/\\tTRUE\\t0\\t${pair[0].trim()}\\t${pair[1].trim()}"
+                else ".douyin.com\tTRUE\t/\tTRUE\t0\t${pair[0].trim()}\t${pair[1].trim()}"
             }
             if (lines.isEmpty()) throw IllegalArgumentException("Phiên đăng nhập Douyin không có cookie hợp lệ.")
-            cookieFile.writeText("# Netscape HTTP Cookie File\n" + lines.joinToString("\\n"), Charsets.UTF_8)
+            cookieFile.writeText("# Netscape HTTP Cookie File\n" + lines.joinToString("\n"), Charsets.UTF_8)
             request.addOption("--cookies", cookieFile.absolutePath)
             return YoutubeDL.getInstance().execute(request).out
         } finally {
