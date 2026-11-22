@@ -201,7 +201,7 @@ fun AiScreen(vm: MainViewModel) {
                                         val temp = File(context.cacheDir, "muchiai_server_${System.currentTimeMillis()}.mp4")
                                         try {
                                             val downloaded = server.downloadResolvedVideo(
-                                                resolvedUrl, temp, serverReply?.provider, serverReply?.title
+                                                resolvedUrl, temp, serverReply?.provider, serverReply?.title, sourceUrl
                                             )
                                             serverFileDownloaded = true
                                             MediaStoreSaver(context).saveVideoToGallery(
