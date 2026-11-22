@@ -137,28 +137,32 @@ class AiVideoServerClient(
         videoUrl: String,
         destination: File,
         provider: String?,
-        title: String?
+        title: String?,
+        sourceUrl: String
     ): AiVideoDownloadResult = withContext(Dispatchers.IO) {
         destination.parentFile?.mkdirs()
-        val isKuaishou = provider?.contains("Kuaishou", ignoreCase = true) == true
-        val requestBuilder = Request.Builder().url(videoUrl).get()
-            .header("Accept", "video/*,application/octet-stream;q=0.9,*/*;q=0.8")
-            .header(
-                "User-Agent",
-                if (isKuaishou) {
-                    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
-                } else {
-                    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
-                }
-            )
-        if (isKuaishou) requestBuilder.header("Referer", "https://www.kuaishou.com/")
-        val request = requestBuilder.build()
+        val requestJson = JSONObject()
+            .put("video_url", videoUrl)
+            .put("source_url", sourceUrl)
+            .put("provider", provider.orEmpty())
+        val request = Request.Builder()
+            .url("${baseUrl.trimEnd('/')}/download/proxy")
+            .post(requestJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .header("Accept", "video/*,application/octet-stream")
+            .build()
+
         val bytes = client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("Không tải được file video: HTTP ${response.code}")
-            val body = response.body ?: throw IOException("Máy chủ video trả nội dung rỗng.")
+            if (!response.isSuccessful) {
+                val bodyText = response.body?.string().orEmpty()
+                val detail = runCatching { JSONObject(bodyText).optString("detail") }
+                    .getOrNull()?.takeIf { it.isNotBlank() }
+                    ?: bodyText.take(300).ifBlank { "HTTP ${response.code}" }
+                throw IOException("Máy chủ proxy không tải được file video: HTTP ${response.code}: $detail")
+            }
+            val body = response.body ?: throw IOException("Máy chủ proxy trả nội dung rỗng.")
             val type = body.contentType()?.toString()?.lowercase().orEmpty()
             if (type.contains("text/html") || type.contains("application/json")) {
-                throw IOException("Đường dẫn trả về không phải file video ($type).")
+                throw IOException("Máy chủ proxy trả nội dung không phải video ($type).")
             }
             destination.outputStream().buffered().use { output ->
                 body.byteStream().use { input -> input.copyTo(output) }
@@ -166,7 +170,7 @@ class AiVideoServerClient(
         }
         if (bytes <= 0L || !destination.exists() || destination.length() <= 0L) {
             destination.delete()
-            throw IOException("File video tải về rỗng.")
+            throw IOException("File video tải qua máy chủ proxy bị rỗng.")
         }
         AiVideoDownloadResult(provider ?: "AI Video Server", title, bytes)
     }
