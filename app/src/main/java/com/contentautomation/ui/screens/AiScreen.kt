@@ -303,10 +303,12 @@ fun AiScreen(vm: MainViewModel) {
                                     }
                                 } else {
                                     val reply = serverReply?.message
-                                    if (reply.isNullOrBlank()) {
-                                        val diagnostic = response.exceptionOrNull()?.message ?: "Máy chủ không trả lời."
+                                    if (serverReply?.type == "error" || reply.isNullOrBlank()) {
+                                        val diagnostic = reply
+                                            ?: response.exceptionOrNull()?.message
+                                            ?: "Trợ lý không trả lời."
                                         vm.reportAiIssue("MuChi AI chưa thể phản hồi", diagnostic)
-                                        appendLine(AiChatLine("Xin lỗi chủ nhân, hiện tại tôi chưa thể trả lời. Chủ nhân thử lại sau nhé.", false))
+                                        appendLine(AiChatLine("Xin lỗi chủ nhân, hiện tại tôi chưa thể trả lời. Tôi đã ghi nhận sự cố trong thông báo hệ thống.", false))
                                     } else if (
                                         reply.contains("GEMINI_API_KEY", ignoreCase = true) ||
                                         reply.contains("OPENROUTER_API_KEY", ignoreCase = true) ||
@@ -314,7 +316,7 @@ fun AiScreen(vm: MainViewModel) {
                                         reply.contains("Chưa cấu hình API", ignoreCase = true)
                                     ) {
                                         vm.reportAiIssue("MuChi AI chưa được kết nối", reply)
-                                        appendLine(AiChatLine("Tôi chưa được kết nối với mô hình AI. Chủ nhân kiểm tra phần API trong Cài đặt giúp tôi nhé.", false))
+                                        appendLine(AiChatLine("Xin lỗi chủ nhân, trợ lý đang gặp sự cố kết nối. Tôi đã ghi nhận trong thông báo hệ thống.", false))
                                     } else {
                                         appendLine(AiChatLine(reply, false))
                                     }
