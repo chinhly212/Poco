@@ -184,7 +184,7 @@ class AiVideoServerClient(
                 throw IOException("Nguồn tải không trả dữ liệu video.")
             }
             val expectedBytes = body.contentLength().takeIf { it > 0L }
-            val savedUri = saver.saveVideoFromStream(
+            saver.saveVideoFromStream(
                 body.byteStream(),
                 displayName,
                 expectedBytes
