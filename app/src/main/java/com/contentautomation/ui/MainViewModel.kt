@@ -64,7 +64,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val message = when (info.state) {
                 WorkInfo.State.RUNNING -> info.progress.getString("message") ?: "Đang quét các kênh..."
                 WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> "Đang chờ bắt đầu quét..."
-                WorkInfo.State.SUCCEEDED -> "Hoàn tất: ${output.getInt("scanned_accounts", 0)} kênh · ${output.getInt("discovered_videos", 0)} video mới · ${output.getInt("queued_jobs", 0)} công việc."
+                WorkInfo.State.SUCCEEDED -> output.getString("summary") ?: "Hoàn tất: ${output.getInt("scanned_accounts", 0)} kênh · ${output.getInt("discovered_videos", 0)} video mới · ${output.getInt("queued_jobs", 0)} công việc."
                 WorkInfo.State.FAILED -> "Lượt quét thất bại. Xem thông báo hệ thống để biết nguyên nhân."
                 WorkInfo.State.CANCELLED -> "Lượt quét đã bị hủy."
             }
