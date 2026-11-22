@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,10 +60,11 @@ fun AiScreen(vm: MainViewModel) {
         chatDao.insert(AiChatMessage(message = line.text, fromUser = line.fromUser))
         lines.add(line)
     }
+
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var serverOnline by remember { mutableStateOf<Boolean?>(null) }
-    var serverStatusLine by remember { mutableStateOf("Đang kết nối máy chủ…") }
+    var serverStatusLine by remember { mutableStateOf("Đang kết nối…") }
 
     LaunchedEffect(Unit) {
         val savedMessages = runCatching { chatDao.getAll() }.getOrElse { emptyList() }
@@ -73,19 +75,20 @@ fun AiScreen(vm: MainViewModel) {
             .onSuccess { health ->
                 serverOnline = true
                 serverStatusLine = if (health.aiReady || vm.getSavedApiKeys().isNotEmpty()) {
-                    "Đang hoạt động · mô hình: ${health.configuredProviders.joinToString()}"
+                    "Trợ lý sẵn sàng"
                 } else {
-                    "Máy chủ đã kết nối · chưa cấu hình API mô hình AI"
+                    "Chưa kết nối mô hình AI"
                 }
             }
-            .onFailure { error ->
+            .onFailure {
                 serverOnline = false
-                serverStatusLine = error.message ?: "Không kết nối được máy chủ"
+                serverStatusLine = "Trợ lý đang gặp sự cố kết nối"
             }
+
         if (lines.isEmpty()) {
             appendLine(
                 AiChatLine(
-                    "Xin chào! Tôi là trợ lý MuChi. Bạn có thể trò chuyện, hỏi AI hoặc gửi link video để tôi tự tìm nguồn tải và lưu vào điện thoại.",
+                    "Xin chào chủ nhân! Tôi là trợ lý riêng của bạn. Tôi sẽ cố gắng trả lời tự nhiên, ngắn gọn và đúng điều bạn cần. Bạn có thể trò chuyện hoặc gửi đường dẫn video để tôi tìm và tải giúp.",
                     false
                 )
             )
@@ -137,9 +140,16 @@ fun AiScreen(vm: MainViewModel) {
                 }
             }
             if (busy) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CircularProgressIndicator()
-                    Text("MuChi AI đang xử lý…", style = MaterialTheme.typography.labelMedium)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 2.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Text("Đang suy nghĩ…", style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
@@ -177,59 +187,42 @@ fun AiScreen(vm: MainViewModel) {
                                 if (sourceUrl != null) {
                                     var saved = false
                                     var serverFileDownloaded = false
+                                    var serverError = serverReply?.message
+                                        ?: response.exceptionOrNull()?.message
+                                        ?: "Không nhận được kết quả từ máy chủ."
                                     val providerErrors = serverReply?.providerErrors.orEmpty()
-                                    var serverError = buildString {
-                                        append(serverReply?.message
-                                            ?: response.exceptionOrNull()?.message
-                                            ?: "Máy chủ chưa trả đường dẫn video.")
-                                        if (providerErrors.isNotEmpty()) {
-                                            append("\n")
-                                            append(providerErrors.joinToString("\n"))
-                                        }
-                                    }
-                                    if (providerErrors.isNotEmpty()) {
-                                        appendLine(
-                                            AiChatLine(
-                                                "Chi tiết các nguồn tải trên máy chủ:\n" +
-                                                    providerErrors.joinToString("\n"),
-                                                false
-                                            )
-                                        )
-                                    }
+
                                     if (resolvedUrl != null) {
-                                        appendLine(AiChatLine("Máy chủ đã tìm thấy video qua ${serverReply?.provider ?: "API"}. Đang tải…", false))
+                                        // Keep provider names and download infrastructure out of the chat.
+                                        appendLine(AiChatLine("Tôi đã tìm thấy video.", false))
                                         val temp = File(context.cacheDir, "muchiai_server_${System.currentTimeMillis()}.mp4")
                                         try {
-                                            val downloaded = server.downloadResolvedVideo(
+                                            server.downloadResolvedVideo(
                                                 resolvedUrl, temp, serverReply?.provider, serverReply?.title, sourceUrl
                                             )
                                             serverFileDownloaded = true
                                             MediaStoreSaver(context).saveVideoToGallery(
                                                 temp, "MuChi_${System.currentTimeMillis()}.mp4"
                                             )
-                                            appendLine(AiChatLine(
-                                                "Đã tải và lưu video vào Movies/MuChi. Nguồn: ${downloaded.provider}; ${downloaded.bytesWritten / 1024} KB.",
-                                                false
-                                            ))
+                                            appendLine(AiChatLine("Tôi đã tải và lưu video vào thư viện cho chủ nhân.", false))
                                             saved = true
                                         } catch (error: Exception) {
-                                            serverError = error.message ?: "Không tải được file từ API."
+                                            serverError = error.message ?: "Không thể tải hoặc lưu video."
                                         } finally {
                                             temp.delete()
                                         }
                                     }
 
                                     if (!saved && !serverFileDownloaded) {
-                                        appendLine(AiChatLine("API máy chủ chưa tải được. Đang thử bộ tải dự phòng trên điện thoại…", false))
                                         val fallbackDir = File(context.cacheDir, "muchiai_fallback_${System.currentTimeMillis()}")
                                         try {
                                             val localFile = withContext(Dispatchers.IO) {
                                                 fallbackDir.mkdirs()
-                                                val app = context.applicationContext as ContentAutomationApp
-                                                if (!app.awaitMediaEngines()) {
+                                                val mediaApp = context.applicationContext as ContentAutomationApp
+                                                if (!mediaApp.awaitMediaEngines()) {
                                                     throw IllegalStateException(
                                                         ContentAutomationApp.engineInitializationError
-                                                            ?: "Bộ tải trên điện thoại chưa sẵn sàng."
+                                                            ?: "Bộ tải dự phòng chưa sẵn sàng."
                                                     )
                                                 }
                                                 val template = File(fallbackDir, "video.%(ext)s").absolutePath
@@ -244,38 +237,74 @@ fun AiScreen(vm: MainViewModel) {
                                                 fallbackDir.listFiles()
                                                     ?.filter { it.isFile && !it.name.endsWith(".part") && it.length() > 0L }
                                                     ?.maxByOrNull { it.length() }
-                                                    ?: throw IllegalStateException("yt-dlp không tạo được file video.")
+                                                    ?: throw IllegalStateException("Bộ tải không tạo được tệp video.")
                                             }
                                             MediaStoreSaver(context).saveVideoToGallery(
                                                 localFile, "MuChi_${System.currentTimeMillis()}.mp4"
                                             )
-                                            appendLine(AiChatLine(
-                                                "Đã tải và lưu video vào Movies/MuChi bằng bộ tải dự phòng trên điện thoại.",
-                                                false
-                                            ))
+                                            appendLine(AiChatLine("Tôi đã tải và lưu video vào thư viện cho chủ nhân.", false))
+                                            saved = true
                                         } catch (localError: Exception) {
-                                            appendLine(AiChatLine(
-                                                "Chưa tải được video. Lỗi máy chủ: $serverError. Lỗi bộ tải trên điện thoại: ${localError.message ?: "không xác định"}.",
-                                                false
-                                            ))
+                                            val diagnostics = buildString {
+                                                append("Đường dẫn: ").append(sourceUrl).append("\\n")
+                                                append("Lỗi xử lý từ máy chủ: ").append(serverError).append("\\n")
+                                                if (providerErrors.isNotEmpty()) {
+                                                    append("Nguồn dự phòng: ").append(providerErrors.joinToString(" | ")).append("\\n")
+                                                }
+                                                append("Lỗi bộ tải trên điện thoại: ")
+                                                    .append(localError.message ?: localError.javaClass.simpleName)
+                                            }
+                                            vm.reportAiIssue("AI không tải được video", diagnostics)
+                                            appendLine(
+                                                AiChatLine(
+                                                    "Xin lỗi chủ nhân, lần này tôi chưa tải được video. Tôi đã ghi nhận sự cố trong thông báo hệ thống để kiểm tra.",
+                                                    false
+                                                )
+                                            )
                                         } finally {
                                             fallbackDir.deleteRecursively()
                                         }
                                     } else if (!saved && serverFileDownloaded) {
+                                        vm.reportAiIssue(
+                                            "AI tìm thấy video nhưng không lưu được",
+                                            "Đường dẫn: $sourceUrl\\nLỗi lưu thư viện: $serverError"
+                                        )
                                         appendLine(
                                             AiChatLine(
-                                                "Video đã tải về điện thoại nhưng không lưu được vào thư viện: $serverError",
+                                                "Tôi đã tìm thấy video nhưng chưa thể lưu vào thư viện. Tôi đã ghi nhận sự cố trong thông báo hệ thống.",
                                                 false
                                             )
                                         )
                                     }
                                 } else {
                                     val reply = serverReply?.message
-                                        ?: "Không thể kết nối máy chủ AI: ${response.exceptionOrNull()?.message ?: "lỗi không xác định"}"
-                                    appendLine(AiChatLine(reply, false))
+                                    if (reply.isNullOrBlank()) {
+                                        val diagnostic = response.exceptionOrNull()?.message ?: "Máy chủ không trả lời."
+                                        vm.reportAiIssue("MuChi AI chưa thể phản hồi", diagnostic)
+                                        appendLine(AiChatLine("Xin lỗi chủ nhân, hiện tại tôi chưa thể trả lời. Chủ nhân thử lại sau nhé.", false))
+                                    } else if (
+                                        reply.contains("GEMINI_API_KEY", ignoreCase = true) ||
+                                        reply.contains("OPENROUTER_API_KEY", ignoreCase = true) ||
+                                        reply.contains("DEEPSEEK_API_KEY", ignoreCase = true) ||
+                                        reply.contains("Chưa cấu hình API", ignoreCase = true)
+                                    ) {
+                                        vm.reportAiIssue("MuChi AI chưa được kết nối", reply)
+                                        appendLine(AiChatLine("Tôi chưa được kết nối với mô hình AI. Chủ nhân kiểm tra phần API trong Cài đặt giúp tôi nhé.", false))
+                                    } else {
+                                        appendLine(AiChatLine(reply, false))
+                                    }
                                 }
                             } catch (error: Exception) {
-                                appendLine(AiChatLine("Không xử lý được yêu cầu: ${error.message ?: "Lỗi không xác định"}", false))
+                                vm.reportAiIssue(
+                                    "MuChi AI gặp sự cố",
+                                    error.message ?: error.javaClass.simpleName
+                                )
+                                appendLine(
+                                    AiChatLine(
+                                        "Xin lỗi chủ nhân, tôi vừa gặp sự cố khi xử lý yêu cầu. Tôi đã ghi nhận lỗi trong thông báo hệ thống.",
+                                        false
+                                    )
+                                )
                             } finally {
                                 busy = false
                             }
