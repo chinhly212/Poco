@@ -39,13 +39,8 @@ import com.contentautomation.data.db.entity.AiChatMessage
 import com.contentautomation.ui.MainViewModel
 import com.contentautomation.video.AiVideoServerClient
 import com.contentautomation.video.AiChatTurn
-import com.yausername.youtubedl_android.YoutubeDL
-import com.yausername.youtubedl_android.YoutubeDLRequest
 import com.contentautomation.video.MediaStoreSaver
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.File
 
 private data class AiChatLine(val text: String, val fromUser: Boolean)
 
@@ -250,56 +245,21 @@ fun AiScreen(vm: MainViewModel) {
                                     }
 
                                     if (!saved) {
-                                        val fallbackDir = File(context.cacheDir, "muchiai_fallback_${System.currentTimeMillis()}")
-                                        try {
-                                            val localFile = withContext(Dispatchers.IO) {
-                                                fallbackDir.mkdirs()
-                                                val mediaApp = context.applicationContext as ContentAutomationApp
-                                                if (!mediaApp.awaitMediaEngines()) {
-                                                    throw IllegalStateException(
-                                                        ContentAutomationApp.engineInitializationError
-                                                            ?: "Bộ tải dự phòng chưa sẵn sàng."
-                                                    )
-                                                }
-                                                val template = File(fallbackDir, "video.%(ext)s").absolutePath
-                                                val request = YoutubeDLRequest(sourceUrl).apply {
-                                                    addOption("--no-playlist")
-                                                    addOption("-f", "best[ext=mp4]/best")
-                                                    addOption("--merge-output-format", "mp4")
-                                                    addOption("--remux-video", "mp4")
-                                                    addOption("-o", template)
-                                                }
-                                                YoutubeDL.getInstance().execute(request)
-                                                fallbackDir.listFiles()
-                                                    ?.filter { it.isFile && !it.name.endsWith(".part") && it.length() > 0L }
-                                                    ?.maxByOrNull { it.length() }
-                                                    ?: throw IllegalStateException("Bộ tải không tạo được video.")
+                                        val diagnostics = buildString {
+                                            append("Đường dẫn: ").append(sourceUrl).append("\n")
+                                            append("Lỗi xử lý từ máy chủ: ").append(serverError).append("\n")
+                                            if (providerErrors.isNotEmpty()) {
+                                                append("Nguồn dự phòng: ").append(providerErrors.joinToString(" | ")).append("\n")
                                             }
-                                            MediaStoreSaver(context).saveVideoToGallery(
-                                                localFile, "MuChi_${System.currentTimeMillis()}.mp4"
-                                            )
-                                            appendLine(AiChatLine("Tôi đã tải và lưu video vào thư viện cho chủ nhân.", false))
-                                            saved = true
-                                        } catch (localError: Exception) {
-                                            val diagnostics = buildString {
-                                                append("Đường dẫn: ").append(sourceUrl).append("\n")
-                                                append("Lỗi xử lý từ máy chủ: ").append(serverError).append("\n")
-                                                if (providerErrors.isNotEmpty()) {
-                                                    append("Nguồn dự phòng: ").append(providerErrors.joinToString(" | ")).append("\n")
-                                                }
-                                                append("Lỗi bộ tải trên điện thoại: ")
-                                                    .append(localError.message ?: localError.javaClass.simpleName)
-                                            }
-                                            vm.reportAiIssue("AI không tải được video", diagnostics)
-                                            appendLine(
-                                                AiChatLine(
-                                                    "Xin lỗi chủ nhân, lần này tôi chưa tải được video. Tôi đã ghi nhận sự cố trong thông báo hệ thống để kiểm tra.",
-                                                    false
-                                                )
-                                            )
-                                        } finally {
-                                            fallbackDir.deleteRecursively()
+                                            append("Không sử dụng tải tạm trên điện thoại; video chưa được lưu vào thư viện.")
                                         }
+                                        vm.reportAiIssue("AI không tải được video", diagnostics)
+                                        appendLine(
+                                            AiChatLine(
+                                                "Xin lỗi chủ nhân, lần này tôi chưa tải được video. Tôi đã ghi nhận sự cố trong thông báo hệ thống để kiểm tra.",
+                                                false
+                                            )
+                                        )
                                     }
                                 } else {
                                     val reply = serverReply?.message
