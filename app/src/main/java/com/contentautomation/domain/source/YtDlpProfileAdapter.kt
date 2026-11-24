@@ -117,6 +117,14 @@ abstract class YtDlpProfileAdapter(private val cookieDirectory: File? = null) : 
                     addOption("--playlist-end", "100")
                     addOption("--skip-download")
                     addOption("--ignore-errors")
+                    // Douyin's CDN/profile host can return unusable AAAA DNS records on
+                    // some Android/mobile networks. Force IPv4 and retry transient DNS/HTTP
+                    // failures instead of failing the entire daily account scan immediately.
+                    addOption("--force-ipv4")
+                    addOption("--socket-timeout", "30")
+                    addOption("--retries", "3")
+                    addOption("--extractor-retries", "3")
+                    addOption("--retry-sleep", "http:1:3")
                     addOption("--no-warnings")
                 }
                 val output = executeWithSession(request, cookieHeader)
