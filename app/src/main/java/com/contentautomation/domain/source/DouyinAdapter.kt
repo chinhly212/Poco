@@ -54,8 +54,17 @@ class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter
                 val responseText = response.body?.string().orEmpty()
                 val result = runCatching { JSONObject(responseText) }.getOrNull()
                 if (!response.isSuccessful || result?.optString("status") != "success") {
-                    val detail = result?.optString("detail")?.takeIf { it.isNotBlank() }
-                        ?: "Máy chủ quét Douyin trả HTTP ${response.code}."
+                    val serverDetail = result?.optString("detail")?.takeIf { it.isNotBlank() }
+                    val responsePreview = responseText
+                        .replace(Regex("<[^>]*>"), " ")
+                        .replace(Regex("\\s+"), " ")
+                        .trim()
+                        .take(500)
+                    val detail = serverDetail
+                        ?: responsePreview.takeIf { it.isNotBlank() }?.let {
+                            "Máy chủ quét Douyin trả HTTP ${response.code}: $it"
+                        }
+                        ?: "Máy chủ quét Douyin trả HTTP ${response.code} nhưng không có nội dung phản hồi."
                     throw SourceUnavailableException(detail)
                 }
                 val entries = result.optJSONArray("videos") ?: return@withContext emptyList()
