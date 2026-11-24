@@ -50,6 +50,13 @@ alter table public.poco_conversations enable row level security;
 alter table public.poco_conversation_members enable row level security;
 alter table public.poco_messages enable row level security;
 
+-- Explicit PostgREST privileges; RLS remains the row-level security boundary.
+grant select, insert, update on public.poco_profiles to authenticated;
+grant select on public.poco_conversations to authenticated;
+grant select on public.poco_conversation_members to authenticated;
+grant select, insert on public.poco_messages to authenticated;
+
+
 -- SECURITY DEFINER helper avoids recursive RLS evaluation on the membership table.
 create or replace function public.poco_is_conversation_member(target_conversation_id uuid)
 returns boolean
