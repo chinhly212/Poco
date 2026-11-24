@@ -92,11 +92,13 @@ fun ChatScreen(auth: SupabaseAuth) {
         }
     }
 
-    LaunchedEffect(selected?.id) {
-        if (selected != null) {
+    LaunchedEffect(myId, selected?.id) {
+        if (myId != null) {
             while (true) {
-                runCatching { refreshMessages(); refreshConversations() }
-                    .onFailure { error = it.message ?: "Không thể đồng bộ tin nhắn." }
+                runCatching {
+                    refreshConversations()
+                    if (selected != null) refreshMessages()
+                }.onFailure { error = it.message ?: "Không thể đồng bộ Chat." }
                 delay(3500)
             }
         }
