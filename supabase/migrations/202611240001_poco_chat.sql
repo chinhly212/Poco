@@ -57,13 +57,13 @@ language sql
 stable
 security definer
 set search_path = public
-as $
+as $$
     select exists (
         select 1 from public.poco_conversation_members
         where conversation_id = target_conversation_id
           and user_id = auth.uid()
     );
-$;
+$$;
 
 revoke all on function public.poco_is_conversation_member(uuid) from public;
 grant execute on function public.poco_is_conversation_member(uuid) to authenticated;
