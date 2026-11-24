@@ -54,7 +54,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ChatScreen(auth: SupabaseAuth) {
     val context = LocalContext.current
-    val repo = remember(context) { PocoChatRepository(context.applicationContext) }
+    val repo = remember(context, auth) { PocoChatRepository(context.applicationContext, auth) }
     val scope = rememberCoroutineScope()
     var myId by remember { mutableStateOf<String?>(null) }
     var conversations by remember { mutableStateOf<List<PocoChatConversation>>(emptyList()) }
