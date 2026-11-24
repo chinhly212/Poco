@@ -331,7 +331,7 @@ fun AppNavHost(vm: MainViewModel) {
                 }
 
                 composable(MuChiRoutes.CHAT) {
-                    ChatScreen()
+                    ChatScreen(auth = auth)
                 }
 
                 composable(MuChiRoutes.SETTINGS) {
