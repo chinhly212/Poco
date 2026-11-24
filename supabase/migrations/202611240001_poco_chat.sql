@@ -50,6 +50,24 @@ alter table public.poco_conversations enable row level security;
 alter table public.poco_conversation_members enable row level security;
 alter table public.poco_messages enable row level security;
 
+-- SECURITY DEFINER helper avoids recursive RLS evaluation on the membership table.
+create or replace function public.poco_is_conversation_member(target_conversation_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $
+    select exists (
+        select 1 from public.poco_conversation_members
+        where conversation_id = target_conversation_id
+          and user_id = auth.uid()
+    );
+$;
+
+revoke all on function public.poco_is_conversation_member(uuid) from public;
+grant execute on function public.poco_is_conversation_member(uuid) to authenticated;
+
 drop policy if exists "poco profiles readable by authenticated" on public.poco_profiles;
 create policy "poco profiles readable by authenticated"
     on public.poco_profiles for select to authenticated using (true);
@@ -66,36 +84,24 @@ create policy "poco profile update own"
 drop policy if exists "poco conversations visible to members" on public.poco_conversations;
 create policy "poco conversations visible to members"
     on public.poco_conversations for select to authenticated
-    using (exists (
-        select 1 from public.poco_conversation_members m
-        where m.conversation_id = id and m.user_id = auth.uid()
-    ));
+    using (public.poco_is_conversation_member(id));
 
 drop policy if exists "poco members visible to conversation members" on public.poco_conversation_members;
 create policy "poco members visible to conversation members"
     on public.poco_conversation_members for select to authenticated
-    using (exists (
-        select 1 from public.poco_conversation_members mine
-        where mine.conversation_id = conversation_id and mine.user_id = auth.uid()
-    ));
+    using (public.poco_is_conversation_member(conversation_id));
 
 drop policy if exists "poco messages visible to conversation members" on public.poco_messages;
 create policy "poco messages visible to conversation members"
     on public.poco_messages for select to authenticated
-    using (exists (
-        select 1 from public.poco_conversation_members m
-        where m.conversation_id = conversation_id and m.user_id = auth.uid()
-    ));
+    using (public.poco_is_conversation_member(conversation_id));
 
 drop policy if exists "poco members can send messages as themselves" on public.poco_messages;
 create policy "poco members can send messages as themselves"
     on public.poco_messages for insert to authenticated
     with check (
         sender_id = auth.uid()
-        and exists (
-            select 1 from public.poco_conversation_members m
-            where m.conversation_id = conversation_id and m.user_id = auth.uid()
-        )
+        and public.poco_is_conversation_member(conversation_id)
     );
 
 create or replace function public.poco_create_direct_conversation(other_user_id uuid)
