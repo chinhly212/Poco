@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,6 +33,12 @@ fun ApiSettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         "openrouter" to "OpenRouter",
         "deepseek" to "DeepSeek"
     )
+    val apiKeyUrls = mapOf(
+        "gemini" to "https://aistudio.google.com/app/apikey",
+        "openrouter" to "https://openrouter.ai/keys",
+        "deepseek" to "https://platform.deepseek.com/api_keys"
+    )
+    val uriHandler = LocalUriHandler.current
     val inputs = remember { mutableStateMapOf<String, String>() }
     val connectionStates by vm.apiConnectionStates.collectAsStateWithLifecycle()
 
@@ -64,6 +71,11 @@ fun ApiSettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     visualTransformation = PasswordVisualTransformation(),
                     enabled = state?.checking != true
                 )
+                TextButton(
+                    onClick = { uriHandler.openUri(apiKeyUrls.getValue(id)) }
+                ) {
+                    Text("Chưa có API key? Nhấn vào đây để lấy")
+                }
                 Button(
                     onClick = { vm.validateAndSaveApi(id, inputs[id].orEmpty()) },
                     enabled = !inputs[id].isNullOrBlank() && state?.checking != true,
