@@ -119,16 +119,18 @@ class PocoChatRepository(context: Context) {
     }
 
     suspend fun createDirect(otherUserId: String): String {
-        val result = JSONArray(request("/rest/v1/rpc/poco_create_direct_conversation", "POST",
-            JSONObject().put("other_user_id", otherUserId).toString()))
-        return if (result.length() > 0) result.getString(0) else error("Không tạo được cuộc trò chuyện.")
+        val raw = request("/rest/v1/rpc/poco_create_direct_conversation", "POST",
+            JSONObject().put("other_user_id", otherUserId).toString())
+        (org.json.JSONTokener(raw).nextValue() as? String)
+            ?: error("Máy chủ không trả mã cuộc trò chuyện hợp lệ.")
     }
 
     suspend fun createGroup(title: String, memberIds: List<String>): String {
         val ids = JSONArray()
         memberIds.distinct().forEach(ids::put)
         val payload = JSONObject().put("group_title", title.trim()).put("member_user_ids", ids)
-        val result = JSONArray(request("/rest/v1/rpc/poco_create_group", "POST", payload.toString()))
-        return if (result.length() > 0) result.getString(0) else error("Không tạo được nhóm.")
+        val raw = request("/rest/v1/rpc/poco_create_group", "POST", payload.toString())
+        (org.json.JSONTokener(raw).nextValue() as? String)
+            ?: error("Máy chủ không trả mã nhóm hợp lệ.")
     }
 }
