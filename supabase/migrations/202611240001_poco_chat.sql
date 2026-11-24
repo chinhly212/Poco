@@ -249,7 +249,7 @@ begin
     select count(*) into requested_count
     from (
         select distinct member_id
-        from unnest(coalesce(member_user_ids, array[]::uuid[]) || array[current_user_id]) as member_id
+        from unnest(coalesce(member_user_ids, array[]::uuid[]) || array[current_user_id]) as input(member_id)
         where member_id is not null
     ) members;
 
@@ -276,7 +276,7 @@ begin
         case when members.user_id = current_user_id then 'owner' else 'member' end
     from (
         select distinct member_id as user_id
-        from unnest(coalesce(member_user_ids, array[]::uuid[]) || array[current_user_id]) as member_id
+        from unnest(coalesce(member_user_ids, array[]::uuid[]) || array[current_user_id]) as input(member_id)
         where member_id is not null
     ) members;
 
