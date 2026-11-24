@@ -23,7 +23,7 @@ private fun gb(v: Float) = String.format(Locale.getDefault(), "%.1f GB", v)
  * onDriveClick: hành động của nút ở khu vực Google Drive.
  */
 @Composable
-fun StorageScreen(
+fun StorageSettingsSection(
     storage: StorageInfo,
     drive: DriveUiState,
     onConnectDrive: () -> Unit,
@@ -36,7 +36,7 @@ fun StorageScreen(
     val low = storage.totalGb > 0f &&
         (storage.fraction >= WARN_FRACTION || storage.freeGb < WARN_FREE_GB)
 
-    ScreenColumn {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 GText("BỘ NHỚ ĐIỆN THOẠI", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
