@@ -218,3 +218,91 @@ begin
     end if;
 end;
 $$;
+
+
+-- Create group conversations atomically. The creator is always the owner.
+create or replace function public.poco_create_group(
+    group_title text,
+    member_user_ids uuid[]
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    current_user_id uuid := auth.uid();
+    conversation_id uuid;
+    requested_count integer;
+    found_count integer;
+begin
+    if current_user_id is null then
+        raise exception 'Authentication required';
+    end if;
+
+    if nullif(trim(coalesce(group_title, '')), '') is null
+       or char_length(trim(group_title)) > 80 then
+        raise exception 'Group name must contain 1 to 80 characters';
+    end if;
+
+    -- Always include the creator, remove duplicates and reject an empty group.
+    select count(*) into requested_count
+    from (
+        select distinct member_id
+        from unnest(coalesce(member_user_ids, array[]::uuid[]) || array[current_user_id]) as member_id
+        where member_id is not null
+    ) members;
+
+    if requested_count < 2 or requested_count > 100 then
+        raise exception 'A group must contain 2 to 100 members';
+    end if;
+
+    select count(*) into found_count
+    from public.poco_profiles p
+    where p.user_id = any(coalesce(member_user_ids, array[]::uuid[]) || array[current_user_id]);
+
+    if found_count <> requested_count then
+        raise exception 'One or more users do not exist';
+    end if;
+
+    insert into public.poco_conversations(is_group, title, created_by)
+    values (true, trim(group_title), current_user_id)
+    returning id into conversation_id;
+
+    insert into public.poco_conversation_members(conversation_id, user_id, role)
+    select
+        conversation_id,
+        members.user_id,
+        case when members.user_id = current_user_id then 'owner' else 'member' end
+    from (
+        select distinct member_id as user_id
+        from unnest(coalesce(member_user_ids, array[]::uuid[]) || array[current_user_id]) as member_id
+        where member_id is not null
+    ) members;
+
+    return conversation_id;
+end;
+$$;
+
+revoke all on function public.poco_create_group(text, uuid[]) from public;
+grant execute on function public.poco_create_group(text, uuid[]) to authenticated;
+
+-- Keep conversation ordering current whenever a new message is sent.
+create or replace function public.poco_touch_conversation_on_message()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    update public.poco_conversations
+       set updated_at = new.created_at
+     where id = new.conversation_id;
+    return new;
+end;
+$$;
+
+drop trigger if exists poco_message_updates_conversation on public.poco_messages;
+create trigger poco_message_updates_conversation
+    after insert on public.poco_messages
+    for each row execute procedure public.poco_touch_conversation_on_message();
