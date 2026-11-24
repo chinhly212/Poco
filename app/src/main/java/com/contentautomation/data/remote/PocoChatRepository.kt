@@ -28,14 +28,13 @@ data class PocoChatMessage(
     val createdAt: String
 )
 
-class PocoChatRepository(context: Context) {
+class PocoChatRepository(context: Context, private val auth: SupabaseAuth = SupabaseAuth(context.applicationContext)) {
     companion object {
         private const val BASE = "https://odxgthsecijktkkubjwf.supabase.co"
         private const val KEY = "sb_publishable_PA474FOyjVttQPBnAfsGAA_nkEVbAdI"
         private val JSON = "application/json; charset=utf-8".toMediaType()
     }
 
-    private val auth = SupabaseAuth(context.applicationContext)
     private val client = OkHttpClient()
 
     private fun token(): String = auth.currentAccessToken()?.takeIf { it.isNotBlank() }
@@ -43,26 +42,43 @@ class PocoChatRepository(context: Context) {
 
     private suspend fun request(path: String, method: String = "GET", body: String? = null,
                                 prefer: String? = null): String = withContext(Dispatchers.IO) {
-        val builder = Request.Builder().url(BASE + path)
-            .header("apikey", KEY)
-            .header("Authorization", "Bearer ${token()}")
-            .header("Accept", "application/json")
-        if (prefer != null) builder.header("Prefer", prefer)
-        when (method) {
-            "POST" -> builder.post((body ?: "{}").toRequestBody(JSON))
-            "PATCH" -> builder.patch((body ?: "{}").toRequestBody(JSON))
-            "DELETE" -> builder.delete((body ?: "").toRequestBody(JSON))
-            else -> builder.get()
-        }
-        client.newCall(builder.build()).execute().use { response ->
-            val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                val detail = runCatching {
-                    JSONObject(text).optString("message").ifBlank { JSONObject(text).optString("details") }
-                }.getOrDefault("")
-                error(detail.ifBlank { "Máy chủ POCO trả HTTP ${response.code}" })
+        fun buildRequest(accessToken: String): Request {
+            val builder = Request.Builder().url(BASE + path)
+                .header("apikey", KEY)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Accept", "application/json")
+            if (prefer != null) builder.header("Prefer", prefer)
+            when (method) {
+                "POST" -> builder.post((body ?: "{}").toRequestBody(JSON))
+                "PATCH" -> builder.patch((body ?: "{}").toRequestBody(JSON))
+                "DELETE" -> builder.delete((body ?: "").toRequestBody(JSON))
+                else -> builder.get()
             }
-            text
+            return builder.build()
+        }
+
+        var accessToken = token()
+        var response = client.newCall(buildRequest(accessToken)).execute()
+        if (response.code == 401) {
+            response.close()
+            accessToken = auth.refreshSession().getOrElse {
+                error("Phiên POCO hết hạn và không thể làm mới. Hãy đăng nhập lại.")
+            }.accessToken
+            response = client.newCall(buildRequest(accessToken)).execute()
+        }
+        response.use {
+            val responseText = it.body?.string().orEmpty()
+            if (!it.isSuccessful) {
+                val detail = runCatching {
+                    JSONObject(responseText).optString("message").ifBlank {
+                        JSONObject(responseText).optString("details").ifBlank {
+                            JSONObject(responseText).optString("hint")
+                        }
+                    }
+                }.getOrDefault("")
+                error(detail.ifBlank { "Máy chủ POCO trả HTTP ${it.code}" })
+            }
+            responseText
         }
     }
 
