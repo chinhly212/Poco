@@ -189,6 +189,22 @@ create trigger poco_auth_user_created
     after insert on auth.users
     for each row execute procedure public.poco_handle_new_user();
 
+-- Backfill profiles for accounts that already existed before this migration.
+insert into public.poco_profiles(user_id, display_name, username)
+select
+    u.id,
+    coalesce(nullif(u.raw_user_meta_data->>'display_name', ''),
+             nullif(split_part(coalesce(u.email, ''), '@', 1), ''),
+             'POCO User'),
+    lower(regexp_replace(
+        coalesce(nullif(u.raw_user_meta_data->>'display_name', ''),
+                 nullif(split_part(coalesce(u.email, ''), '@', 1), ''),
+                 'poco_user'),
+        '[^a-zA-Z0-9_]', '', 'g'
+    )) || '_' || substr(replace(u.id::text, '-', ''), 1, 8)
+from auth.users u
+on conflict (user_id) do nothing;
+
 -- Enable Realtime for message inserts (safe to run more than once).
 do $$
 begin
