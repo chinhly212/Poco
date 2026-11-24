@@ -106,7 +106,7 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
         val ids = (0 until memberships.length()).map { memberships.getJSONObject(it).getString("conversation_id") }
         val inFilter = ids.joinToString(",", "(", ")")
         val rows = JSONArray(request("/rest/v1/poco_conversations?select=id,title,is_group,updated_at&id=in.${enc(inFilter)}&order=updated_at.desc&limit=100"))
-        (0 until rows.length()).map { i ->
+        return (0 until rows.length()).map { i ->
             val o = rows.getJSONObject(i)
             val id = o.getString("id")
             val group = o.optBoolean("is_group")
@@ -137,7 +137,7 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
     suspend fun createDirect(otherUserId: String): String {
         val raw = request("/rest/v1/rpc/poco_create_direct_conversation", "POST",
             JSONObject().put("other_user_id", otherUserId).toString())
-        (org.json.JSONTokener(raw).nextValue() as? String)
+        return (org.json.JSONTokener(raw).nextValue() as? String)
             ?: error("Máy chủ không trả mã cuộc trò chuyện hợp lệ.")
     }
 
@@ -146,7 +146,7 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
         memberIds.distinct().forEach(ids::put)
         val payload = JSONObject().put("group_title", title.trim()).put("member_user_ids", ids)
         val raw = request("/rest/v1/rpc/poco_create_group", "POST", payload.toString())
-        (org.json.JSONTokener(raw).nextValue() as? String)
+        return (org.json.JSONTokener(raw).nextValue() as? String)
             ?: error("Máy chủ không trả mã nhóm hợp lệ.")
     }
 }
