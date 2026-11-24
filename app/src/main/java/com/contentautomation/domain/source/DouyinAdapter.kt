@@ -31,17 +31,6 @@ class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter
     override suspend fun getLatestVideos(
         accountIdentifier: String,
         cookieHeader: String?
-    ): List<SourceVideoItem> {
-        if (!accountIdentifier.startsWith("MS4wLjAB")) {
-            throw SourceUnavailableException("Mã hồ sơ Douyin chưa được xác minh. Hãy xóa kênh và thêm lại bằng link trang cá nhân.")
-        }
-        return super.getLatestVideos(accountIdentifier, cookieHeader)
-    }
-
-
-    override suspend fun getLatestVideos(
-        accountIdentifier: String,
-        cookieHeader: String?
     ): List<SourceVideoItem> = withContext(Dispatchers.IO) {
         if (!accountIdentifier.startsWith("MS4wLjAB")) {
             throw SourceUnavailableException("Mã hồ sơ Douyin chưa được xác minh. Hãy xóa kênh và thêm lại bằng link trang cá nhân.")
