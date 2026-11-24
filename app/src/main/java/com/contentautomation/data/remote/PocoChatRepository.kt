@@ -74,7 +74,7 @@ class PocoChatRepository(context: Context) {
     }
 
     suspend fun searchUsers(term: String): List<PocoChatProfile> {
-        val safe = term.trim().replace("%", "").replace(",", " ")
+        val safe = term.trim().replace(Regex("[^\\p{L}\\p{N}_ ]"), " ").replace(Regex("\\s+"), " ")
         if (safe.length < 2) return emptyList()
         val filter = "(display_name.ilike.*$safe*,username.ilike.*$safe*)"
         val rows = JSONArray(request("/rest/v1/poco_profiles?select=user_id,display_name,username&or=${enc(filter)}&limit=25"))
