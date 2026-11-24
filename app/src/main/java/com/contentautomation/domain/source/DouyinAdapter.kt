@@ -5,6 +5,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter(cookieDirectory) {
@@ -33,6 +36,61 @@ class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter
             throw SourceUnavailableException("Mã hồ sơ Douyin chưa được xác minh. Hãy xóa kênh và thêm lại bằng link trang cá nhân.")
         }
         return super.getLatestVideos(accountIdentifier, cookieHeader)
+    }
+
+
+    override suspend fun getLatestVideos(
+        accountIdentifier: String,
+        cookieHeader: String?
+    ): List<SourceVideoItem> = withContext(Dispatchers.IO) {
+        if (!accountIdentifier.startsWith("MS4wLjAB")) {
+            throw SourceUnavailableException("Mã hồ sơ Douyin chưa được xác minh. Hãy xóa kênh và thêm lại bằng link trang cá nhân.")
+        }
+        try {
+            val payload = JSONObject()
+                .put("sec_uid", accountIdentifier)
+                .put("cookie", cookieHeader.orEmpty())
+                .put("since_timestamp", 0)
+                .put("max_items", 100)
+            val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val request = Request.Builder()
+                .url("https://ai-video-server-59tj.onrender.com/douyin/profile/videos")
+                .post(body)
+                .header("Accept", "application/json")
+                .build()
+            profileClient.newCall(request).execute().use { response ->
+                val responseText = response.body?.string().orEmpty()
+                val result = runCatching { JSONObject(responseText) }.getOrNull()
+                if (!response.isSuccessful || result?.optString("status") != "success") {
+                    val detail = result?.optString("detail")?.takeIf { it.isNotBlank() }
+                        ?: "Máy chủ quét Douyin trả HTTP ${response.code}."
+                    throw SourceUnavailableException(detail)
+                }
+                val entries = result.optJSONArray("videos") ?: return@withContext emptyList()
+                buildList {
+                    for (index in 0 until entries.length()) {
+                        val item = entries.optJSONObject(index) ?: continue
+                        val id = item.optString("id").takeIf { it.isNotBlank() && it != "null" } ?: continue
+                        val url = item.optString("url").takeIf { it.startsWith("http") }
+                            ?: "https://www.douyin.com/video/$id"
+                        val timestamp = item.optLong("published_at", 0L).takeIf { it > 0L }
+                        add(SourceVideoItem(
+                            id = id,
+                            url = url,
+                            title = item.optString("title").takeIf { it.isNotBlank() && it != "null" },
+                            description = item.optString("description").takeIf { it.isNotBlank() && it != "null" },
+                            publishedAt = timestamp
+                        ))
+                    }
+                }.distinctBy { it.id }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SourceUnavailableException) {
+            throw e
+        } catch (e: Exception) {
+            throw SourceUnavailableException("Không thể quét danh sách video Douyin qua máy chủ: ${e.message ?: "lỗi kết nối"}", e)
+        }
     }
 
     override suspend fun verifyProfile(
