@@ -18,7 +18,6 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ChatBubbleOutline
 import androidx.compose.material.icons.rounded.GroupAdd
 import androidx.compose.material.icons.rounded.Send
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -212,7 +211,7 @@ fun ChatScreen(auth: SupabaseAuth) {
                     Spacer(Modifier.height(8.dp))
                     Text("Cuộc trò chuyện", fontWeight = FontWeight.SemiBold)
                     if (conversations.isEmpty() && !loading) {
-                        Text("Chưa có cuộc trò chuyện. Tìm email/tên người dùng ở trên để bắt đầu.", color = Color.Gray, fontSize = 13.sp)
+                        Text("Chưa có cuộc trò chuyện. Tìm tên hoặc username POCO ở trên để bắt đầu.", color = Color.Gray, fontSize = 13.sp)
                     }
                     LazyColumn(Modifier.weight(1f)) {
                         items(conversations, key = { it.id }) { conversation ->
