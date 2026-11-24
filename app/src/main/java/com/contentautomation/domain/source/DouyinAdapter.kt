@@ -9,6 +9,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.time.LocalDate
+import java.time.ZoneId
 
 class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter(cookieDirectory) {
 
@@ -39,7 +41,7 @@ class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter
             val payload = JSONObject()
                 .put("sec_uid", accountIdentifier)
                 .put("cookie", cookieHeader.orEmpty())
-                .put("since_timestamp", 0)
+                .put("since_timestamp", LocalDate.now(ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
                 .put("max_items", 100)
             val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             val request = Request.Builder()
