@@ -89,57 +89,72 @@ class KuaishouAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapt
             "Chưa có phiên đăng nhập Kuaishou. Hãy đăng nhập lại trong MuChi rồi lưu phiên."
         }
 
-        val profile = profileUrl(accountIdentifier)
-        val payload = JSONObject()
-            .put("url", profile)
-            .put("cookie", cookieHeader)
-            .put("max_pages", 10)
-            .put("since_timestamp", LocalDate.now(ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
-        val request = Request.Builder()
-            .url("$SERVER_BASE/kuaishou/profile/videos")
-            .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
-            .header("Accept", "application/json")
-            .build()
-
         try {
-            serverClient.newCall(request).execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                val json = runCatching { JSONObject(body) }.getOrNull()
-                if (!response.isSuccessful) {
-                    val detail = json?.optString("detail")?.takeIf { it.isNotBlank() }
-                        ?: "Máy chủ Kuaishou trả HTTP ${response.code}."
-                    throw SourceUnavailableException(detail)
-                }
-                val root = json ?: throw SourceUnavailableException("Máy chủ trả dữ liệu Kuaishou không hợp lệ.")
-                if (root.optString("status") != "success") {
-                    throw SourceUnavailableException("Máy chủ chưa xác nhận quét Kuaishou thành công.")
-                }
-                val entries = root.optJSONArray("videos")
-                    ?: throw SourceUnavailableException("Máy chủ không trả danh sách video.")
-                buildList {
-                    for (index in 0 until entries.length()) {
-                        val item = entries.optJSONObject(index) ?: continue
-                        val id = item.optString("id").takeIf { it.isNotBlank() && it != "null" } ?: continue
-                        val url = item.optString("url").takeIf { it.startsWith("https://") }
-                            ?: videoUrl(id)
-                        val published = item.opt("published_at")
-                        val publishedAt = when (published) {
-                            is Number -> published.toLong().let { if (it in 1..9_999_999_999L) it * 1000L else it }
-                            is String -> published.toLongOrNull()?.let { if (it in 1..9_999_999_999L) it * 1000L else it }
-                            else -> null
-                        }
-                        add(
-                            SourceVideoItem(
-                                id = id,
-                                url = url,
-                                title = item.optString("title").takeIf { it.isNotBlank() },
-                                description = item.optString("description").takeIf { it.isNotBlank() },
-                                publishedAt = publishedAt
-                            )
-                        )
+            val profile = profileUrl(accountIdentifier)
+            val sinceTimestamp = LocalDate.now(ZoneId.systemDefault())
+                .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val collected = linkedMapOf<String, SourceVideoItem>()
+            var cursor = ""
+
+            // Each request asks the backend for exactly one Kuaishou page.
+            repeat(MAX_SCAN_PAGES) {
+                val payload = JSONObject()
+                    .put("url", profile)
+                    .put("cookie", cookieHeader)
+                    .put("max_pages", 1)
+                    .put("cursor", cursor)
+                    .put("since_timestamp", sinceTimestamp)
+                val request = Request.Builder()
+                    .url("$SERVER_BASE/kuaishou/profile/videos")
+                    .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .header("Accept", "application/json")
+                    .build()
+
+                val page = serverClient.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    val json = runCatching { JSONObject(body) }.getOrNull()
+                    if (!response.isSuccessful) {
+                        val detail = json?.optString("detail")?.takeIf { it.isNotBlank() }
+                            ?: "Máy chủ Kuaishou trả HTTP ${response.code}."
+                        throw SourceUnavailableException(detail)
                     }
-                }.distinctBy { it.id }
+                    val root = json ?: throw SourceUnavailableException("Máy chủ trả dữ liệu Kuaishou không hợp lệ.")
+                    if (root.optString("status") != "success") {
+                        throw SourceUnavailableException("Máy chủ chưa xác nhận quét Kuaishou thành công.")
+                    }
+                    root
+                }
+
+                val entries = page.optJSONArray("videos")
+                    ?: throw SourceUnavailableException("Máy chủ không trả danh sách video Kuaishou.")
+                for (index in 0 until entries.length()) {
+                    val item = entries.optJSONObject(index) ?: continue
+                    val id = item.optString("id").takeIf { it.isNotBlank() && it != "null" } ?: continue
+                    val url = item.optString("url").takeIf { it.startsWith("https://") }
+                        ?: videoUrl(id)
+                    val published = item.opt("published_at")
+                    val publishedAt = when (published) {
+                        is Number -> published.toLong().let { if (it in 1..9_999_999_999L) it * 1000L else it }
+                        is String -> published.toLongOrNull()?.let { if (it in 1..9_999_999_999L) it * 1000L else it }
+                        else -> null
+                    }
+                    collected.putIfAbsent(id, SourceVideoItem(
+                        id = id,
+                        url = url,
+                        title = item.optString("title").takeIf { it.isNotBlank() },
+                        description = item.optString("description").takeIf { it.isNotBlank() },
+                        publishedAt = publishedAt
+                    ))
+                }
+
+                val nextCursor = page.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
+                if (!page.optBoolean("has_more", false) || nextCursor == null || nextCursor == cursor) {
+                    return@withContext collected.values.toList()
+                }
+                cursor = nextCursor
+                kotlinx.coroutines.delay(PAGE_DELAY_MS)
             }
+            collected.values.toList()
         } catch (e: CancellationException) {
             throw e
         } catch (e: SourceUnavailableException) {
@@ -154,5 +169,7 @@ class KuaishouAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapt
 
     private companion object {
         const val SERVER_BASE = "https://ai-video-server-59tj.onrender.com"
+        const val MAX_SCAN_PAGES = 20
+        const val PAGE_DELAY_MS = 900L
     }
 }
