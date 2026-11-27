@@ -84,7 +84,7 @@ fun AppNavHost(vm: MainViewModel) {
     val authScope = rememberCoroutineScope()
     var authenticated by remember { mutableStateOf(!auth.currentAccessToken().isNullOrBlank()) }
     var accountStatus by remember { mutableStateOf<MuChiAccountStatus?>(null) }
-    var accountStatusLoading by remember { mutableStateOf(false) }
+    var accountStatusLoading by remember { mutableStateOf(!auth.currentAccessToken().isNullOrBlank()) }
 
     LaunchedEffect(authenticated) {
         if (authenticated) {
