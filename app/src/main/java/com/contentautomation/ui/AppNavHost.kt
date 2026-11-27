@@ -53,6 +53,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.contentautomation.data.prefs.UserIdentity
 import com.contentautomation.data.remote.SupabaseAuth
+import com.contentautomation.data.remote.UserSupportRepository
+import com.contentautomation.data.remote.MuChiAccountStatus
 import com.contentautomation.ui.components.BottomItem
 import com.contentautomation.ui.components.GlassBackground
 import com.contentautomation.ui.components.GlassBottomBar
@@ -81,6 +83,25 @@ fun AppNavHost(vm: MainViewModel) {
     val auth = remember(context) { SupabaseAuth(context.applicationContext) }
     val authScope = rememberCoroutineScope()
     var authenticated by remember { mutableStateOf(!auth.currentAccessToken().isNullOrBlank()) }
+    var accountStatus by remember { mutableStateOf<MuChiAccountStatus?>(null) }
+    var accountStatusLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(authenticated) {
+        if (authenticated) {
+            accountStatusLoading = true
+            val support = UserSupportRepository(context.applicationContext, auth)
+            val status = runCatching { support.accountStatus() }
+                .recoverCatching {
+                    auth.refreshSession().getOrThrow()
+                    support.accountStatus()
+                }
+            accountStatus = status.getOrNull()
+            accountStatusLoading = false
+        } else {
+            accountStatus = null
+            accountStatusLoading = false
+        }
+    }
 
     val driveAuthorizationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -154,6 +175,31 @@ fun AppNavHost(vm: MainViewModel) {
         SupabaseLoginScreen(
             auth = auth,
             onSignedIn = { authenticated = true }
+        )
+        return
+    }
+    if (accountStatusLoading) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Text("Đang xác minh trạng thái tài khoản MuChi…")
+        }
+        return
+    }
+    if (accountStatus?.isBanned == true) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Tài khoản đã bị khóa") },
+            text = {
+                Text(accountStatus?.banReason?.takeIf { it.isNotBlank() }
+                    ?: "Tài khoản này hiện không được phép sử dụng MuChi. Vui lòng liên hệ quản trị viên.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    authScope.launch {
+                        auth.signOut()
+                        authenticated = false
+                    }
+                }) { Text("Đăng xuất") }
+            }
         )
         return
     }
