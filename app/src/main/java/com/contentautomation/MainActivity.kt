@@ -69,15 +69,17 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(showSplash) {
                 if (!showSplash) {
                     updateState = UpdateUiState.Checking
-                    val update = try {
-                        updateManager.checkForUpdate()
-                    } catch (_: Exception) {
-                        null
-                    }
-                    updateState = if (update != null) {
-                        UpdateUiState.Available(update)
-                    } else {
-                        UpdateUiState.Idle
+                    try {
+                        val update = updateManager.checkForUpdate()
+                        updateState = if (update != null) {
+                            UpdateUiState.Available(update)
+                        } else {
+                            UpdateUiState.Idle
+                        }
+                    } catch (error: Exception) {
+                        updateState = UpdateUiState.CheckFailed(
+                            error.message ?: "Không thể kết nối máy chủ cập nhật. Hãy kiểm tra Internet rồi thử lại."
+                        )
                     }
                 }
             }
@@ -88,15 +90,17 @@ class MainActivity : ComponentActivity() {
                     recheckAfterSkip = false
                     scope.launch {
                         updateState = UpdateUiState.Checking
-                        val update = try {
-                            updateManager.checkForUpdate()
-                        } catch (_: Exception) {
-                            null
-                        }
-                        updateState = if (update != null) {
-                            UpdateUiState.Available(update)
-                        } else {
-                            UpdateUiState.Idle
+                        try {
+                            val update = updateManager.checkForUpdate()
+                            updateState = if (update != null) {
+                                UpdateUiState.Available(update)
+                            } else {
+                                UpdateUiState.Idle
+                            }
+                        } catch (error: Exception) {
+                            updateState = UpdateUiState.CheckFailed(
+                                error.message ?: "Không thể kết nối máy chủ cập nhật. Hãy kiểm tra Internet rồi thử lại."
+                            )
                         }
                     }
                 }
@@ -146,6 +150,23 @@ class MainActivity : ComponentActivity() {
                                 updateState = UpdateUiState.Failed(
                                     update,
                                     error.message ?: "Không thể hoàn tất cập nhật."
+                                )
+                            }
+                        }
+                    },
+                    onCheckAgain = {
+                        scope.launch {
+                            updateState = UpdateUiState.Checking
+                            try {
+                                val update = updateManager.checkForUpdate()
+                                updateState = if (update != null) {
+                                    UpdateUiState.Available(update)
+                                } else {
+                                    UpdateUiState.Idle
+                                }
+                            } catch (error: Exception) {
+                                updateState = UpdateUiState.CheckFailed(
+                                    error.message ?: "Không thể kết nối máy chủ cập nhật. Hãy kiểm tra Internet rồi thử lại."
                                 )
                             }
                         }

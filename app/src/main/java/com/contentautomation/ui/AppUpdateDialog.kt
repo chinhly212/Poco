@@ -16,6 +16,7 @@ import com.contentautomation.update.AvailableUpdate
 sealed interface UpdateUiState {
     data object Idle : UpdateUiState
     data object Checking : UpdateUiState
+    data class CheckFailed(val message: String) : UpdateUiState
     data class Available(val update: AvailableUpdate) : UpdateUiState
     data class Downloading(val update: AvailableUpdate) : UpdateUiState
     data class Failed(val update: AvailableUpdate, val message: String) : UpdateUiState
@@ -26,9 +27,23 @@ fun AppUpdateDialog(
     state: UpdateUiState,
     onSkip: () -> Unit,
     onUpdate: (AvailableUpdate) -> Unit,
-    onRetry: (AvailableUpdate) -> Unit
+    onRetry: (AvailableUpdate) -> Unit,
+    onCheckAgain: () -> Unit
 ) {
     when (state) {
+        is UpdateUiState.CheckFailed -> {
+            AlertDialog(
+                onDismissRequest = onSkip,
+                title = { Text("Không kiểm tra được cập nhật") },
+                text = { Text(state.message) },
+                confirmButton = {
+                    Button(onClick = onCheckAgain) { Text("Kiểm tra lại") }
+                },
+                dismissButton = {
+                    TextButton(onClick = onSkip) { Text("Đóng") }
+                }
+            )
+        }
         is UpdateUiState.Available -> {
             AlertDialog(
                 onDismissRequest = onSkip,
