@@ -112,10 +112,8 @@ fun SettingsScreen(
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text("Thông tin tài khoản", fontSize = 11.sp, color = SettingsMuted, fontWeight = FontWeight.SemiBold)
                 Text(profile?.displayName?.ifBlank { "Chưa đặt tên" } ?: "Đang tải hồ sơ…", fontSize = 15.sp, color = SettingsInk, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Text(
-                    listOf(profile?.nickname?.takeIf { it.isNotBlank() }?.let { "Biệt danh: $it" }, profile?.accountId).filterNotNull().joinToString("  · ").ifBlank { "ID MuChi" },
-                    fontSize = 11.sp, color = SettingsMuted, maxLines = 1
-                )
+                Text("Biệt danh: ${profile?.nickname?.takeIf { it.isNotBlank() } ?: "Chưa đặt"}", fontSize = 11.sp, color = SettingsMuted, maxLines = 1)
+                Text("ID: ${profile?.accountId ?: "Đang tải…"}", fontSize = 11.sp, color = SettingsMuted, maxLines = 1)
             }
             Icon(Icons.Outlined.ChevronRight, contentDescription = "Chỉnh sửa hồ sơ", tint = SettingsMuted)
         }
