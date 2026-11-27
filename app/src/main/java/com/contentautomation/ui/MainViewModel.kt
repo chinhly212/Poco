@@ -13,6 +13,7 @@ import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.*
 import com.contentautomation.data.prefs.AppPreferences
 import com.contentautomation.data.remote.GoogleDriveClient
+import com.contentautomation.data.remote.UserSupportRepository
 import com.contentautomation.data.remote.DriveAccountInfo
 import com.contentautomation.data.remote.DriveFileItem
 import android.net.Uri
@@ -50,6 +51,7 @@ data class ScanProgressUiState(
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val application = app as ContentAutomationApp
+    private val userSupportRepository by lazy { UserSupportRepository(app.applicationContext) }
 
     private val _scanProgress = MutableStateFlow(ScanProgressUiState())
     val scanProgress = _scanProgress.asStateFlow()
@@ -231,6 +233,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _uiErrors.update { current ->
             (listOf(error) + current).take(50)
         }
+        // Chỉ gửi lỗi thật lên máy chủ; recordError cũng được dùng cho một số thông báo thành công.
+        val isSuccessNotice = title.startsWith("Kết nối thành công") ||
+            title.startsWith("Đã kết nối") ||
+            title.startsWith("Đã xóa API") ||
+            title.startsWith("Đã ngắt phiên") ||
+            title.startsWith("Đã lưu phiên")
+        if (!isSuccessNotice) {
+            viewModelScope.launch {
+                runCatching {
+                    userSupportRepository.reportError(
+                        message = "$title: $message",
+                        errorCode = kind.name,
+                        source = "android"
+                    )
+                }.onFailure { Log.w("MainViewModel", "Không thể gửi error log lên máy chủ", it) }
+            }
+        }
+
         viewModelScope.launch {
             runCatching {
                 application.database.notificationDao().insert(
