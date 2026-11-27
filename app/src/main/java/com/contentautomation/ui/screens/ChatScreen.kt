@@ -28,7 +28,6 @@ import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.GroupAdd
-import androidx.compose.material.icons.outlined.PersonAddAlt1
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.AlertDialog
@@ -204,14 +203,10 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
                         Icon(Icons.Outlined.ContentCopy, contentDescription = "Sao chép ID", modifier = Modifier.padding(start = 5.dp).size(15.dp), tint = ChatMuted)
                     }
                     IconButton(onClick = {
-                        groupMode = false
-                        search = ""
-                    }) { Icon(Icons.Outlined.PersonAddAlt1, contentDescription = "Thêm bạn", tint = ChatInk) }
-                    IconButton(onClick = {
                         groupMode = !groupMode
                         selectedMembers.clear()
                         groupTitle = ""
-                    }) { Icon(Icons.Outlined.GroupAdd, contentDescription = "Tạo nhóm", tint = ChatInk) }
+                    }) { Icon(Icons.Outlined.GroupAdd, contentDescription = "Thêm bạn hoặc tạo nhóm", tint = ChatInk) }
                 }
 
                 Row(
