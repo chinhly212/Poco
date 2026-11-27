@@ -138,8 +138,8 @@ private fun compressAvatar(context: android.content.Context, uri: Uri): ByteArra
     } else null
     val bitmap = if (Build.VERSION.SDK_INT >= 28) {
         ImageDecoder.decodeBitmap(source!!) { decoder, _, _ ->
-            decoder.isMutableRequired = true
-            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            decoder.setMutableRequired(true)
+            decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE)
         }
     } else {
         @Suppress("DEPRECATION")
