@@ -12,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,6 +31,8 @@ import com.contentautomation.data.db.entity.SourceAccount
 import com.contentautomation.data.remote.PocoChatProfile
 import com.contentautomation.data.remote.PocoChatRepository
 import com.contentautomation.data.remote.SupabaseAuth
+import com.contentautomation.data.remote.UserSupportRepository
+import com.contentautomation.data.remote.MuChiAccountStatus
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.outlined.Person
 import com.contentautomation.ui.DriveUiState
@@ -80,7 +84,31 @@ fun SettingsScreen(
     val profileRepo = remember(context, auth) { PocoChatRepository(context.applicationContext, auth) }
     var profile by remember { mutableStateOf<PocoChatProfile?>(null) }
     var showProfileEditor by remember { mutableStateOf(false) }
-    LaunchedEffect(auth) { runCatching { profileRepo.myProfile() }.onSuccess { profile = it } }
+    val supportRepo = remember(context, auth) { UserSupportRepository(context.applicationContext, auth) }
+    val scope = rememberCoroutineScope()
+    var accountStatus by remember { mutableStateOf<MuChiAccountStatus?>(null) }
+    var accountStatusMessage by remember { mutableStateOf("Đang đồng bộ trạng thái tài khoản…") }
+    var showSupportDialog by remember { mutableStateOf(false) }
+    var supportCategory by remember { mutableStateOf("support") }
+    var supportSubject by remember { mutableStateOf("") }
+    var supportMessage by remember { mutableStateOf("") }
+    var supportBusy by remember { mutableStateOf(false) }
+    var supportFeedback by remember { mutableStateOf("") }
+    fun refreshAccountStatus() {
+        scope.launch {
+            accountStatusMessage = "Đang đồng bộ trạng thái tài khoản…"
+            runCatching { supportRepo.accountStatus() }
+                .onSuccess {
+                    accountStatus = it
+                    accountStatusMessage = if (it.isBanned) "Tài khoản đang bị khóa" else "Đã đồng bộ với máy chủ"
+                }
+                .onFailure { accountStatusMessage = it.message ?: "Không thể đồng bộ tài khoản" }
+        }
+    }
+    LaunchedEffect(auth) {
+        runCatching { profileRepo.myProfile() }.onSuccess { profile = it }
+        refreshAccountStatus()
+    }
     val douyin = accounts.count { it.platform.equals("douyin", true) }
     val kuaishou = accounts.count { it.platform.equals("kuaishou", true) }
     var confirmLogout by remember { mutableStateOf(false) }
@@ -154,6 +182,39 @@ fun SettingsScreen(
                     }
                     if (index != accounts.lastIndex) SettingsDivider()
                 }
+            }
+        }
+
+        SettingsGroup("Gói dịch vụ & Hỗ trợ") {
+            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (accountStatus?.isPro == true) "MuChi Pro" else "MuChi Free",
+                        fontSize = 15.sp, color = if (accountStatus?.isPro == true) SettingsGreen else SettingsInk,
+                        fontWeight = FontWeight.SemiBold)
+                    Text(
+                        when {
+                            accountStatus?.isBanned == true -> "Tài khoản bị khóa: ${accountStatus?.banReason ?: "Liên hệ hỗ trợ"}"
+                            accountStatus?.proPermanent == true -> "Pro vĩnh viễn"
+                            accountStatus?.proExpiresAt != null -> "Hết hạn: ${accountStatus?.proExpiresAt}"
+                            accountStatus != null -> "Gói miễn phí"
+                            else -> accountStatusMessage
+                        },
+                        fontSize = 11.sp, color = if (accountStatus?.isBanned == true) SettingsRed else SettingsMuted
+                    )
+                    Text(accountStatusMessage, fontSize = 10.sp, color = SettingsMuted)
+                }
+                TextButton(onClick = { refreshAccountStatus() }) { Text("Làm mới") }
+            }
+            SettingsDivider()
+            Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Trung tâm hỗ trợ", fontSize = 14.sp, color = SettingsInk, fontWeight = FontWeight.Medium)
+                    Text("Gửi yêu cầu trực tiếp đến quản trị MuChi", fontSize = 11.sp, color = SettingsMuted)
+                }
+                TextButton(onClick = { showSupportDialog = true }) { Text("Gửi yêu cầu") }
+            }
+            supportFeedback.takeIf { it.isNotBlank() }?.let {
+                Text(it, fontSize = 11.sp, color = SettingsGreen, modifier = Modifier.padding(bottom = 10.dp))
             }
         }
 
@@ -245,6 +306,45 @@ fun SettingsScreen(
             Text("Đăng xuất tài khoản", fontSize = 14.sp, color = SettingsRed, fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.height(8.dp))
+    }
+
+    if (showSupportDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!supportBusy) showSupportDialog = false },
+            title = { Text("Gửi yêu cầu hỗ trợ") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(value = supportCategory, onValueChange = { supportCategory = it },
+                        label = { Text("Danh mục") }, singleLine = true)
+                    OutlinedTextField(value = supportSubject, onValueChange = { supportSubject = it },
+                        label = { Text("Tiêu đề") }, singleLine = true)
+                    OutlinedTextField(value = supportMessage, onValueChange = { supportMessage = it },
+                        label = { Text("Mô tả vấn đề") }, minLines = 3)
+                    if (supportFeedback.isNotBlank()) Text(supportFeedback, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !supportBusy && supportMessage.isNotBlank(), onClick = {
+                    scope.launch {
+                        supportBusy = true
+                        supportFeedback = ""
+                        runCatching {
+                            supportRepo.createTicket(supportCategory.ifBlank { "support" },
+                                supportSubject.ifBlank { "Yêu cầu hỗ trợ" }, supportMessage)
+                        }.onSuccess {
+                            supportFeedback = "Đã gửi yêu cầu hỗ trợ thành công."
+                            supportMessage = ""
+                            supportSubject = ""
+                            showSupportDialog = false
+                        }.onFailure {
+                            supportFeedback = it.message ?: "Gửi yêu cầu thất bại."
+                        }
+                        supportBusy = false
+                    }
+                }) { Text(if (supportBusy) "Đang gửi…" else "Gửi") }
+            },
+            dismissButton = { TextButton(enabled = !supportBusy, onClick = { showSupportDialog = false }) { Text("Đóng") } }
+        )
     }
 
     if (showProfileEditor) {
