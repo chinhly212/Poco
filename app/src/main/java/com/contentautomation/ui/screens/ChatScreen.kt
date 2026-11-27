@@ -91,11 +91,12 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
     val appearancePrefs = remember(context) {
         context.getSharedPreferences("muchi_chat_appearance", Context.MODE_PRIVATE)
     }
-    var ownBubbleColor by remember {
-        mutableStateOf(Color(appearancePrefs.getInt("own_bubble_color", 0xFF18181B.toInt())))
+    val appearanceKey = selected?.id ?: "default"
+    var ownBubbleColor by remember(appearanceKey) {
+        mutableStateOf(Color(appearancePrefs.getInt("own_bubble_color_$appearanceKey", 0xFF18181B.toInt())))
     }
-    var chatBackgroundUri by remember {
-        mutableStateOf(appearancePrefs.getString("chat_background_uri", null))
+    var chatBackgroundUri by remember(appearanceKey) {
+        mutableStateOf(appearancePrefs.getString("chat_background_uri_$appearanceKey", null))
     }
     var showAppearanceDialog by remember { mutableStateOf(false) }
     val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -104,7 +105,7 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
                 context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             chatBackgroundUri = uri.toString()
-            appearancePrefs.edit().putString("chat_background_uri", uri.toString()).apply()
+            appearancePrefs.edit().putString("chat_background_uri_$appearanceKey", uri.toString()).apply()
         }
     }
     var myId by remember { mutableStateOf<String?>(null) }
@@ -502,7 +503,7 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
                                     )
                                     .clickable {
                                         ownBubbleColor = color
-                                        appearancePrefs.edit().putInt("own_bubble_color", color.toArgb()).apply()
+                                        appearancePrefs.edit().putInt("own_bubble_color_$appearanceKey", color.toArgb()).apply()
                                     }
                             )
                             Text(label, fontSize = 10.sp, color = ChatMuted)
@@ -528,7 +529,7 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
                 if (!chatBackgroundUri.isNullOrBlank()) {
                     TextButton(onClick = {
                         chatBackgroundUri = null
-                        appearancePrefs.edit().remove("chat_background_uri").apply()
+                        appearancePrefs.edit().remove("chat_background_uri_$appearanceKey").apply()
                     }) { Text("Xóa ảnh nền", color = ChatMuted) }
                 }
                 Text("Lớp phủ tối nhẹ giúp nội dung tin nhắn luôn dễ đọc.", fontSize = 11.sp, color = ChatMuted)
