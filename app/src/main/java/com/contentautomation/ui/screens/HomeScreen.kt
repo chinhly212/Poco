@@ -157,6 +157,25 @@ private fun PipelineCard(jobs: List<PipelineJob>, onOpenWork: () -> Unit) {
             Spacer(Modifier.weight(1f))
         }
 
+        val completion = if (jobs.isEmpty()) 0f else done.toFloat() / jobs.size
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                GText("Tỷ lệ hoàn thành", 11.sp, color = Muted)
+                GText("${(completion * 100).toInt()}%", 11.sp, weight = FontWeight.SemiBold, color = Ink)
+            }
+            Box(
+                Modifier.fillMaxWidth().height(6.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(Color(0xFFE4E4E7))
+            ) {
+                Box(
+                    Modifier.fillMaxWidth(completion.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .background(SuccessGreen)
+                )
+            }
+        }
+
         if (jobs.isEmpty()) {
             GText(
                 "Chưa có công việc. Thêm tài khoản nguồn rồi chọn Quét ngay.",
