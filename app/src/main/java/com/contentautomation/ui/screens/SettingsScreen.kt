@@ -225,8 +225,7 @@ fun SettingsScreen(
 private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SettingsWhite)
-            .border(1.dp, SettingsBorder, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp),
-        content = content
+            .border(1.dp, SettingsBorder, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp)
     ) {
         Text(title, modifier = Modifier.padding(top = 13.dp, bottom = 4.dp), fontSize = 11.sp, color = SettingsMuted, fontWeight = FontWeight.Bold)
         content()
