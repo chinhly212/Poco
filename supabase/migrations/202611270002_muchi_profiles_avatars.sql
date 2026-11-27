@@ -7,6 +7,7 @@ alter table public.poco_profiles
 
 -- Admin-facing canonical profile mirror. Keep account_id stable and searchable.
 create table if not exists public.profiles (
+    id uuid not null unique,
     user_id uuid primary key references auth.users(id) on delete cascade,
     account_id text not null unique,
     display_name text not null default '',
@@ -17,6 +18,7 @@ create table if not exists public.profiles (
 
 -- Also handle projects where public.profiles already existed with a partial schema.
 alter table public.profiles
+    add column if not exists id uuid,
     add column if not exists user_id uuid references auth.users(id) on delete cascade,
     add column if not exists account_id text,
     add column if not exists display_name text not null default '',
@@ -68,10 +70,11 @@ security definer
 set search_path = public
 as $$
 begin
-    insert into public.profiles(user_id, account_id, display_name, nickname, avatar_url, updated_at)
-    values (new.user_id, new.account_id, coalesce(new.display_name, ''),
+    insert into public.profiles(id, user_id, account_id, display_name, nickname, avatar_url, updated_at)
+    values (new.user_id, new.user_id, new.account_id, coalesce(new.display_name, ''),
             coalesce(new.nickname, ''), new.avatar_url, coalesce(new.updated_at, now()))
     on conflict (user_id) do update set
+        id = excluded.id,
         account_id = excluded.account_id,
         display_name = excluded.display_name,
         nickname = excluded.nickname,
@@ -90,11 +93,12 @@ create trigger muchi_sync_profile_mirror_trigger
     for each row execute procedure public.muchi_sync_profile_mirror();
 
 -- Backfill all existing accounts, including profiles created before this migration.
-insert into public.profiles(user_id, account_id, display_name, nickname, avatar_url, updated_at)
-select user_id, account_id, coalesce(display_name, ''), coalesce(nickname, ''),
+insert into public.profiles(id, user_id, account_id, display_name, nickname, avatar_url, updated_at)
+select user_id, user_id, account_id, coalesce(display_name, ''), coalesce(nickname, ''),
        avatar_url, coalesce(updated_at, now())
 from public.poco_profiles
 on conflict (user_id) do update set
+    id = excluded.id,
     account_id = excluded.account_id,
     display_name = excluded.display_name,
     nickname = excluded.nickname,
