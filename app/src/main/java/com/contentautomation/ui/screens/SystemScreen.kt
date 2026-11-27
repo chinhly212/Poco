@@ -296,18 +296,10 @@ private fun JobCard(job: PipelineJob, onPauseJob: (String) -> Unit, onResumeJob:
                 GText(job.sourceVideoId, 11.sp, color = Muted, modifier = Modifier.weight(1f))
                 GText("Thử lại: ${job.retries}", 11.sp, color = Muted)
             }
-            val stageIndex = resumableStages.indexOf(job.stage).coerceAtLeast(0)
-            val stageProgress = if (job.status == PipelineStatus.DONE) 1f else stageIndex.toFloat() / resumableStages.size
             GText(
-                "Tiến độ công đoạn: ${if (job.status == PipelineStatus.DONE) resumableStages.size else stageIndex}/${resumableStages.size}",
+                "Công đoạn hiện tại: ${stageLabel(job.stage)}",
                 10.sp,
                 color = Muted
-            )
-            LinearProgressIndicator(
-                progress = stageProgress,
-                modifier = Modifier.fillMaxWidth(),
-                color = Ink,
-                trackColor = BorderColor
             )
             if (!job.error.isNullOrBlank()) {
                 GText(job.error!!, 11.sp, color = if (job.status == PipelineStatus.DONE) Green else Red)
