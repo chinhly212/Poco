@@ -179,7 +179,6 @@ fun AiScreen(vm: MainViewModel) {
                                 busy = false
                             }
                         }
-        }
     }
 
     Column(
