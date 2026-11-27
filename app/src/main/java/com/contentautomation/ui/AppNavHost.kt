@@ -40,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -62,6 +63,7 @@ import com.contentautomation.ui.screens.SettingsScreen
 import com.contentautomation.ui.screens.SystemScreen
 import com.contentautomation.ui.screens.ApiSettingsScreen
 import com.contentautomation.ui.screens.ChatScreen
+import kotlinx.coroutines.launch
 
 private object MuChiRoutes {
     const val HOME = "home"
@@ -77,6 +79,7 @@ fun AppNavHost(vm: MainViewModel) {
 
     val context = LocalContext.current
     val auth = remember(context) { SupabaseAuth(context.applicationContext) }
+    val authScope = rememberCoroutineScope()
     var authenticated by remember { mutableStateOf(!auth.currentAccessToken().isNullOrBlank()) }
 
     val driveAuthorizationLauncher = rememberLauncherForActivityResult(
@@ -374,6 +377,19 @@ fun AppNavHost(vm: MainViewModel) {
                             vm.deleteAccount(id)
                         },
                         onOpenApi = { navigateTo(MuChiRoutes.API) },
+                        onLogout = {
+                            authScope.launch {
+                                auth.signOut()
+                                    .onSuccess { authenticated = false }
+                                    .onFailure { error ->
+                                        Toast.makeText(
+                                            context,
+                                            error.message ?: "Không thể đăng xuất. Hãy thử lại.",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                            }
+                        },
                         notificationsGranted = Build.VERSION.SDK_INT < 33 ||
                             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
                         storagePermissionRequired = Build.VERSION.SDK_INT <= 28,
