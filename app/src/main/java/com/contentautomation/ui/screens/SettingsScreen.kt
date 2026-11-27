@@ -233,6 +233,30 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
 }
 
 @Composable
+private fun SessionRow(
+    platform: String,
+    saved: Boolean,
+    onLogin: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 58.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Phiên $platform", fontSize = 13.sp, color = SettingsInk, fontWeight = FontWeight.Medium)
+            Text(if (saved) "Đã lưu phiên" else "Chưa đăng nhập", fontSize = 11.sp,
+                color = if (saved) SettingsGreen else SettingsMuted)
+        }
+        if (saved) {
+            TextButton(onClick = onLogin, contentPadding = PaddingValues(horizontal = 5.dp)) {
+                Text("Đăng nhập lại", fontSize = 11.sp, color = SettingsInk)
+            }
+            TextButton(onClick = onDelete, contentPadding = PaddingValues(horizontal = 5.dp)) {
+                Text("Xóa", fontSize = 11.sp, color = SettingsRed)
+            }
+        } else SmallAction("Đăng nhập", onLogin)
+    }
+}
+
+@Composable
 private fun SettingsDivider() {
     Box(Modifier.fillMaxWidth().height(1.dp).background(SettingsBorder))
 }
