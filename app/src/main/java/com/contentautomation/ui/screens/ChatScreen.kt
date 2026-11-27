@@ -3,6 +3,10 @@ package com.contentautomation.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,6 +34,8 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -52,11 +58,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.contentautomation.data.remote.PocoChatConversation
 import com.contentautomation.data.remote.PocoChatMessage
 import com.contentautomation.data.remote.PocoChatProfile
@@ -78,6 +87,25 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val preferences = remember(context) {
         context.getSharedPreferences("muchi_chat_nicknames", Context.MODE_PRIVATE)
+    }
+    val appearancePrefs = remember(context) {
+        context.getSharedPreferences("muchi_chat_appearance", Context.MODE_PRIVATE)
+    }
+    var ownBubbleColor by remember {
+        mutableStateOf(Color(appearancePrefs.getInt("own_bubble_color", 0xFF18181B.toInt())))
+    }
+    var chatBackgroundUri by remember {
+        mutableStateOf(appearancePrefs.getString("chat_background_uri", null))
+    }
+    var showAppearanceDialog by remember { mutableStateOf(false) }
+    val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            chatBackgroundUri = uri.toString()
+            appearancePrefs.edit().putString("chat_background_uri", uri.toString()).apply()
+        }
     }
     var myId by remember { mutableStateOf<String?>(null) }
     var myAccountId by remember { mutableStateOf<String?>(null) }
@@ -276,7 +304,7 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
                                 }.padding(vertical = 9.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                ChatAvatar(profile.displayName.ifBlank { profile.accountId }, 44)
+                                ChatAvatar(profile.displayName.ifBlank { profile.accountId }, 44, profile.avatarUrl)
                                 Column(Modifier.weight(1f).padding(start = 11.dp)) {
                                     Text(profile.displayName.ifBlank { profile.accountId.ifBlank { profile.userId } }, fontWeight = FontWeight.SemiBold, color = ChatInk, fontSize = 14.sp)
                                     Text("${profile.accountId}  ·  @${profile.username}", fontSize = 12.sp, color = ChatMuted)
@@ -313,7 +341,7 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
                                     }.padding(vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    ChatAvatar(title, 44)
+                                    ChatAvatar(title, 44, conversation.avatarUrl)
                                     Column(Modifier.weight(1f).padding(start = 11.dp)) {
                                         Text(title, fontWeight = FontWeight.SemiBold, color = ChatInk, fontSize = 14.sp, maxLines = 1)
                                         Text(conversation.lastMessage.ifBlank { "Mở cuộc trò chuyện" }, color = ChatMuted, fontSize = 12.sp, maxLines = 1)
@@ -335,7 +363,7 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
                     IconButton(onClick = { selected = null; messages = emptyList(); peerProfile = null }) {
                         Icon(Icons.Outlined.ArrowBack, contentDescription = "Quay lại", tint = ChatInk)
                     }
-                    ChatAvatar(peerName, 36)
+                    ChatAvatar(peerName, 36, peerProfile?.avatarUrl)
                     Text(
                         peerName,
                         modifier = Modifier.padding(start = 9.dp).weight(1f),
@@ -347,12 +375,27 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
                             showNicknameDialog = true
                         }) { Icon(Icons.Outlined.Edit, contentDescription = "Sửa biệt danh", tint = ChatMuted) }
                     }
+                    IconButton(onClick = { showAppearanceDialog = true }) {
+                        Icon(Icons.Outlined.MoreVert, contentDescription = "Tùy chỉnh phòng chat", tint = ChatInk)
+                    }
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(ChatBorder))
-                LazyColumn(
-                    Modifier.weight(1f).fillMaxWidth().background(ChatWhite).padding(horizontal = 14.dp, vertical = 8.dp),
-                    reverseLayout = false
-                ) {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    if (!chatBackgroundUri.isNullOrBlank()) {
+                        AsyncImage(
+                            model = chatBackgroundUri,
+                            contentDescription = "Ảnh nền phòng chat",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.22f)))
+                    } else {
+                        Box(Modifier.fillMaxSize().background(ChatWhite))
+                    }
+                    LazyColumn(
+                        Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 8.dp),
+                        reverseLayout = false
+                    ) {
                     items(messages, key = { it.id }) { message ->
                         val mine = message.senderId == myId
                         Row(
@@ -367,13 +410,14 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
                                         if (mine) RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 4.dp)
                                         else RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 4.dp, bottomEnd = 16.dp)
                                     )
-                                    .background(if (mine) ChatInk else ChatSurface)
+                                    .background(if (mine) ownBubbleColor else ChatSurface.copy(alpha = 0.96f))
                                     .padding(horizontal = 13.dp, vertical = 9.dp),
-                                color = if (mine) ChatWhite else ChatInk,
+                                color = if (mine) Color.White else ChatInk,
                                 fontSize = 14.sp
                             )
                         }
                     }
+                }
                 }
                 Row(
                     Modifier.fillMaxWidth().background(ChatWhite).imePadding().padding(horizontal = 12.dp, vertical = 8.dp)
@@ -417,6 +461,50 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
         }
     }
 
+    if (showAppearanceDialog) {
+        AlertDialog(
+            onDismissRequest = { showAppearanceDialog = false },
+            title = { Text("Tùy chỉnh phòng Chat") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Màu bong bóng tin nhắn của bạn", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        listOf(
+                            "Đen" to Color(0xFF18181B),
+                            "Xanh navy" to Color(0xFF1E3A8A),
+                            "Xanh rêu" to Color(0xFF365A40),
+                            "Tím than" to Color(0xFF43305D)
+                        ).forEach { (label, color) ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    Modifier.size(34.dp).clip(CircleShape).background(color)
+                                        .border(if (ownBubbleColor == color) 3.dp else 1.dp, if (ownBubbleColor == color) Color(0xFF9CA3AF) else ChatBorder, CircleShape)
+                                        .clickable {
+                                            ownBubbleColor = color
+                                            appearancePrefs.edit().putInt("own_bubble_color", color.toArgb()).apply()
+                                        }
+                                )
+                                Text(label, fontSize = 9.sp, color = ChatMuted)
+                            }
+                        }
+                    }
+                    TextButton(onClick = { backgroundPicker.launch(arrayOf("image/*")) }) {
+                        Icon(Icons.Outlined.Image, contentDescription = null)
+                        Text(" Chọn ảnh nền từ điện thoại")
+                    }
+                    if (!chatBackgroundUri.isNullOrBlank()) {
+                        TextButton(onClick = {
+                            chatBackgroundUri = null
+                            appearancePrefs.edit().remove("chat_background_uri").apply()
+                        }) { Text("Xóa ảnh nền") }
+                    }
+                    Text("Ảnh nền được lưu trên thiết bị này; lớp phủ tối nhẹ giúp nội dung dễ đọc.", fontSize = 11.sp, color = ChatMuted)
+                }
+            },
+            confirmButton = { TextButton(onClick = { showAppearanceDialog = false }) { Text("Xong") } }
+        )
+    }
+
     if (showNicknameDialog && peerProfile != null) {
         AlertDialog(
             onDismissRequest = { showNicknameDialog = false },
@@ -450,13 +538,22 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
 }
 
 @Composable
-private fun ChatAvatar(name: String, size: Int) {
+private fun ChatAvatar(name: String, size: Int, avatarUrl: String? = null) {
     val initial = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
     Box(
         Modifier.size(size.dp).clip(CircleShape).background(ChatSurface),
         contentAlignment = Alignment.Center
     ) {
-        Text(initial, color = ChatInk, fontWeight = FontWeight.SemiBold, fontSize = (size * 0.38f).sp)
+        if (!avatarUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = avatarUrl,
+                contentDescription = "Ảnh đại diện $name",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Text(initial, color = ChatInk, fontWeight = FontWeight.SemiBold, fontSize = (size * 0.38f).sp)
+        }
     }
 }
 
