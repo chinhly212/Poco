@@ -94,7 +94,7 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
                     listOf("message", "msg", "error_description", "details", "hint", "error", "code")
                         .firstNotNullOfOrNull { key -> json.optString(key).takeIf(String::isNotBlank) }
                 }.getOrDefault("")
-                error(detail.ifBlank { "Máy chủ POCO trả HTTP ${it.code}" })
+                error((detail ?: "").ifBlank { "Máy chủ POCO trả HTTP ${it.code}" })
             }
             responseText
         }
