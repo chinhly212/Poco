@@ -242,12 +242,12 @@ fun AppNavHost(vm: MainViewModel) {
                     items = listOf(
                         BottomItem(
                             label = "Trang chủ",
-                            icon = Icons.Rounded.Home
+                            icon = Icons.Outlined.Home
                         ),
-                        BottomItem(label = "Công việc", icon = Icons.Rounded.Work),
-                        BottomItem(label = "AI", icon = Icons.Rounded.AutoAwesome),
-                        BottomItem(label = "Chat", icon = Icons.Rounded.ChatBubbleOutline),
-                        BottomItem(label = "Cài đặt", icon = Icons.Rounded.Settings)
+                        BottomItem(label = "Công việc", icon = Icons.Outlined.WorkOutline),
+                        BottomItem(label = "AI", icon = Icons.Outlined.AutoAwesome),
+                        BottomItem(label = "Chat", icon = Icons.Outlined.ChatBubbleOutline),
+                        BottomItem(label = "Cài đặt", icon = Icons.Outlined.Settings)
                     ),
 
                     selectedIndex = selectedIndex,
