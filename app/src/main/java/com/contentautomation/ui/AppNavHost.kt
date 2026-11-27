@@ -344,6 +344,7 @@ fun AppNavHost(vm: MainViewModel) {
                 composable(MuChiRoutes.SETTINGS) {
 
                     SettingsScreen(
+                        auth = auth,
                         deviceId = deviceId,
                         accounts = accounts,
                         appVersion = appVersion,
