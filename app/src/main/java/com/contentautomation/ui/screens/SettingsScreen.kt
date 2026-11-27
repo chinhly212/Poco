@@ -10,6 +10,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.contentautomation.data.db.entity.SourceAccount
+import com.contentautomation.ui.DriveUiState
+import com.contentautomation.ui.models.StorageInfo
+import com.contentautomation.data.remote.DriveFileItem
 import com.contentautomation.ui.components.*
 
 @Composable
@@ -17,6 +20,14 @@ fun SettingsScreen(
     deviceId: String,
     accounts: List<SourceAccount>,
     appVersion: String,
+    storage: StorageInfo,
+    drive: DriveUiState,
+    onConnectDrive: () -> Unit,
+    onRefreshDrive: () -> Unit,
+    onPickUpload: () -> Unit,
+    onDeleteDriveFile: (String) -> Unit,
+    onDownloadDriveFile: (String, String) -> Unit,
+    onDisconnectDrive: () -> Unit,
     onCopyId: () -> Unit,
     onAddAccount: () -> Unit,
     onSetAccountEnabled: (String, Boolean) -> Unit,
@@ -89,6 +100,23 @@ fun SettingsScreen(
                 }
             }
         }
+
+        GlassCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                GText("LƯU TRỮ & GOOGLE DRIVE", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
+                GText("Quản lý dung lượng điện thoại và tài khoản Google Drive ngay tại đây.", 12.sp, color = GlassColors.InkSoft)
+            }
+        }
+        StorageSettingsSection(
+            storage = storage,
+            drive = drive,
+            onConnectDrive = onConnectDrive,
+            onRefreshDrive = onRefreshDrive,
+            onPickUpload = onPickUpload,
+            onDeleteDriveFile = onDeleteDriveFile,
+            onDownloadDriveFile = onDownloadDriveFile,
+            onDisconnectDrive = onDisconnectDrive
+        )
 
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

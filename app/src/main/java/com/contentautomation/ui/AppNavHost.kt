@@ -26,9 +26,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.ChatBubbleOutline
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Work
-import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -60,14 +60,14 @@ import com.contentautomation.ui.screens.HomeScreen
 import com.contentautomation.ui.screens.AiScreen
 import com.contentautomation.ui.screens.SettingsScreen
 import com.contentautomation.ui.screens.SystemScreen
-import com.contentautomation.ui.screens.StorageScreen
 import com.contentautomation.ui.screens.ApiSettingsScreen
+import com.contentautomation.ui.screens.ChatScreen
 
 private object MuChiRoutes {
     const val HOME = "home"
     const val WORK = "work"
     const val AI = "ai"
-    const val STORAGE = "storage"
+    const val CHAT = "chat"
     const val SETTINGS = "settings"
     const val API = "api"
 }
@@ -184,7 +184,7 @@ fun AppNavHost(vm: MainViewModel) {
         MuChiRoutes.HOME -> 0
         MuChiRoutes.WORK -> 1
         MuChiRoutes.AI -> 2
-        MuChiRoutes.STORAGE -> 3
+        MuChiRoutes.CHAT -> 3
         MuChiRoutes.SETTINGS, MuChiRoutes.API -> 4
         else -> 0
     }
@@ -243,7 +243,7 @@ fun AppNavHost(vm: MainViewModel) {
                         ),
                         BottomItem(label = "Công việc", icon = Icons.Rounded.Work),
                         BottomItem(label = "AI", icon = Icons.Rounded.AutoAwesome),
-                        BottomItem(label = "Dung lượng", icon = Icons.Rounded.Storage),
+                        BottomItem(label = "Chat", icon = Icons.Rounded.ChatBubbleOutline),
                         BottomItem(label = "Cài đặt", icon = Icons.Rounded.Settings)
                     ),
 
@@ -254,7 +254,7 @@ fun AppNavHost(vm: MainViewModel) {
                             0 -> navigateTo(MuChiRoutes.HOME)
                             1 -> navigateTo(MuChiRoutes.WORK)
                             2 -> navigateTo(MuChiRoutes.AI)
-                            3 -> navigateTo(MuChiRoutes.STORAGE)
+                            3 -> navigateTo(MuChiRoutes.CHAT)
                             4 -> navigateTo(MuChiRoutes.SETTINGS)
                         }
                     }
@@ -331,17 +331,8 @@ fun AppNavHost(vm: MainViewModel) {
                     AiScreen(vm)
                 }
 
-                composable(MuChiRoutes.STORAGE) {
-                    StorageScreen(
-                        storage = phoneStorage,
-                        drive = driveState,
-                        onConnectDrive = { connectDrive() },
-                        onRefreshDrive = { vm.refreshDrive() },
-                        onPickUpload = { driveUploadLauncher.launch(arrayOf("*/*")) },
-                        onDeleteDriveFile = { vm.deleteDriveFile(it) },
-                        onDownloadDriveFile = { id, name -> vm.downloadDriveFile(id, name) },
-                        onDisconnectDrive = { vm.disconnectDrive() }
-                    )
+                composable(MuChiRoutes.CHAT) {
+                    ChatScreen(auth = auth)
                 }
 
                 composable(MuChiRoutes.SETTINGS) {
@@ -350,6 +341,14 @@ fun AppNavHost(vm: MainViewModel) {
                         deviceId = deviceId,
                         accounts = accounts,
                         appVersion = appVersion,
+                        storage = phoneStorage,
+                        drive = driveState,
+                        onConnectDrive = { connectDrive() },
+                        onRefreshDrive = { vm.refreshDrive() },
+                        onPickUpload = { driveUploadLauncher.launch(arrayOf("*/*")) },
+                        onDeleteDriveFile = { vm.deleteDriveFile(it) },
+                        onDownloadDriveFile = { id, name -> vm.downloadDriveFile(id, name) },
+                        onDisconnectDrive = { vm.disconnectDrive() },
 
                         onCopyId = {
                             val clipboard =
