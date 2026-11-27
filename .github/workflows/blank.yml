@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '.github/workflows/**'
   workflow_dispatch:
 
 concurrency:
@@ -139,17 +141,41 @@ jobs:
 
           git fetch --tags --force
           if [ -n "$PREVIOUS_TAG" ] && git rev-parse -q --verify "refs/tags/$PREVIOUS_TAG" >/dev/null; then
-            git log --no-merges --format='- %s%n%b' "$PREVIOUS_TAG"..HEAD > "$RUNNER_TEMP/release-notes.md"
+            git log --no-merges --format='%s' "$PREVIOUS_TAG"..HEAD > "$RUNNER_TEMP/commit-subjects.txt"
           else
-            cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
-          - Thêm cập nhật APK trực tiếp ngay trong ứng dụng bằng bản vá Delta.
-          - Hiển thị phiên bản mới và nội dung thay đổi khi mở ứng dụng.
-          - Kiểm tra SHA-256 và chữ ký cài đặt trước khi chuyển sang trình cài đặt Android.
-          NOTES
+            printf '%s\\n' "Enable in-app updates" > "$RUNNER_TEMP/commit-subjects.txt"
           fi
-          if [ ! -s "$RUNNER_TEMP/release-notes.md" ]; then
-            echo "- Sửa lỗi và cải thiện độ ổn định." > "$RUNNER_TEMP/release-notes.md"
-          fi
+
+          # Nội dung giới thiệu hiển thị trong MuChi luôn được tạo bằng tiếng Việt.
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          subjects = Path(os.environ["RUNNER_TEMP"] + "/commit-subjects.txt").read_text(
+              encoding="utf-8"
+          ).splitlines()
+          notes = []
+          for subject in subjects:
+              s = subject.lower()
+              if "403" in s or ("chat" in s and ("logout" in s or "account" in s)):
+                  note = "- Khắc phục lỗi HTTP 403 khi sử dụng Chat và đăng xuất tài khoản."
+              elif "updater" in s or "in-app update" in s or "update" in s:
+                  note = "- Cải thiện tính năng kiểm tra và cập nhật phiên bản trực tiếp trong ứng dụng."
+              elif "chat" in s or "message" in s:
+                  note = "- Cải thiện chức năng trò chuyện và gửi nhận tin nhắn."
+              elif "logout" in s or "sign out" in s or "account" in s:
+                  note = "- Cải thiện chức năng tài khoản và đăng xuất."
+              else:
+                  note = "- Sửa lỗi và cải thiện độ ổn định của ứng dụng."
+              if note not in notes:
+                  notes.append(note)
+
+          if not notes:
+              notes = ["- Sửa lỗi và cải thiện độ ổn định của ứng dụng."]
+          Path(os.environ["RUNNER_TEMP"] + "/release-notes.md").write_text(
+              "\\n".join(notes) + "\\n", encoding="utf-8"
+          )
+          PY
 
           export TAG VERSION_CODE VERSION_NAME PREVIOUS REPOSITORY
           python3 - <<'PY'
