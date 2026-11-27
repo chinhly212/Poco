@@ -24,11 +24,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.ChatBubbleOutline
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Work
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.WorkOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -158,6 +158,7 @@ fun AppNavHost(vm: MainViewModel) {
         return
     }
     val navController = rememberNavController()
+    var isChatDetail by remember { mutableStateOf(false) }
 
     val isSystemRunning by
         vm.isSystemRunning.collectAsStateWithLifecycle()
@@ -238,16 +239,17 @@ fun AppNavHost(vm: MainViewModel) {
             containerColor = Color.Transparent,
 
             bottomBar = {
+                if (!isChatDetail) {
                 GlassBottomBar(
                     items = listOf(
                         BottomItem(
                             label = "Trang chủ",
-                            icon = Icons.Rounded.Home
+                            icon = Icons.Outlined.Home
                         ),
-                        BottomItem(label = "Công việc", icon = Icons.Rounded.Work),
-                        BottomItem(label = "AI", icon = Icons.Rounded.AutoAwesome),
-                        BottomItem(label = "Chat", icon = Icons.Rounded.ChatBubbleOutline),
-                        BottomItem(label = "Cài đặt", icon = Icons.Rounded.Settings)
+                        BottomItem(label = "Công việc", icon = Icons.Outlined.WorkOutline),
+                        BottomItem(label = "AI", icon = Icons.Outlined.AutoAwesome),
+                        BottomItem(label = "Chat", icon = Icons.Outlined.ChatBubbleOutline),
+                        BottomItem(label = "Cài đặt", icon = Icons.Outlined.Settings)
                     ),
 
                     selectedIndex = selectedIndex,
@@ -262,6 +264,7 @@ fun AppNavHost(vm: MainViewModel) {
                         }
                     }
                 )
+                }
             }
         ) { innerPadding ->
 
@@ -335,7 +338,7 @@ fun AppNavHost(vm: MainViewModel) {
                 }
 
                 composable(MuChiRoutes.CHAT) {
-                    ChatScreen(auth = auth)
+                    ChatScreen(auth = auth, onDetailChanged = { isChatDetail = it })
                 }
 
                 composable(MuChiRoutes.SETTINGS) {

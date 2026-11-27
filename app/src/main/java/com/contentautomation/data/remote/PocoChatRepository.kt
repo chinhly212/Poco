@@ -144,15 +144,67 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
         val ids = (0 until memberships.length()).map { memberships.getJSONObject(it).getString("conversation_id") }
         val inFilter = ids.joinToString(",", "(", ")")
         val rows = JSONArray(request("/rest/v1/poco_conversations?select=id,title,is_group,updated_at&id=in.${enc(inFilter)}&order=updated_at.desc&limit=100"))
+
+        val members = JSONArray(request("/rest/v1/poco_conversation_members?select=conversation_id,user_id&conversation_id=in.${enc(inFilter)}"))
+        val peerByConversation = mutableMapOf<String, String>()
+        for (i in 0 until members.length()) {
+            val member = members.getJSONObject(i)
+            val conversationId = member.optString("conversation_id")
+            val memberId = member.optString("user_id")
+            if (memberId.isNotBlank() && memberId != userId) peerByConversation.putIfAbsent(conversationId, memberId)
+        }
+
+        val peerIds = peerByConversation.values.distinct()
+        val profilesByUser = mutableMapOf<String, PocoChatProfile>()
+        if (peerIds.isNotEmpty()) {
+            val profileFilter = peerIds.joinToString(",", "(", ")")
+            val profiles = JSONArray(request("/rest/v1/poco_profiles?select=user_id,account_id,display_name,username&user_id=in.${enc(profileFilter)}"))
+            for (i in 0 until profiles.length()) {
+                val p = profiles.getJSONObject(i)
+                val profile = PocoChatProfile(p.getString("user_id"), p.optString("account_id"), p.optString("display_name"), p.optString("username"))
+                profilesByUser[profile.userId] = profile
+            }
+        }
+
+        val lastMessageByConversation = mutableMapOf<String, String>()
+        val messageRows = JSONArray(request("/rest/v1/poco_messages?select=conversation_id,body&conversation_id=in.${enc(inFilter)}&deleted_at=is.null&order=created_at.desc&limit=100"))
+        for (i in 0 until messageRows.length()) {
+            val message = messageRows.getJSONObject(i)
+            val conversationId = message.optString("conversation_id")
+            if (conversationId !in lastMessageByConversation) {
+                lastMessageByConversation[conversationId] = message.optString("body")
+            }
+        }
+
         return (0 until rows.length()).map { i ->
             val o = rows.getJSONObject(i)
             val id = o.getString("id")
             val group = o.optBoolean("is_group")
-            val title = o.optString("title").ifBlank {
-                if (group) "Nhóm POCO" else "Cuộc trò chuyện"
-            }
-            PocoChatConversation(id, title, group, o.optString("updated_at"))
+            val peer = profilesByUser[peerByConversation[id]]
+            val profileTitle = peer?.displayName?.takeIf { it.isNotBlank() }
+                ?: peer?.accountId?.takeIf { it.isNotBlank() }
+                ?: peer?.username?.takeIf { it.isNotBlank() }
+                ?: peer?.userId
+            val title = if (group) o.optString("title").ifBlank { "Nhóm POCO" }
+                else profileTitle ?: o.optString("title").ifBlank { "Cuộc trò chuyện" }
+            PocoChatConversation(id, title, group, o.optString("updated_at"), lastMessageByConversation[id].orEmpty())
         }
+    }
+
+    suspend fun conversationPeer(conversationId: String, myUserId: String): PocoChatProfile? {
+        val members = JSONArray(request("/rest/v1/poco_conversation_members?select=user_id&conversation_id=eq.$conversationId"))
+        val peerId = (0 until members.length())
+            .map { members.getJSONObject(it).optString("user_id") }
+            .firstOrNull { it.isNotBlank() && it != myUserId } ?: return null
+        val rows = JSONArray(request("/rest/v1/poco_profiles?select=user_id,account_id,display_name,username&user_id=eq.$peerId&limit=1"))
+        if (rows.length() == 0) return null
+        val profile = rows.getJSONObject(0)
+        return PocoChatProfile(
+            profile.getString("user_id"),
+            profile.optString("account_id"),
+            profile.optString("display_name"),
+            profile.optString("username")
+        )
     }
 
     suspend fun messages(conversationId: String): List<PocoChatMessage> {
