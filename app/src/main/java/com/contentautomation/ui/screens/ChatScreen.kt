@@ -37,6 +37,7 @@ import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -81,6 +82,7 @@ private val ChatBorder = Color(0xFFE4E4E7)
 private val ChatInk = Color(0xFF18181B)
 private val ChatMuted = Color(0xFF71717A)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
     val context = LocalContext.current
