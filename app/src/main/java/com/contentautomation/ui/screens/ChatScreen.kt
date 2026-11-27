@@ -55,6 +55,7 @@ fun ChatScreen(auth: SupabaseAuth) {
     val repo = remember(context, auth) { PocoChatRepository(context.applicationContext, auth) }
     val scope = rememberCoroutineScope()
     var myId by remember { mutableStateOf<String?>(null) }
+    var myAccountId by remember { mutableStateOf<String?>(null) }
     var conversations by remember { mutableStateOf<List<PocoChatConversation>>(emptyList()) }
     var selected by remember { mutableStateOf<PocoChatConversation?>(null) }
     var messages by remember { mutableStateOf<List<PocoChatMessage>>(emptyList()) }
@@ -83,6 +84,7 @@ fun ChatScreen(auth: SupabaseAuth) {
     LaunchedEffect(Unit) {
         try {
             myId = repo.myUserId()
+            myAccountId = repo.myAccountId()
             refreshConversations()
         } catch (e: Exception) {
             error = e.message ?: "Không thể kết nối Chat POCO."
@@ -129,7 +131,7 @@ fun ChatScreen(auth: SupabaseAuth) {
             if (selected == null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.ChatBubbleOutline, contentDescription = null)
-                    Text("  POCO Chat", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("  MuChi Chat", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))
                     IconButton(onClick = {
                         groupMode = !groupMode
@@ -137,12 +139,12 @@ fun ChatScreen(auth: SupabaseAuth) {
                         groupTitle = ""
                     }) { Icon(Icons.Rounded.GroupAdd, contentDescription = "Tạo nhóm") }
                 }
-                Text("Dùng tài khoản POCO hiện tại", fontSize = 12.sp, color = Color.Gray)
+                Text("ID MuChi của bạn: ${myAccountId ?: "Đang tải..."}", fontSize = 12.sp, color = Color.Gray)
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
                     value = search, onValueChange = { search = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text(if (groupMode) "Tìm người để thêm vào nhóm" else "Tìm người dùng POCO") },
+                    label = { Text(if (groupMode) "Tìm bằng ID MuChi hoặc tên để thêm vào nhóm" else "Tìm bằng ID MuChi, tên hoặc username") },
                     singleLine = true
                 )
                 if (groupMode) {
@@ -181,7 +183,7 @@ fun ChatScreen(auth: SupabaseAuth) {
                             ) {
                                 Column(Modifier.weight(1f)) {
                                     Text(profile.displayName.ifBlank { profile.username }, fontWeight = FontWeight.SemiBold)
-                                    Text("@${profile.username}", fontSize = 12.sp, color = Color.Gray)
+                                    Text("${profile.accountId}  ·  @${profile.username}", fontSize = 12.sp, color = Color.Gray)
                                 }
                                 if (groupMode) {
                                     Checkbox(
@@ -212,7 +214,7 @@ fun ChatScreen(auth: SupabaseAuth) {
                     Spacer(Modifier.height(8.dp))
                     Text("Cuộc trò chuyện", fontWeight = FontWeight.SemiBold)
                     if (conversations.isEmpty() && !loading) {
-                        Text("Chưa có cuộc trò chuyện. Tìm tên hoặc username POCO ở trên để bắt đầu.", color = Color.Gray, fontSize = 13.sp)
+                        Text("Chưa có cuộc trò chuyện. Tìm ID MuChi, tên hoặc username ở trên để bắt đầu.", color = Color.Gray, fontSize = 13.sp)
                     }
                     LazyColumn(Modifier.weight(1f)) {
                         items(conversations, key = { it.id }) { conversation ->
@@ -241,7 +243,7 @@ fun ChatScreen(auth: SupabaseAuth) {
                     }
                     Column {
                         Text(selected!!.title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text(if (selected!!.isGroup) "Nhóm POCO" else "Trò chuyện riêng", color = Color.Gray, fontSize = 12.sp)
+                        Text(if (selected!!.isGroup) "Nhóm MuChi" else "Trò chuyện riêng", color = Color.Gray, fontSize = 12.sp)
                     }
                 }
                 LazyColumn(
