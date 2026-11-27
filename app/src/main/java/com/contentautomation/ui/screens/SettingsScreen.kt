@@ -1,23 +1,42 @@
 package com.contentautomation.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import com.contentautomation.data.db.entity.SourceAccount
 import com.contentautomation.ui.DriveUiState
 import com.contentautomation.ui.models.StorageInfo
-import com.contentautomation.ui.components.*
+import java.util.Locale
+
+private val SettingsBg = Color(0xFFF4F4F5)
+private val SettingsWhite = Color(0xFFFFFFFF)
+private val SettingsBorder = Color(0xFFE4E4E7)
+private val SettingsInk = Color(0xFF18181B)
+private val SettingsMuted = Color(0xFF71717A)
+private val SettingsGreen = Color(0xFF16A34A)
+private val SettingsAmber = Color(0xFFD97706)
+private val SettingsRed = Color(0xFFDC2626)
 
 @Composable
 fun SettingsScreen(
@@ -50,199 +69,188 @@ fun SettingsScreen(
     onLogoutDouyin: () -> Unit,
     onLogoutKuaishou: () -> Unit
 ) {
-    val kuaishou = accounts.count { it.platform.equals("kuaishou", ignoreCase = true) }
-    val douyin = accounts.count { it.platform.equals("douyin", ignoreCase = true) }
-    var showLogoutConfirmation by remember { mutableStateOf(false) }
-
-    ScreenColumn {
-        GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                GText("ID THIẾT BỊ", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
-                Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    GText(deviceId, 14.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.width(12.dp))
-                    GlassButton("Sao chép", onClick = onCopyId)
-                }
-            }
-        }
-
-        GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                GText("TÀI KHOẢN NGUỒN", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft,
-                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
-                InfoRow("Tổng số tài khoản", accounts.size.toString())
-                GlassDivider()
-                InfoRow("Kuaishou", kuaishou.toString())
-                GlassDivider()
-                InfoRow("Douyin", douyin.toString())
-            }
-        }
-
-        GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                GText("QUYỀN ỨNG DỤNG", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        GText("Thông báo Android", 13.sp, weight = FontWeight.SemiBold)
-                        GText(if (notificationsGranted) "Đã cấp quyền" else "Chưa cấp quyền", 11.sp,
-                            color = if (notificationsGranted) GlassColors.Green else GlassColors.Amber)
-                    }
-                    GlassButton(if (notificationsGranted) "Đã bật" else "Cấp quyền", onClick = onRequestNotifications)
-                }
-                GlassDivider()
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        GText("Lưu video và tệp", 13.sp, weight = FontWeight.SemiBold)
-                        GText(
-                            if (!storagePermissionRequired) "Android 10 trở lên: dùng bộ chọn/MediaStore, không cần quyền truy cập toàn bộ bộ nhớ."
-                            else if (storageGranted) "Đã cấp quyền lưu trữ cho Android 9 trở xuống."
-                            else "Cần quyền lưu trữ trên Android 9 trở xuống.",
-                            11.sp, color = GlassColors.InkSoft
-                        )
-                    }
-                    if (storagePermissionRequired) {
-                        GlassButton(if (storageGranted) "Đã bật" else "Cấp quyền", onClick = onRequestStorage)
-                    }
-                }
-            }
-        }
-
-        GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                GText("LƯU TRỮ & GOOGLE DRIVE", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
-                GText("Quản lý dung lượng điện thoại và tài khoản Google Drive ngay tại đây.", 12.sp, color = GlassColors.InkSoft)
-            }
-        }
-        StorageSettingsSection(
-            storage = storage,
-            drive = drive,
-            onConnectDrive = onConnectDrive,
-            onRefreshDrive = onRefreshDrive,
-            onPickUpload = onPickUpload,
-            onDeleteDriveFile = onDeleteDriveFile,
-            onDownloadDriveFile = onDownloadDriveFile,
-            onDisconnectDrive = onDisconnectDrive
-        )
-
-        GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                GText("ĐĂNG NHẬP NỀN TẢNG", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        GText("Douyin", 13.sp, weight = FontWeight.SemiBold)
-                        GText(if (douyinSession) "Đã lưu phiên đăng nhập" else "Chưa đăng nhập", 11.sp,
-                            color = if (douyinSession) GlassColors.Green else GlassColors.Amber)
-                    }
-                    GlassButton(if (douyinSession) "Đăng nhập lại" else "Đăng nhập", onClick = onLoginDouyin)
-                    if (douyinSession) TextButton(onClick = onLogoutDouyin) { GText("Xóa phiên", 11.sp, color = GlassColors.Red) }
-                }
-                GlassDivider()
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        GText("Kuaishou", 13.sp, weight = FontWeight.SemiBold)
-                        GText(if (kuaishouSession) "Đã lưu phiên đăng nhập" else "Chưa đăng nhập", 11.sp,
-                            color = if (kuaishouSession) GlassColors.Green else GlassColors.Amber)
-                    }
-                    GlassButton(if (kuaishouSession) "Đăng nhập lại" else "Đăng nhập", onClick = onLoginKuaishou)
-                    if (kuaishouSession) TextButton(onClick = onLogoutKuaishou) { GText("Xóa phiên", 11.sp, color = GlassColors.Red) }
-                }
-            }
-        }
-
-        GlassButton("API mô hình AI", onClick = onOpenApi, primary = true, modifier = Modifier.fillMaxWidth())
-        GlassButton("Thêm tài khoản", onClick = onAddAccount, modifier = Modifier.fillMaxWidth())
-
-        if (accounts.isNotEmpty()) {
-            GText("QUẢN LÝ TÀI KHOẢN", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
-            accounts.forEach { account ->
-                GlassCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                GText(account.accountName.ifBlank { account.accountIdentifier }, 14.sp, weight = FontWeight.Bold)
-                                GText(account.platform.uppercase(), 11.sp, color = GlassColors.Blue)
-                            }
-                            Switch(
-                                checked = account.enabled,
-                                onCheckedChange = { onSetAccountEnabled(account.id, it) }
-                            )
-                        }
-                        GText("ID tài khoản: ${account.accountIdentifier}", 12.sp, color = GlassColors.InkSoft)
-                        if (account.profileVerifiedAt != null) {
-                            account.profileAvatarUrl?.takeIf { it.startsWith("https://") }?.let { avatar ->
-                                coil.compose.AsyncImage(
-                                    model = avatar,
-                                    contentDescription = "Ảnh đại diện tài khoản",
-                                    modifier = Modifier.size(64.dp)
-                                )
-                            }
-                            account.profileDescription?.takeIf { it.isNotBlank() }?.let {
-                                GText(it, 11.sp, color = GlassColors.InkSoft)
-                            }
-                            account.profileFollowerCount?.let {
-                                GText("Người theo dõi: $it", 11.sp, color = GlassColors.Blue)
-                            }
-                            account.profileFollowingCount?.let {
-                                GText("Đang theo dõi: $it", 11.sp, color = GlassColors.Blue)
-                            }
-                            account.profileVideoCount?.let {
-                                GText("Tổng số video: $it", 11.sp, color = GlassColors.Blue)
-                            }
-                            GText("Đã xác minh hồ sơ", 10.sp, color = GlassColors.Green)
-                        }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            TextButton(onClick = { onDeleteAccount(account.id) }) {
-                                GText("Xóa tài khoản", 12.sp, color = GlassColors.Red)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                GText("THÔNG TIN ỨNG DỤNG", 10.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft,
-                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
-                InfoRow("Phiên bản", appVersion)
-            }
-        }
-
-        // Luôn đặt đăng xuất ở cuối cùng của trang Cài đặt.
-        TextButton(
-            onClick = { showLogoutConfirmation = true },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            GText("Đăng xuất tài khoản", 14.sp, weight = FontWeight.Bold, color = GlassColors.Red)
-        }
+    val douyin = accounts.count { it.platform.equals("douyin", true) }
+    val kuaishou = accounts.count { it.platform.equals("kuaishou", true) }
+    var confirmLogout by remember { mutableStateOf(false) }
+    val shortId = remember(deviceId) {
+        if (deviceId.length > 18) "${deviceId.take(8)}...${deviceId.takeLast(7)}" else deviceId
     }
 
-    if (showLogoutConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showLogoutConfirmation = false },
-            title = { androidx.compose.material3.Text("Đăng xuất MuChi?") },
-            text = { androidx.compose.material3.Text("Bạn sẽ quay về màn hình đăng nhập. Dữ liệu tài khoản trên máy chủ không bị xóa.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showLogoutConfirmation = false
-                    onLogout()
-                }) {
-                    androidx.compose.material3.Text("Đăng xuất")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutConfirmation = false }) {
-                    androidx.compose.material3.Text("Hủy")
+    Column(
+        Modifier.fillMaxSize().background(SettingsBg).verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        SettingsGroup("Tài khoản & Nguồn dữ liệu") {
+            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Tổng: ${accounts.size}  •  Douyin: $douyin  •  Kuaishou: $kuaishou",
+                    modifier = Modifier.weight(1f), fontSize = 12.sp, color = SettingsInk, fontWeight = FontWeight.Medium, maxLines = 1)
+                SmallAction("+ Thêm", onAddAccount)
+            }
+            SettingsDivider()
+            SessionRow("Douyin", douyinSession, onLoginDouyin, onLogoutDouyin)
+            SettingsDivider()
+            SessionRow("Kuaishou", kuaishouSession, onLoginKuaishou, onLogoutKuaishou)
+            SettingsDivider()
+            Row(
+                Modifier.fillMaxWidth().height(52.dp).clickable(onClick = onOpenApi),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Cấu hình API mô hình AI", modifier = Modifier.weight(1f), fontSize = 14.sp, color = SettingsInk, fontWeight = FontWeight.Medium)
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = SettingsMuted)
+            }
+            if (accounts.isNotEmpty()) {
+                SettingsDivider()
+                Text("Tài khoản nguồn", modifier = Modifier.padding(top = 10.dp, bottom = 4.dp), fontSize = 11.sp, color = SettingsMuted, fontWeight = FontWeight.SemiBold)
+                accounts.forEachIndexed { index, account ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(account.accountName.ifBlank { account.accountIdentifier }, fontSize = 13.sp, color = SettingsInk, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text("${account.platform.uppercase(Locale.ROOT)} · ${account.accountIdentifier}", fontSize = 11.sp, color = SettingsMuted, maxLines = 1)
+                        }
+                        Switch(checked = account.enabled, onCheckedChange = { onSetAccountEnabled(account.id, it) })
+                        TextButton(onClick = { onDeleteAccount(account.id) }, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                            Text("Xóa", color = SettingsRed, fontSize = 12.sp)
+                        }
+                    }
+                    if (index != accounts.lastIndex) SettingsDivider()
                 }
             }
+        }
+
+        SettingsGroup("Lưu trữ & Đám mây") {
+            val used = String.format(Locale.getDefault(), "%.1f", storage.usedGb)
+            val total = String.format(Locale.getDefault(), "%.1f", storage.totalGb)
+            val free = String.format(Locale.getDefault(), "%.1f", storage.freeGb)
+            Column(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Bộ nhớ điện thoại", modifier = Modifier.weight(1f), fontSize = 14.sp, color = SettingsInk, fontWeight = FontWeight.SemiBold)
+                    Text("$used / $total GB", fontSize = 13.sp, color = SettingsInk, fontWeight = FontWeight.SemiBold)
+                }
+                Box(Modifier.fillMaxWidth().padding(top = 9.dp).height(5.dp).clip(RoundedCornerShape(8.dp)).background(SettingsBorder)) {
+                    Box(Modifier.fillMaxWidth(storage.fraction.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(8.dp)).background(SettingsAmber))
+                }
+                Text("Còn trống $free GB • Tự lưu vào thư mục Movies", modifier = Modifier.padding(top = 7.dp), fontSize = 11.sp, color = SettingsMuted)
+            }
+            SettingsDivider()
+            Row(Modifier.fillMaxWidth().heightIn(min = 54.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Google Drive", fontSize = 14.sp, color = SettingsInk, fontWeight = FontWeight.Medium)
+                    Text(
+                        if (drive.connected) drive.account?.email ?: "Đã kết nối" else "Phiên hết hạn",
+                        fontSize = 11.sp, color = if (drive.connected) SettingsGreen else SettingsAmber, maxLines = 1
+                    )
+                }
+                if (drive.connected) {
+                    SmallAction("Làm mới", onRefreshDrive)
+                    Spacer(Modifier.width(6.dp))
+                    SmallAction("Tải lên", onPickUpload)
+                    Spacer(Modifier.width(6.dp))
+                    SmallAction("Ngắt", onDisconnectDrive)
+                } else SmallAction("Kết nối lại", onConnectDrive)
+            }
+            if (drive.loading) Text("Đang đồng bộ…", fontSize = 11.sp, color = SettingsMuted, modifier = Modifier.padding(bottom = 6.dp))
+            drive.message?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 11.sp, color = SettingsAmber, modifier = Modifier.padding(bottom = 6.dp)) }
+            if (drive.connected) {
+                SettingsDivider()
+                Text("Tệp trên Drive · ${drive.files.size}", modifier = Modifier.padding(top = 10.dp, bottom = 4.dp), fontSize = 11.sp, color = SettingsMuted, fontWeight = FontWeight.SemiBold)
+                if (drive.files.isEmpty()) Text("Chưa có tệp", fontSize = 12.sp, color = SettingsMuted, modifier = Modifier.padding(vertical = 8.dp))
+                drive.files.forEach { file ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(file.name, fontSize = 12.sp, color = SettingsInk, maxLines = 1)
+                            Text(formatSettingsBytes(file.sizeBytes), fontSize = 10.sp, color = SettingsMuted)
+                        }
+                        TextButton(onClick = { onDownloadDriveFile(file.id, file.name) }, contentPadding = PaddingValues(horizontal = 5.dp)) { Text("Tải về", fontSize = 11.sp) }
+                        TextButton(onClick = { onDeleteDriveFile(file.id) }, contentPadding = PaddingValues(horizontal = 5.dp)) { Text("Xóa", fontSize = 11.sp, color = SettingsRed) }
+                    }
+                }
+            }
+        }
+
+        SettingsGroup("Thiết bị & Quyền") {
+            Row(Modifier.fillMaxWidth().height(50.dp).clickable(onClick = onRequestNotifications), verticalAlignment = Alignment.CenterVertically) {
+                Text("Thông báo ứng dụng", modifier = Modifier.weight(1f), fontSize = 14.sp, color = SettingsInk)
+                Text(if (notificationsGranted) "Đã bật" else "Chưa bật", fontSize = 12.sp, color = if (notificationsGranted) SettingsGreen else SettingsAmber, fontWeight = FontWeight.SemiBold)
+            }
+            if (storagePermissionRequired) {
+                SettingsDivider()
+                Row(Modifier.fillMaxWidth().height(48.dp).clickable(onClick = onRequestStorage), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Quyền lưu trữ", modifier = Modifier.weight(1f), fontSize = 14.sp, color = SettingsInk)
+                    Text(if (storageGranted) "Đã bật" else "Cấp quyền", fontSize = 12.sp, color = if (storageGranted) SettingsGreen else SettingsAmber)
+                }
+            }
+            SettingsDivider()
+            Row(Modifier.fillMaxWidth().height(50.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("ID Thiết bị", modifier = Modifier.weight(1f), fontSize = 14.sp, color = SettingsInk)
+                Text("MC-${shortId.removePrefix("MC-")}", fontSize = 12.sp, color = SettingsMuted)
+                IconButton(onClick = onCopyId, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = "Sao chép ID", tint = SettingsMuted, modifier = Modifier.size(17.dp))
+                }
+            }
+        }
+
+        SettingsGroup("Hệ thống") {
+            Row(Modifier.fillMaxWidth().height(50.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Phiên bản ứng dụng", modifier = Modifier.weight(1f), fontSize = 14.sp, color = SettingsInk)
+                Text(appVersion, fontSize = 13.sp, color = SettingsMuted, fontWeight = FontWeight.SemiBold)
+            }
+        }
+
+        Box(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SettingsWhite)
+                .border(1.dp, SettingsBorder, RoundedCornerShape(12.dp))
+                .clickable { confirmLogout = true }.padding(vertical = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Đăng xuất tài khoản", fontSize = 14.sp, color = SettingsRed, fontWeight = FontWeight.SemiBold)
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+
+    if (confirmLogout) {
+        AlertDialog(
+            onDismissRequest = { confirmLogout = false },
+            title = { Text("Đăng xuất MuChi?") },
+            text = { Text("Bạn sẽ quay về màn hình đăng nhập. Dữ liệu tài khoản trên máy chủ không bị xóa.") },
+            confirmButton = {
+                TextButton(onClick = { confirmLogout = false; onLogout() }) { Text("Đăng xuất") }
+            },
+            dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("Hủy") } }
         )
     }
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
-        GText(label, 13.sp, modifier = Modifier.weight(1f))
-        GText(value, 13.sp, weight = FontWeight.Bold, color = GlassColors.Blue)
+private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SettingsWhite)
+            .border(1.dp, SettingsBorder, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp),
+        content = content
+    ) {
+        Text(title, modifier = Modifier.padding(top = 13.dp, bottom = 4.dp), fontSize = 11.sp, color = SettingsMuted, fontWeight = FontWeight.Bold)
+        content()
     }
+}
+
+@Composable
+private fun SettingsDivider() {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(SettingsBorder))
+}
+
+@Composable
+private fun SmallAction(label: String, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(7.dp)).background(SettingsBg).clickable(onClick = onClick)
+            .padding(horizontal = 9.dp, vertical = 6.dp)
+    ) { Text(label, fontSize = 11.sp, color = SettingsInk, fontWeight = FontWeight.SemiBold) }
+}
+
+private fun formatSettingsBytes(value: Long): String {
+    if (value < 1024L) return "$value B"
+    val units = listOf("KB", "MB", "GB", "TB")
+    var amount = value.toDouble()
+    var index = -1
+    do { amount /= 1024.0; index++ } while (amount >= 1024.0 && index < units.lastIndex)
+    return String.format(Locale.getDefault(), "%.1f %s", amount, units[index])
 }
