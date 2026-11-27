@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '.github/workflows/**'
   workflow_dispatch:
 
 concurrency:
@@ -32,12 +30,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Gradle with dependency and build cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
       - name: Setup Android SDK, NDK and CMake
         uses: android-actions/setup-android@v4
         with:
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
-          packages: 'platform-tools platforms;android-34 platforms;android-36 build-tools;34.0.0 ndk;29.0.14206865 cmake;3.31.6'
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0 ndk;29.0.14206865 cmake;3.31.6'
 
       - name: Restore release signing keystore
         env:
@@ -58,14 +61,11 @@ jobs:
           echo "Signing keystore verification passed."
 
       - name: Build signed APKs
-        uses: gradle/gradle-build-action@v3
         env:
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        with:
-          gradle-version: '8.9'
-          arguments: assembleRelease --no-daemon -PbuildNumber=${{ github.run_number }}
+        run: gradle assembleRelease --no-daemon --parallel --build-cache -PbuildNumber=${GITHUB_RUN_NUMBER}
 
       - name: Build BSDIFF patch generator when a previous release exists
         run: |
