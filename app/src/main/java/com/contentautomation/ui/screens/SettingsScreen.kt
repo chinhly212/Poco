@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -102,10 +103,11 @@ fun SettingsScreen(
                 coil.compose.AsyncImage(
                     model = profile?.avatarUrl,
                     contentDescription = "Ảnh đại diện",
-                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(28.dp))
+                    modifier = Modifier.size(56.dp).clip(CircleShape),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
                 )
             } else {
-                Box(Modifier.size(56.dp).clip(RoundedCornerShape(28.dp)).background(SettingsBg), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(56.dp).clip(CircleShape).background(SettingsBg), contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.Person, contentDescription = null, tint = SettingsMuted, modifier = Modifier.size(27.dp))
                 }
             }
