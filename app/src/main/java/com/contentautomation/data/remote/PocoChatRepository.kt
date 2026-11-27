@@ -150,7 +150,7 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
         response.use {
             if (!it.isSuccessful) error(runCatching { JSONObject(body).optString("message") }.getOrNull().orEmpty().ifBlank { "Không thể tải ảnh đại diện lên (HTTP ${it.code})." })
         }
-        "$BASE/storage/v1/object/public/avatars/$objectPath"
+        "$BASE/storage/v1/object/public/avatars/$objectPath?v=${System.currentTimeMillis()}"
     }
 
     private fun JSONObject.toChatProfile() = PocoChatProfile(
@@ -178,7 +178,7 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
         } else {
             val safe = input.replace(Regex("[^\\p{L}\\p{N}_ ]"), " ").replace(Regex("\\s+"), " ").trim()
             if (safe.length < 2) return emptyList()
-            val filter = "(display_name.ilike.*$safe*,username.ilike.*$safe*)"
+            val filter = "(display_name.ilike.*$safe*,nickname.ilike.*$safe*,username.ilike.*$safe*)"
             "/rest/v1/poco_profiles?select=user_id,account_id,display_name,username,avatar_url,nickname&or=${enc(filter)}&limit=25"
         }
         val rows = JSONArray(request(path))
@@ -238,7 +238,7 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
                 ?: peer?.userId
             val title = if (group) o.optString("title").ifBlank { "Nhóm POCO" }
                 else profileTitle ?: o.optString("title").ifBlank { "Cuộc trò chuyện" }
-            PocoChatConversation(id, title, group, o.optString("updated_at"), lastMessageByConversation[id].orEmpty(), peer?.avatarUrl)
+            PocoChatConversation(id, title, group, o.optString("updated_at"), lastMessageByConversation[id].orEmpty(), if (group) null else peer?.avatarUrl)
         }
     }
 
