@@ -12,7 +12,7 @@ import org.json.JSONObject
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-data class PocoChatProfile(val userId: String, val accountId: String, val displayName: String, val username: String)
+data class PocoChatProfile(val userId: String, val accountId: String, val displayName: String, val username: String, val avatarUrl: String? = null, val nickname: String = "")
 data class PocoChatConversation(
     val id: String,
     val title: String,
@@ -107,6 +107,60 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
         return user.getString("id")
     }
 
+    suspend fun myProfile(): PocoChatProfile {
+        val userId = myUserId()
+        val rows = JSONArray(request("/rest/v1/poco_profiles?select=user_id,account_id,display_name,username,avatar_url,nickname&user_id=eq.$userId&limit=1"))
+        if (rows.length() == 0) error("Chưa tìm thấy hồ sơ MuChi của tài khoản này.")
+        return rows.getJSONObject(0).toChatProfile()
+    }
+
+    suspend fun updateMyProfile(displayName: String, nickname: String, avatarUrl: String?) {
+        val cleanName = displayName.trim()
+        require(cleanName.isNotBlank() && cleanName.length <= 60) { "Tên hiển thị phải có từ 1 đến 60 ký tự." }
+        require(nickname.length <= 40) { "Biệt danh không được vượt quá 40 ký tự." }
+        val payload = JSONObject()
+            .put("display_name", cleanName)
+            .put("nickname", nickname.trim())
+            .put("avatar_url", avatarUrl ?: JSONObject.NULL)
+            .put("updated_at", java.time.Instant.now().toString())
+        request("/rest/v1/poco_profiles?user_id=eq.${enc(myUserId())}", "PATCH", payload.toString(), "return=minimal")
+    }
+
+    suspend fun uploadAvatar(jpegBytes: ByteArray): String = withContext(Dispatchers.IO) {
+        require(jpegBytes.isNotEmpty() && jpegBytes.size <= 1024 * 1024) { "Ảnh đại diện sau nén phải nhỏ hơn 1 MB." }
+        val userId = myUserId()
+        val objectPath = "$userId/avatar.jpg"
+        val url = "$BASE/storage/v1/object/avatars/$objectPath"
+        fun build(accessToken: String) = Request.Builder().url(url)
+            .header("apikey", KEY)
+            .header("Authorization", "Bearer $accessToken")
+            .header("Content-Type", "image/jpeg")
+            .header("x-upsert", "true")
+            .post(jpegBytes.toRequestBody("image/jpeg".toMediaType()))
+            .build()
+        var response = client.newCall(build(token())).execute()
+        var body = response.body?.string().orEmpty()
+        if (response.code == 401) {
+            response.close()
+            val refreshed = auth.refreshSession().getOrElse { error("Phiên hết hạn, không thể tải ảnh lên: ${it.message}") }
+            response = client.newCall(build(refreshed.accessToken)).execute()
+            body = response.body?.string().orEmpty()
+        }
+        response.use {
+            if (!it.isSuccessful) error(runCatching { JSONObject(body).optString("message") }.getOrNull().orEmpty().ifBlank { "Không thể tải ảnh đại diện lên (HTTP ${it.code})." })
+        }
+        "$BASE/storage/v1/object/public/avatars/$objectPath"
+    }
+
+    private fun JSONObject.toChatProfile() = PocoChatProfile(
+        userId = getString("user_id"),
+        accountId = optString("account_id"),
+        displayName = optString("display_name"),
+        username = optString("username"),
+        avatarUrl = optString("avatar_url").takeIf { it.isNotBlank() && it != "null" },
+        nickname = optString("nickname")
+    )
+
     suspend fun myAccountId(): String {
         val userId = myUserId()
         val rows = JSONArray(request("/rest/v1/poco_profiles?select=account_id&user_id=eq.$userId&limit=1"))
@@ -119,22 +173,17 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
         if (input.length < 2) return emptyList()
         val idPattern = Regex("^MC-A[0-9]{6}$", RegexOption.IGNORE_CASE)
         val path = if (idPattern.matches(input)) {
-            "/rest/v1/poco_profiles?select=user_id,account_id,display_name,username&account_id=eq.${enc(input.uppercase())}&limit=25"
+            "/rest/v1/poco_profiles?select=user_id,account_id,display_name,username,avatar_url,nickname&account_id=eq.${enc(input.uppercase())}&limit=25"
         } else {
             val safe = input.replace(Regex("[^\\p{L}\\p{N}_ ]"), " ").replace(Regex("\\s+"), " ").trim()
             if (safe.length < 2) return emptyList()
             val filter = "(display_name.ilike.*$safe*,username.ilike.*$safe*)"
-            "/rest/v1/poco_profiles?select=user_id,account_id,display_name,username&or=${enc(filter)}&limit=25"
+            "/rest/v1/poco_profiles?select=user_id,account_id,display_name,username,avatar_url,nickname&or=${enc(filter)}&limit=25"
         }
         val rows = JSONArray(request(path))
         return (0 until rows.length()).map { i ->
             val o = rows.getJSONObject(i)
-            PocoChatProfile(
-                o.getString("user_id"),
-                o.getString("account_id"),
-                o.optString("display_name"),
-                o.optString("username")
-            )
+            o.toChatProfile()
         }
     }
 
@@ -158,10 +207,10 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
         val profilesByUser = mutableMapOf<String, PocoChatProfile>()
         if (peerIds.isNotEmpty()) {
             val profileFilter = peerIds.joinToString(",", "(", ")")
-            val profiles = JSONArray(request("/rest/v1/poco_profiles?select=user_id,account_id,display_name,username&user_id=in.${enc(profileFilter)}"))
+            val profiles = JSONArray(request("/rest/v1/poco_profiles?select=user_id,account_id,display_name,username,avatar_url,nickname&user_id=in.${enc(profileFilter)}"))
             for (i in 0 until profiles.length()) {
                 val p = profiles.getJSONObject(i)
-                val profile = PocoChatProfile(p.getString("user_id"), p.optString("account_id"), p.optString("display_name"), p.optString("username"))
+                val profile = p.toChatProfile()
                 profilesByUser[profile.userId] = profile
             }
         }
@@ -196,15 +245,10 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
         val peerId = (0 until members.length())
             .map { members.getJSONObject(it).optString("user_id") }
             .firstOrNull { it.isNotBlank() && it != myUserId } ?: return null
-        val rows = JSONArray(request("/rest/v1/poco_profiles?select=user_id,account_id,display_name,username&user_id=eq.$peerId&limit=1"))
+        val rows = JSONArray(request("/rest/v1/poco_profiles?select=user_id,account_id,display_name,username,avatar_url,nickname&user_id=eq.$peerId&limit=1"))
         if (rows.length() == 0) return null
         val profile = rows.getJSONObject(0)
-        return PocoChatProfile(
-            profile.getString("user_id"),
-            profile.optString("account_id"),
-            profile.optString("display_name"),
-            profile.optString("username")
-        )
+        return profile.toChatProfile()
     }
 
     suspend fun messages(conversationId: String): List<PocoChatMessage> {
