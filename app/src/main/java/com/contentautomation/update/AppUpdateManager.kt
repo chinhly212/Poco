@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import com.cundong.utils.PatchUtils
-import com.google.gson.Gson
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -44,8 +43,7 @@ class AppUpdateManager(private val context: Context) {
         clearTemporaryUpdateFiles()
 
         val json = readLatestReleaseAsset("update.json")
-        val manifest = Gson().fromJson(json, UpdateManifest::class.java)
-            ?: throw IOException("Thông tin cập nhật không hợp lệ")
+        val manifest = parseUpdateManifest(json)
         if (manifest.versionCode <= installedVersionCode()) return@withContext null
 
         val abi = Build.SUPPORTED_ABIS.firstOrNull { manifest.assets.containsKey(it) }
@@ -53,6 +51,54 @@ class AppUpdateManager(private val context: Context) {
         val asset = manifest.assets[abi]
             ?: throw IOException("Thiếu tệp cập nhật cho kiến trúc $abi")
         AvailableUpdate(manifest, abi, asset)
+    }
+
+
+    /**
+     * Parse the release manifest explicitly. This avoids Gson reflection trying to
+     * instantiate obfuscated Kotlin/collection implementation classes in minified builds.
+     */
+    private fun parseUpdateManifest(json: String): UpdateManifest {
+        val root = try {
+            JsonParser.parseString(json).asJsonObject
+        } catch (error: Exception) {
+            throw IOException("Thông tin cập nhật không hợp lệ", error)
+        }
+        fun requiredLong(name: String): Long =
+            root.get(name)?.takeUnless { it.isJsonNull }?.asLong
+                ?: throw IOException("Thiếu trường $name trong update.json")
+        fun requiredString(name: String): String =
+            root.get(name)?.takeUnless { it.isJsonNull }?.asString?.takeIf { it.isNotBlank() }
+                ?: throw IOException("Thiếu trường $name trong update.json")
+
+        val assetObject = root.getAsJsonObject("assets")
+            ?: throw IOException("Manifest không có danh sách APK")
+        val parsedAssets = linkedMapOf<String, ReleaseAsset>()
+        for ((abi, value) in assetObject.entrySet()) {
+            if (!value.isJsonObject) continue
+            val item = value.asJsonObject
+            fun optionalString(name: String): String? =
+                item.get(name)?.takeUnless { it.isJsonNull }?.asString?.takeIf { it.isNotBlank() }
+            fun optionalLong(name: String): Long? =
+                item.get(name)?.takeUnless { it.isJsonNull }?.asLong
+            val apkUrl = optionalString("apkUrl") ?: continue
+            val apkSha256 = optionalString("apkSha256") ?: continue
+            parsedAssets[abi] = ReleaseAsset(
+                apkUrl = apkUrl,
+                apkSha256 = apkSha256,
+                patchUrl = optionalString("patchUrl"),
+                patchSha256 = optionalString("patchSha256"),
+                baseVersionCode = optionalLong("baseVersionCode"),
+                baseApkSha256 = optionalString("baseApkSha256")
+            )
+        }
+        if (parsedAssets.isEmpty()) throw IOException("Manifest không có APK hợp lệ")
+        return UpdateManifest(
+            versionCode = requiredLong("versionCode"),
+            versionName = requiredString("versionName"),
+            releaseNotes = root.get("releaseNotes")?.takeUnless { it.isJsonNull }?.asString.orEmpty(),
+            assets = parsedAssets
+        )
     }
 
     suspend fun downloadAndPrepare(update: AvailableUpdate): File = withContext(Dispatchers.IO) {
