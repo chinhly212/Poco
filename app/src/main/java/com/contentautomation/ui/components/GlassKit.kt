@@ -30,20 +30,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 object GlassColors {
-    val Ink = Color(0xFF0B2A55)
-    val InkSoft = Color(0xFF40607F)
-    val InkFaint = Color(0xFF8AA3BF)
-    val Blue = Color(0xFF0A66D9)
-    val Green = Color(0xFF0A8A5C)
-    val Red = Color(0xFFC0322B)
-    val Amber = Color(0xFF9A5A00)
-    val Divider = Color(0x290A66D9)
-    val BgTop = Color(0xFFFFFFFF)
-    val BgMid = Color(0xFFE6F3FF)
-    val BgBottom = Color(0xFFC4E2FF)
+    val Ink = Color(0xFF18181B)
+    val InkSoft = Color(0xFF71717A)
+    val InkFaint = Color(0xFFA1A1AA)
+    val Blue = Color(0xFF2563EB)
+    val Green = Color(0xFF16A34A)
+    val Red = Color(0xFFDC2626)
+    val Amber = Color(0xFFD97706)
+    val Divider = Color(0xFFE4E4E7)
+    val BgTop = Color(0xFFF4F4F5)
+    val BgMid = Color(0xFFF4F4F5)
+    val BgBottom = Color(0xFFF4F4F5)
 }
 
-/** Nền trắng chuyển xanh nhạt, có vệt sáng xanh để lớp kính có chiều sâu. */
+/** Nền xám phẳng theo giao diện Minimalist SaaS. */
 @Composable
 fun GlassBackground(
     modifier: Modifier = Modifier,
@@ -52,24 +52,7 @@ fun GlassBackground(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(GlassColors.BgTop, GlassColors.BgMid, GlassColors.BgBottom)
-                )
-            )
-            .drawBehind {
-                fun blob(color: Color, cx: Float, cy: Float, r: Float) {
-                    val c = Offset(size.width * cx, size.height * cy)
-                    drawCircle(
-                        brush = Brush.radialGradient(listOf(color, Color.Transparent), c, r),
-                        radius = r,
-                        center = c
-                    )
-                }
-                blob(Color(0x8C5AAFFF), 0.88f, 0.06f, size.width * 0.75f)
-                blob(Color(0x592882F0), 0.00f, 0.52f, size.width * 0.80f)
-                blob(Color(0x8078C8FF), 0.80f, 0.92f, size.width * 0.70f)
-            },
+            .background(Color(0xFFF4F4F5)),
         content = content
     )
 }
@@ -204,30 +187,52 @@ fun GlassBottomBar(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    GlassCard(
+    Column(
         modifier = modifier
+            .fillMaxWidth()
+            .background(Color.White)
+            .drawBehind {
+                drawLine(
+                    color = Color(0xFFE4E4E7),
+                    start = Offset(0f, 0f),
+                    end = Offset(size.width, 0f),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
             .navigationBarsPadding()
-            .padding(horizontal = 14.dp, vertical = 10.dp)
-            .fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp)
     ) {
-        Row(Modifier.padding(6.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(62.dp)
+                .padding(horizontal = 5.dp)
+        ) {
             items.forEachIndexed { i, item ->
-                val on = i == selectedIndex
-                val tint = if (on) GlassColors.Blue else GlassColors.InkSoft
+                val selected = i == selectedIndex
+                val tint = if (selected) Color(0xFF18181B) else Color(0xFF71717A)
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .heightIn(min = 44.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(if (on) GlassColors.Blue.copy(alpha = 0.13f) else Color.Transparent)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(6.dp))
                         .clickable { onSelect(i) }
-                        .padding(vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .padding(top = 9.dp, bottom = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Icon(item.icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+                    Icon(
+                        item.icon,
+                        contentDescription = item.label,
+                        tint = tint,
+                        modifier = Modifier.size(21.dp)
+                    )
                     Spacer(Modifier.height(3.dp))
-                    GText(item.label, 10.sp, weight = if (on) FontWeight.Bold else FontWeight.Normal, color = tint)
+                    GText(
+                        item.label,
+                        10.sp,
+                        weight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = tint
+                    )
                 }
             }
         }
