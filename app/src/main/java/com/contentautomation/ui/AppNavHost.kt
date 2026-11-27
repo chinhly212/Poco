@@ -158,6 +158,7 @@ fun AppNavHost(vm: MainViewModel) {
         return
     }
     val navController = rememberNavController()
+    var isChatDetail by remember { mutableStateOf(false) }
 
     val isSystemRunning by
         vm.isSystemRunning.collectAsStateWithLifecycle()
@@ -238,6 +239,7 @@ fun AppNavHost(vm: MainViewModel) {
             containerColor = Color.Transparent,
 
             bottomBar = {
+                if (!isChatDetail) {
                 GlassBottomBar(
                     items = listOf(
                         BottomItem(
@@ -262,6 +264,7 @@ fun AppNavHost(vm: MainViewModel) {
                         }
                     }
                 )
+                }
             }
         ) { innerPadding ->
 
@@ -335,7 +338,7 @@ fun AppNavHost(vm: MainViewModel) {
                 }
 
                 composable(MuChiRoutes.CHAT) {
-                    ChatScreen(auth = auth)
+                    ChatScreen(auth = auth, onDetailChanged = { isChatDetail = it })
                 }
 
                 composable(MuChiRoutes.SETTINGS) {
