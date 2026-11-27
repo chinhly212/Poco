@@ -12,7 +12,7 @@ import org.json.JSONObject
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-data class PocoChatProfile(val userId: String, val displayName: String, val username: String)
+data class PocoChatProfile(val userId: String, val accountId: String, val displayName: String, val username: String)
 data class PocoChatConversation(
     val id: String,
     val title: String,
@@ -89,14 +89,34 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
         return user.getString("id")
     }
 
+    suspend fun myAccountId(): String {
+        val userId = myUserId()
+        val rows = JSONArray(request("/rest/v1/poco_profiles?select=account_id&user_id=eq.$userId&limit=1"))
+        if (rows.length() == 0) error("Tài khoản chưa có ID MuChi. Hãy cập nhật cơ sở dữ liệu Supabase.")
+        return rows.getJSONObject(0).getString("account_id")
+    }
+
     suspend fun searchUsers(term: String): List<PocoChatProfile> {
-        val safe = term.trim().replace(Regex("[^\\p{L}\\p{N}_ ]"), " ").replace(Regex("\\s+"), " ")
-        if (safe.length < 2) return emptyList()
-        val filter = "(display_name.ilike.*$safe*,username.ilike.*$safe*)"
-        val rows = JSONArray(request("/rest/v1/poco_profiles?select=user_id,display_name,username&or=${enc(filter)}&limit=25"))
+        val input = term.trim()
+        if (input.length < 2) return emptyList()
+        val idPattern = Regex("^MC-A[0-9]{6}$", RegexOption.IGNORE_CASE)
+        val path = if (idPattern.matches(input)) {
+            "/rest/v1/poco_profiles?select=user_id,account_id,display_name,username&account_id=eq.${enc(input.uppercase())}&limit=25"
+        } else {
+            val safe = input.replace(Regex("[^\\p{L}\\p{N}_ ]"), " ").replace(Regex("\\s+"), " ").trim()
+            if (safe.length < 2) return emptyList()
+            val filter = "(display_name.ilike.*$safe*,username.ilike.*$safe*)"
+            "/rest/v1/poco_profiles?select=user_id,account_id,display_name,username&or=${enc(filter)}&limit=25"
+        }
+        val rows = JSONArray(request(path))
         return (0 until rows.length()).map { i ->
             val o = rows.getJSONObject(i)
-            PocoChatProfile(o.getString("user_id"), o.optString("display_name"), o.optString("username"))
+            PocoChatProfile(
+                o.getString("user_id"),
+                o.getString("account_id"),
+                o.optString("display_name"),
+                o.optString("username")
+            )
         }
     }
 
