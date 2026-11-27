@@ -26,9 +26,8 @@ alter table public.profiles
 
 create unique index if not exists muchi_profiles_user_id_uidx
     on public.profiles(user_id);
-create unique index if not exists muchi_profiles_account_id_uidx
-    on public.profiles(account_id)
-    where account_id is not null;
+create index if not exists muchi_profiles_account_id_idx
+    on public.profiles(account_id);
 
 update public.profiles
    set display_name = coalesce(display_name, ''),
