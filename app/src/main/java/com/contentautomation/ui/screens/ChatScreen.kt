@@ -91,6 +91,7 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
     val appearancePrefs = remember(context) {
         context.getSharedPreferences("muchi_chat_appearance", Context.MODE_PRIVATE)
     }
+    var selected by remember { mutableStateOf<PocoChatConversation?>(null) }
     val appearanceKey = selected?.id ?: "default"
     var ownBubbleColor by remember(appearanceKey) {
         mutableStateOf(Color(appearancePrefs.getInt("own_bubble_color_$appearanceKey", 0xFF18181B.toInt())))
@@ -111,7 +112,6 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
     var myId by remember { mutableStateOf<String?>(null) }
     var myAccountId by remember { mutableStateOf<String?>(null) }
     var conversations by remember { mutableStateOf<List<PocoChatConversation>>(emptyList()) }
-    var selected by remember { mutableStateOf<PocoChatConversation?>(null) }
     var messages by remember { mutableStateOf<List<PocoChatMessage>>(emptyList()) }
     var peerProfile by remember { mutableStateOf<PocoChatProfile?>(null) }
     var nicknames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
