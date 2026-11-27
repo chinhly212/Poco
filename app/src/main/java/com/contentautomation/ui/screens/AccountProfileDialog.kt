@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,7 +38,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
-import kotlin.math.max
 
 @Composable
 fun AccountProfileDialog(
@@ -150,7 +150,7 @@ fun AccountProfileDialog(
                     AsyncImage(
                         model = selectedImage,
                         contentDescription = "Xem trước ảnh đại diện hình tròn",
-                        modifier = Modifier.size(220.dp).clip(CircleShape),
+                        modifier = Modifier.size(220.dp).clip(CircleShape).graphicsLayer { scaleX = cropZoom; scaleY = cropZoom },
                         contentScale = ContentScale.Crop
                     )
                     Text("Phóng to hoặc thu nhỏ ảnh trong khung tròn", fontSize = 12.sp, color = Color(0xFF71717A))
