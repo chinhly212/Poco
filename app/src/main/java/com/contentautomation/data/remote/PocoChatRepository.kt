@@ -155,6 +155,22 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
         }
     }
 
+    suspend fun conversationPeer(conversationId: String, myUserId: String): PocoChatProfile? {
+        val members = JSONArray(request("/rest/v1/poco_conversation_members?select=user_id&conversation_id=eq.$conversationId"))
+        val peerId = (0 until members.length())
+            .map { members.getJSONObject(it).optString("user_id") }
+            .firstOrNull { it.isNotBlank() && it != myUserId } ?: return null
+        val rows = JSONArray(request("/rest/v1/poco_profiles?select=user_id,account_id,display_name,username&user_id=eq.$peerId&limit=1"))
+        if (rows.length() == 0) return null
+        val profile = rows.getJSONObject(0)
+        return PocoChatProfile(
+            profile.getString("user_id"),
+            profile.optString("account_id"),
+            profile.optString("display_name"),
+            profile.optString("username")
+        )
+    }
+
     suspend fun messages(conversationId: String): List<PocoChatMessage> {
         val rows = JSONArray(request("/rest/v1/poco_messages?select=id,conversation_id,sender_id,body,created_at&conversation_id=eq.$conversationId&deleted_at=is.null&order=created_at.asc&limit=300"))
         return (0 until rows.length()).map { i ->
