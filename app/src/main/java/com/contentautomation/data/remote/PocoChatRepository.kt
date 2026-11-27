@@ -231,7 +231,8 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
             val id = o.getString("id")
             val group = o.optBoolean("is_group")
             val peer = profilesByUser[peerByConversation[id]]
-            val profileTitle = peer?.displayName?.takeIf { it.isNotBlank() }
+            val profileTitle = peer?.nickname?.takeIf { it.isNotBlank() }
+                ?: peer?.displayName?.takeIf { it.isNotBlank() }
                 ?: peer?.accountId?.takeIf { it.isNotBlank() }
                 ?: peer?.username?.takeIf { it.isNotBlank() }
                 ?: peer?.userId
