@@ -2,6 +2,11 @@ package com.contentautomation.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
 import androidx.compose.ui.Alignment
@@ -12,7 +17,6 @@ import androidx.compose.ui.unit.sp
 import com.contentautomation.data.db.entity.SourceAccount
 import com.contentautomation.ui.DriveUiState
 import com.contentautomation.ui.models.StorageInfo
-import com.contentautomation.data.remote.DriveFileItem
 import com.contentautomation.ui.components.*
 
 @Composable
@@ -33,6 +37,7 @@ fun SettingsScreen(
     onSetAccountEnabled: (String, Boolean) -> Unit,
     onDeleteAccount: (String) -> Unit,
     onOpenApi: () -> Unit,
+    onLogout: () -> Unit,
     notificationsGranted: Boolean,
     storagePermissionRequired: Boolean,
     storageGranted: Boolean,
@@ -47,6 +52,7 @@ fun SettingsScreen(
 ) {
     val kuaishou = accounts.count { it.platform.equals("kuaishou", ignoreCase = true) }
     val douyin = accounts.count { it.platform.equals("douyin", ignoreCase = true) }
+    var showLogoutConfirmation by remember { mutableStateOf(false) }
 
     ScreenColumn {
         GlassCard(Modifier.fillMaxWidth()) {
@@ -201,6 +207,35 @@ fun SettingsScreen(
                 InfoRow("Phiên bản", appVersion)
             }
         }
+
+        // Luôn đặt đăng xuất ở cuối cùng của trang Cài đặt.
+        TextButton(
+            onClick = { showLogoutConfirmation = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            GText("Đăng xuất tài khoản", 14.sp, weight = FontWeight.Bold, color = GlassColors.Red)
+        }
+    }
+
+    if (showLogoutConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirmation = false },
+            title = { androidx.compose.material3.Text("Đăng xuất MuChi?") },
+            text = { androidx.compose.material3.Text("Bạn sẽ quay về màn hình đăng nhập. Dữ liệu tài khoản trên máy chủ không bị xóa.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutConfirmation = false
+                    onLogout()
+                }) {
+                    androidx.compose.material3.Text("Đăng xuất")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirmation = false }) {
+                    androidx.compose.material3.Text("Hủy")
+                }
+            }
+        )
     }
 }
 
