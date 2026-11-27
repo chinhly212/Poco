@@ -1,33 +1,41 @@
 package com.contentautomation.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.PowerSettingsNew
-import androidx.compose.material.icons.rounded.Storage
-import androidx.compose.material.icons.rounded.VideocamOff
-import androidx.compose.material.icons.rounded.WifiOff
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.VideocamOff
+import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material3.Icon
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.contentautomation.ui.components.*
-import com.contentautomation.ui.models.AppError
-import com.contentautomation.ui.models.ErrorKind
 import com.contentautomation.data.db.entity.PipelineJob
 import com.contentautomation.data.db.entity.PipelineStage
 import com.contentautomation.data.db.entity.PipelineStatus
+import com.contentautomation.ui.components.GText
+import com.contentautomation.ui.components.ScreenColumn
+import com.contentautomation.ui.models.AppError
+import com.contentautomation.ui.models.ErrorKind
+
+private val PageBg = Color(0xFFF4F4F5)
+private val CardBg = Color(0xFFFFFFFF)
+private val Line = Color(0xFFE4E4E7)
+private val Ink = Color(0xFF18181B)
+private val Muted = Color(0xFF71717A)
+private val ErrorRed = Color(0xFFDC2626)
+private val SuccessGreen = Color(0xFF16A34A)
+private val Blue = Color(0xFF2563EB)
 
 @Composable
 fun HomeScreen(
@@ -51,39 +59,52 @@ fun HomeScreen(
 
 @Composable
 private fun SystemCard(systemOn: Boolean, onToggle: () -> Unit) {
-    val accent = if (systemOn) GlassColors.Green else GlassColors.InkSoft
-
-    GlassCard(Modifier.fillMaxWidth()) {
-        Column(
-            Modifier.fillMaxWidth().padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+    val shape = RoundedCornerShape(10.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(CardBg)
+            .border(1.dp, Line, shape)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            GText("TRẠNG THÁI HỆ THỐNG", 11.sp, weight = FontWeight.Bold, color = GlassColors.InkSoft)
-            Spacer(Modifier.height(5.dp))
-            GText(
-                if (systemOn) "Đang hoạt động" else "Đang tắt",
-                21.sp, weight = FontWeight.Bold, color = accent
-            )
-            Spacer(Modifier.height(20.dp))
             Box(
                 Modifier
-                    .size(112.dp)
+                    .size(9.dp)
                     .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            listOf(Color.White.copy(alpha = 0.95f), accent.copy(alpha = 0.22f))
-                        )
-                    )
-                    .toggleable(value = systemOn, role = Role.Switch, onValueChange = { onToggle() }),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Rounded.PowerSettingsNew,
-                    contentDescription = "Bật hoặc tắt hệ thống",
-                    tint = accent,
-                    modifier = Modifier.size(52.dp)
+                    .background(if (systemOn) SuccessGreen else Color(0xFFA1A1AA))
+            )
+            Column {
+                GText(
+                    if (systemOn) "Hệ thống đang hoạt động" else "Hệ thống đang tắt",
+                    14.sp,
+                    weight = FontWeight.SemiBold,
+                    color = Ink
                 )
+                GText("TRẠNG THÁI HỆ THỐNG", 10.sp, color = Muted)
             }
+        }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF18181B))
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            GText(
+                if (systemOn) "Tắt hệ thống" else "Bật hệ thống",
+                12.sp,
+                weight = FontWeight.SemiBold,
+                color = Color.White
+            )
         }
     }
 }
@@ -94,50 +115,99 @@ private fun PipelineCard(jobs: List<PipelineJob>, onOpenWork: () -> Unit) {
     val pending = jobs.count { it.status == PipelineStatus.PENDING }
     val done = jobs.count { it.status == PipelineStatus.DONE }
     val failed = jobs.count { it.status == PipelineStatus.FAILED }
+    val shape = RoundedCornerShape(10.dp)
 
-    GlassCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                GText("TIẾN TRÌNH CÔNG VIỆC", 10.sp, weight = FontWeight.Bold,
-                    color = GlassColors.InkSoft, modifier = Modifier.weight(1f))
-                TextButton(onClick = onOpenWork) {
-                    GText("Mở công việc", 12.sp, weight = FontWeight.Bold, color = GlassColors.Blue)
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                GText("Tổng: ${jobs.size}", 12.sp, weight = FontWeight.SemiBold)
-                GText("Đang chạy: $running", 12.sp, color = GlassColors.Blue)
-                GText("Chờ: $pending", 12.sp, color = GlassColors.InkSoft)
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                GText("Đã lưu: $done", 12.sp, color = GlassColors.Green)
-                GText("Lỗi: $failed", 12.sp, color = GlassColors.Red)
-            }
-            Spacer(Modifier.height(8.dp))
-            if (jobs.isEmpty()) {
-                GText("Chưa có công việc. Thêm tài khoản nguồn rồi chọn Quét ngay.",
-                    12.sp, color = GlassColors.InkSoft)
-            } else {
-                jobs.take(3).forEach { job ->
-                    GlassDivider()
-                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            GText(stageTitle(job.stage), 12.sp, weight = FontWeight.SemiBold)
-                            GText(job.sourceVideoId, 10.sp, color = GlassColors.InkSoft)
-                        }
-                        GText(statusTitle(job.status), 11.sp, weight = FontWeight.Bold,
-                            color = when (job.status) {
-                                PipelineStatus.RUNNING -> GlassColors.Blue
-                                PipelineStatus.DONE -> GlassColors.Green
-                                PipelineStatus.FAILED -> GlassColors.Red
-                                PipelineStatus.PAUSED -> GlassColors.Amber
-                                PipelineStatus.PENDING -> GlassColors.InkSoft
-                            })
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(CardBg)
+            .border(1.dp, Line, shape)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            GText(
+                "Tiến trình công việc",
+                14.sp,
+                weight = FontWeight.SemiBold,
+                color = Ink,
+                modifier = Modifier.weight(1f)
+            )
+            GText(
+                "Mở công việc",
+                12.sp,
+                weight = FontWeight.SemiBold,
+                color = Blue,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClick = onOpenWork)
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+            )
+        }
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MetricTile("Tổng", jobs.size, Ink, Modifier.weight(1f))
+            MetricTile("Đang chạy", running, Blue, Modifier.weight(1f))
+            MetricTile("Chờ", pending, Muted, Modifier.weight(1f))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MetricTile("Đã lưu", done, SuccessGreen, Modifier.weight(1f))
+            MetricTile("Lỗi", failed, ErrorRed, Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
+        }
+
+        if (jobs.isEmpty()) {
+            GText(
+                "Chưa có công việc. Thêm tài khoản nguồn rồi chọn Quét ngay.",
+                12.sp,
+                color = Muted
+            )
+        } else {
+            jobs.take(3).forEach { job ->
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        GText(stageTitle(job.stage), 12.sp, weight = FontWeight.SemiBold, color = Ink)
+                        GText(job.sourceVideoId, 10.sp, color = Muted)
                     }
+                    GText(
+                        statusTitle(job.status),
+                        11.sp,
+                        weight = FontWeight.SemiBold,
+                        color = when (job.status) {
+                            PipelineStatus.RUNNING -> Blue
+                            PipelineStatus.DONE -> SuccessGreen
+                            PipelineStatus.FAILED -> ErrorRed
+                            PipelineStatus.PAUSED -> Color(0xFFD97706)
+                            PipelineStatus.PENDING -> Muted
+                        }
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MetricTile(label: String, value: Int, valueColor: Color, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(8.dp)
+    Column(
+        modifier
+            .aspectRatio(1f)
+            .clip(shape)
+            .background(Color.White)
+            .border(1.dp, Line, shape)
+            .padding(9.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.Start
+    ) {
+        GText(value.toString(), 20.sp, weight = FontWeight.Bold, color = valueColor)
+        Spacer(Modifier.height(3.dp))
+        GText(label, 11.sp, color = Muted)
     }
 }
 
@@ -169,44 +239,106 @@ private fun ErrorSection(
     onDelete: (String) -> Unit,
     onClear: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            GText("Thông báo hệ thống", 17.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            TextButton(onClick = onClear) {
-                GText("Xóa hết", 12.sp, weight = FontWeight.Bold, color = GlassColors.Blue)
-            }
+            GText("Thông báo hệ thống", 15.sp, weight = FontWeight.SemiBold, color = Ink,
+                modifier = Modifier.weight(1f))
+            GText(
+                "Xóa hết",
+                12.sp,
+                weight = FontWeight.Medium,
+                color = Muted,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClick = onClear)
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+            )
         }
         errors.forEach { ErrorCard(it, onAction, onDelete) }
     }
 }
 
 private fun ErrorKind.icon(): ImageVector = when (this) {
-    ErrorKind.VideoUnavailable -> Icons.Rounded.VideocamOff
-    ErrorKind.StorageAlmostFull -> Icons.Rounded.Storage
-    ErrorKind.NetworkLost -> Icons.Rounded.WifiOff
+    ErrorKind.VideoUnavailable -> Icons.Outlined.VideocamOff
+    ErrorKind.StorageAlmostFull -> Icons.Outlined.Storage
+    ErrorKind.NetworkLost -> Icons.Outlined.WifiOff
 }
 
 @Composable
 private fun ErrorCard(error: AppError, onAction: (AppError) -> Unit, onDelete: (String) -> Unit) {
-    val tint = if (error.kind == ErrorKind.VideoUnavailable) GlassColors.Red else GlassColors.Amber
+    val shape = RoundedCornerShape(10.dp)
+    val is502 = error.title.contains("HTTP 502", ignoreCase = true) ||
+        error.message.contains("HTTP 502", ignoreCase = true)
 
-    GlassCard(Modifier.fillMaxWidth(), shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
-        Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-                IconTile(error.kind.icon(), tint, 26.dp)
-                Column(Modifier.weight(1f)) {
-                    GText(error.title, 14.sp, weight = FontWeight.Bold)
-                    GText(error.time, 11.sp, color = GlassColors.InkSoft)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(CardBg)
+            .border(1.dp, Line, shape)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            Icon(error.kind.icon(), contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    GText(error.title, 13.sp, weight = FontWeight.SemiBold, color = Ink,
+                        modifier = Modifier.weight(1f, fill = false))
+                    if (is502) {
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(Color(0xFFFEE2E2))
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                        ) {
+                            GText("HTTP 502", 10.sp, weight = FontWeight.Bold, color = Color(0xFFB91C1C))
+                        }
+                    }
                 }
-            }
-            GText(error.message, 12.sp, color = GlassColors.InkSoft)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { onDelete(error.id) }) {
-                    GText("Xóa", 12.sp, weight = FontWeight.Bold, color = GlassColors.Red)
-                }
-                GlassButton(error.actionLabel, onClick = { onAction(error) })
+                GText(error.time, 10.sp, color = Muted)
             }
         }
+        GText(error.message, 11.sp, color = Muted)
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RectActionButton(
+                text = "Xóa",
+                onClick = { onDelete(error.id) },
+                textColor = ErrorRed,
+                modifier = Modifier.padding(end = 7.dp)
+            )
+            RectActionButton(
+                text = error.actionLabel,
+                onClick = { onAction(error) },
+                filled = true
+            )
+        }
+    }
+}
+
+@Composable
+private fun RectActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    textColor: Color = Ink,
+    filled: Boolean = false
+) {
+    val shape = RoundedCornerShape(6.dp)
+    Box(
+        modifier
+            .clip(shape)
+            .background(if (filled) Color(0xFFF4F4F5) else Color.White)
+            .border(1.dp, Line, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        GText(text, 11.sp, weight = FontWeight.Medium, color = textColor)
     }
 }
