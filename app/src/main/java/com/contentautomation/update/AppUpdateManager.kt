@@ -4,8 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import com.cundong.utils.PatchUtils
-import com.google.gson.Gson
-import com.google.gson.JsonParser
+import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -43,9 +42,38 @@ class AppUpdateManager(private val context: Context) {
     suspend fun checkForUpdate(): AvailableUpdate? = withContext(Dispatchers.IO) {
         clearTemporaryUpdateFiles()
 
-        val json = readLatestReleaseAsset("update.json")
-        val manifest = Gson().fromJson(json, UpdateManifest::class.java)
-            ?: throw IOException("Thông tin cập nhật không hợp lệ")
+        // Parse JSON explicitly: Gson reflection was failing in minified Release builds
+        // when R8 rewrote generic DTO metadata (reported as abstract class P3.c).
+        val json = JSONObject(readLatestReleaseAsset("update.json"))
+        val assetsJson = json.optJSONObject("assets")
+            ?: throw IOException("Thông tin cập nhật thiếu danh sách APK")
+        val assets = linkedMapOf<String, ReleaseAsset>()
+        val assetKeys = assetsJson.keys()
+        while (assetKeys.hasNext()) {
+            val abiKey = assetKeys.next()
+            val item = assetsJson.optJSONObject(abiKey) ?: continue
+            val apkUrl = item.optString("apkUrl").takeIf { it.isNotBlank() }
+                ?: throw IOException("Thiếu đường dẫn APK cho $abiKey")
+            val apkSha256 = item.optString("apkSha256").takeIf { it.isNotBlank() }
+                ?: throw IOException("Thiếu mã kiểm tra APK cho $abiKey")
+            assets[abiKey] = ReleaseAsset(
+                apkUrl = apkUrl,
+                apkSha256 = apkSha256,
+                patchUrl = item.optString("patchUrl").takeIf { it.isNotBlank() && it != "null" },
+                patchSha256 = item.optString("patchSha256").takeIf { it.isNotBlank() && it != "null" },
+                baseVersionCode = if (item.has("baseVersionCode") && !item.isNull("baseVersionCode")) item.optLong("baseVersionCode") else null,
+                baseApkSha256 = item.optString("baseApkSha256").takeIf { it.isNotBlank() && it != "null" }
+            )
+        }
+        val manifest = UpdateManifest(
+            versionCode = json.optLong("versionCode", -1L),
+            versionName = json.optString("versionName"),
+            releaseNotes = json.optString("releaseNotes"),
+            assets = assets
+        )
+        if (manifest.versionCode < 0L || manifest.versionName.isBlank() || manifest.assets.isEmpty()) {
+            throw IOException("Thông tin cập nhật không đầy đủ hoặc không hợp lệ")
+        }
         if (manifest.versionCode <= installedVersionCode()) return@withContext null
 
         val abi = Build.SUPPORTED_ABIS.firstOrNull { manifest.assets.containsKey(it) }
@@ -139,14 +167,13 @@ class AppUpdateManager(private val context: Context) {
             response.body?.string() ?: throw IOException("GitHub không trả thông tin bản phát hành")
         }
 
-        val release = JsonParser.parseString(releaseJson).asJsonObject
-        val assets = release.getAsJsonArray("assets")
+        val assets = JSONObject(releaseJson).optJSONArray("assets")
             ?: throw IOException("Bản phát hành không có danh sách tệp")
-        val asset = assets.firstOrNull {
-            it.asJsonObject.get("name")?.asString == fileName
-        }?.asJsonObject ?: throw IOException("Không tìm thấy tệp $fileName trong bản phát hành")
-        val assetId = asset.get("id")?.asLong
-            ?: throw IOException("GitHub không trả mã tệp $fileName")
+        val asset = (0 until assets.length()).map { assets.getJSONObject(it) }
+            .firstOrNull { it.optString("name") == fileName }
+            ?: throw IOException("Không tìm thấy tệp $fileName trong bản phát hành")
+        val assetId = asset.optLong("id", -1L)
+        if (assetId <= 0L) throw IOException("GitHub không trả mã tệp $fileName")
         return "$githubApi/releases/assets/$assetId"
     }
 
