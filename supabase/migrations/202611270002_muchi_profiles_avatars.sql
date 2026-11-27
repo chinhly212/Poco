@@ -48,7 +48,7 @@ revoke all on function public.muchi_sync_profile_mirror() from public;
 
 drop trigger if exists muchi_sync_profile_mirror_trigger on public.poco_profiles;
 create trigger muchi_sync_profile_mirror_trigger
-    after insert or update of account_id, display_name, nickname, avatar_url, updated_at
+    after insert or update
     on public.poco_profiles
     for each row execute procedure public.muchi_sync_profile_mirror();
 
