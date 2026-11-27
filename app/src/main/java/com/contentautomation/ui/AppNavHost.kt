@@ -66,6 +66,7 @@ import com.contentautomation.ui.screens.SystemScreen
 import com.contentautomation.ui.screens.ApiSettingsScreen
 import com.contentautomation.ui.screens.ChatScreen
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 private object MuChiRoutes {
     const val HOME = "home"
@@ -100,6 +101,24 @@ fun AppNavHost(vm: MainViewModel) {
         } else {
             accountStatus = null
             accountStatusLoading = false
+        }
+    }
+
+    // Recheck account access periodically while the app is open. A failed request
+    // does not overwrite the last known status, avoiding accidental access changes
+    // during temporary network outages.
+    LaunchedEffect(authenticated) {
+        if (authenticated) {
+            val support = UserSupportRepository(context.applicationContext, auth)
+            while (true) {
+                delay(60_000)
+                val status = runCatching { support.accountStatus() }
+                    .recoverCatching {
+                        auth.refreshSession().getOrThrow()
+                        support.accountStatus()
+                    }
+                status.getOrNull()?.let { accountStatus = it }
+            }
         }
     }
 
