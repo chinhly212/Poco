@@ -1,22 +1,37 @@
 package com.contentautomation.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.ChatBubbleOutline
-import androidx.compose.material.icons.rounded.GroupAdd
-import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.GroupAdd
+import androidx.compose.material.icons.outlined.PersonAddAlt1
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -26,6 +41,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,6 +52,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -49,16 +66,29 @@ import com.contentautomation.data.remote.SupabaseAuth
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private val ChatWhite = Color(0xFFFFFFFF)
+private val ChatSurface = Color(0xFFF4F4F5)
+private val ChatBorder = Color(0xFFE4E4E7)
+private val ChatInk = Color(0xFF18181B)
+private val ChatMuted = Color(0xFF71717A)
+
 @Composable
-fun ChatScreen(auth: SupabaseAuth) {
+fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
     val context = LocalContext.current
     val repo = remember(context, auth) { PocoChatRepository(context.applicationContext, auth) }
     val scope = rememberCoroutineScope()
+    val preferences = remember(context) {
+        context.getSharedPreferences("muchi_chat_nicknames", Context.MODE_PRIVATE)
+    }
     var myId by remember { mutableStateOf<String?>(null) }
     var myAccountId by remember { mutableStateOf<String?>(null) }
     var conversations by remember { mutableStateOf<List<PocoChatConversation>>(emptyList()) }
     var selected by remember { mutableStateOf<PocoChatConversation?>(null) }
     var messages by remember { mutableStateOf<List<PocoChatMessage>>(emptyList()) }
+    var peerProfile by remember { mutableStateOf<PocoChatProfile?>(null) }
+    var nicknames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var showNicknameDialog by remember { mutableStateOf(false) }
+    var nicknameDraft by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<PocoChatProfile>>(emptyList()) }
     var groupMode by remember { mutableStateOf(false) }
@@ -82,6 +112,9 @@ fun ChatScreen(auth: SupabaseAuth) {
     }
 
     LaunchedEffect(Unit) {
+        nicknames = preferences.all.mapNotNull { (key, value) ->
+            (value as? String)?.takeIf { it.isNotBlank() }?.let { key to it }
+        }.toMap()
         try {
             myId = repo.myUserId()
             myAccountId = repo.myAccountId()
@@ -90,6 +123,18 @@ fun ChatScreen(auth: SupabaseAuth) {
             error = e.message ?: "Không thể kết nối Chat POCO."
         } finally {
             loading = false
+        }
+    }
+
+    LaunchedEffect(selected?.id) {
+        onDetailChanged(selected != null)
+        peerProfile = null
+        val active = selected
+        val uid = myId
+        if (active != null && uid != null && !active.isGroup) {
+            runCatching { repo.conversationPeer(active.id, uid) }
+                .onSuccess { peerProfile = it }
+                .onFailure { error = it.message }
         }
     }
 
@@ -124,31 +169,75 @@ fun ChatScreen(auth: SupabaseAuth) {
         }
     }
 
-    Scaffold(containerColor = Color.Transparent) { padding ->
+    fun displayName(profile: PocoChatProfile?): String {
+        if (profile == null) return selected?.title?.takeIf { it.isNotBlank() } ?: "Cuộc trò chuyện"
+        return nicknames[profile.userId]
+            ?: profile.displayName.takeIf { it.isNotBlank() }
+            ?: profile.accountId.takeIf { it.isNotBlank() }
+            ?: profile.username.takeIf { it.isNotBlank() }
+            ?: profile.userId
+    }
+
+    Scaffold(containerColor = ChatWhite) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp)
+            Modifier.fillMaxSize().background(ChatWhite)
+                .padding(padding)
+                .padding(horizontal = if (selected == null) 16.dp else 0.dp)
         ) {
             if (selected == null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.ChatBubbleOutline, contentDescription = null)
-                    Text("  MuChi Chat", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Row(
+                    Modifier.fillMaxWidth().height(48.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Tin nhắn", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ChatInk)
                     Spacer(Modifier.weight(1f))
+                    Row(
+                        Modifier.clip(RoundedCornerShape(8.dp)).background(ChatSurface)
+                            .clickable {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("MuChi ID", myAccountId.orEmpty()))
+                            }
+                            .padding(start = 9.dp, end = 5.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("ID: ${myAccountId ?: "…"}", fontSize = 11.sp, color = ChatInk, fontWeight = FontWeight.Medium)
+                        Icon(Icons.Outlined.ContentCopy, contentDescription = "Sao chép ID", modifier = Modifier.padding(start = 5.dp).size(15.dp), tint = ChatMuted)
+                    }
+                    IconButton(onClick = {
+                        groupMode = false
+                        search = ""
+                    }) { Icon(Icons.Outlined.PersonAddAlt1, contentDescription = "Thêm bạn", tint = ChatInk) }
                     IconButton(onClick = {
                         groupMode = !groupMode
                         selectedMembers.clear()
                         groupTitle = ""
-                    }) { Icon(Icons.Rounded.GroupAdd, contentDescription = "Tạo nhóm") }
+                    }) { Icon(Icons.Outlined.GroupAdd, contentDescription = "Tạo nhóm", tint = ChatInk) }
                 }
-                Text("ID MuChi của bạn: ${myAccountId ?: "Đang tải..."}", fontSize = 12.sp, color = Color.Gray)
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = search, onValueChange = { search = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(if (groupMode) "Tìm bằng ID MuChi hoặc tên để thêm vào nhóm" else "Tìm bằng ID MuChi, tên hoặc username") },
-                    singleLine = true
-                )
+
+                Row(
+                    Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(10.dp))
+                        .background(ChatSurface).padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Search, contentDescription = null, tint = ChatMuted, modifier = Modifier.size(19.dp))
+                    Spacer(Modifier.width(8.dp))
+                    BasicTextField(
+                        value = search,
+                        onValueChange = { search = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ChatInk),
+                        decorationBox = { inner ->
+                            Box {
+                                if (search.isEmpty()) Text("Tìm ID, tên hoặc username...", color = ChatMuted, fontSize = 13.sp)
+                                inner()
+                            }
+                        }
+                    )
+                }
+
                 if (groupMode) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = groupTitle, onValueChange = { groupTitle = it },
                         modifier = Modifier.fillMaxWidth(), label = { Text("Tên nhóm") }, singleLine = true
@@ -171,19 +260,31 @@ fun ChatScreen(auth: SupabaseAuth) {
                         enabled = !busy && groupTitle.isNotBlank() && selectedMembers.isNotEmpty()
                     ) { Text("Tạo nhóm (${selectedMembers.size})") }
                 }
+
                 if (loading) {
-                    CircularProgressIndicator(Modifier.padding(20.dp))
+                    Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = ChatInk)
+                    }
                 } else if (results.isNotEmpty()) {
-                    Text(if (groupMode) "Chọn thành viên" else "Kết quả tìm kiếm", fontWeight = FontWeight.SemiBold)
-                    LazyColumn(Modifier.weight(1f, fill = false)) {
+                    Text(if (groupMode) "Chọn thành viên" else "Kết quả tìm kiếm", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 14.dp, bottom = 5.dp), color = ChatInk)
+                    LazyColumn(Modifier.weight(1f)) {
                         items(results, key = { it.userId }) { profile ->
                             Row(
-                                Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                                Modifier.fillMaxWidth().clickable {
+                                    if (!groupMode) launchAction {
+                                        val id = repo.createDirect(profile.userId)
+                                        refreshConversations()
+                                        selected = conversations.firstOrNull { it.id == id }
+                                            ?: PocoChatConversation(id, profile.displayName.ifBlank { profile.accountId }, false, "")
+                                        search = ""
+                                    }
+                                }.padding(vertical = 9.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(profile.displayName.ifBlank { profile.username }, fontWeight = FontWeight.SemiBold)
-                                    Text("${profile.accountId}  ·  @${profile.username}", fontSize = 12.sp, color = Color.Gray)
+                                ChatAvatar(profile.displayName.ifBlank { profile.accountId }, 44)
+                                Column(Modifier.weight(1f).padding(start = 11.dp)) {
+                                    Text(profile.displayName.ifBlank { profile.accountId.ifBlank { profile.userId } }, fontWeight = FontWeight.SemiBold, color = ChatInk, fontSize = 14.sp)
+                                    Text("${profile.accountId}  ·  @${profile.username}", fontSize = 12.sp, color = ChatMuted)
                                 }
                                 if (groupMode) {
                                     Checkbox(
@@ -193,61 +294,68 @@ fun ChatScreen(auth: SupabaseAuth) {
                                             else selectedMembers.remove(profile.userId)
                                         }
                                     )
-                                } else {
-                                    TextButton(onClick = {
-                                        launchAction {
-                                            val id = repo.createDirect(profile.userId)
-                                            refreshConversations()
-                                            selected = conversations.firstOrNull { it.id == id }
-                                                ?: PocoChatConversation(id, profile.displayName, false, "")
-                                            search = ""
-                                        }
-                                    }) { Text("Nhắn tin") }
-                                }
+                                } else Text("Nhắn tin", color = ChatInk, fontSize = 12.sp)
                             }
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(ChatBorder))
                         }
                     }
                 } else if (search.length >= 2) {
-                    Text("Không tìm thấy người dùng.", color = Color.Gray, fontSize = 13.sp)
-                }
-                if (search.isBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text("Cuộc trò chuyện", fontWeight = FontWeight.SemiBold)
+                    Text("Không tìm thấy người dùng.", color = ChatMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 14.dp))
+                } else if (search.isBlank()) {
+                    Text("Cuộc trò chuyện", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ChatMuted, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
                     if (conversations.isEmpty() && !loading) {
-                        Text("Chưa có cuộc trò chuyện. Tìm ID MuChi, tên hoặc username ở trên để bắt đầu.", color = Color.Gray, fontSize = 13.sp)
-                    }
-                    LazyColumn(Modifier.weight(1f)) {
-                        items(conversations, key = { it.id }) { conversation ->
-                            TextButton(
-                                onClick = {
-                                    selected = conversation
-                                    launchAction { messages = repo.messages(conversation.id) }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(Modifier.fillMaxWidth()) {
-                                    Text(
-                                        (if (conversation.isGroup) "👥 " else "") + conversation.title,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Text(conversation.lastMessage.ifBlank { "Mở cuộc trò chuyện" }, color = Color.Gray, fontSize = 12.sp)
+                        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                            Text("Chưa có tin nhắn. Tìm ID MuChi, tên hoặc username để bắt đầu.", color = ChatMuted, fontSize = 13.sp)
+                        }
+                    } else {
+                        LazyColumn(Modifier.weight(1f)) {
+                            items(conversations, key = { it.id }) { conversation ->
+                                val title = conversation.title.ifBlank { "Cuộc trò chuyện" }
+                                Row(
+                                    Modifier.fillMaxWidth().clickable {
+                                        selected = conversation
+                                        launchAction { messages = repo.messages(conversation.id) }
+                                    }.padding(vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    ChatAvatar(title, 44)
+                                    Column(Modifier.weight(1f).padding(start = 11.dp)) {
+                                        Text(title, fontWeight = FontWeight.SemiBold, color = ChatInk, fontSize = 14.sp, maxLines = 1)
+                                        Text(conversation.lastMessage.ifBlank { "Mở cuộc trò chuyện" }, color = ChatMuted, fontSize = 12.sp, maxLines = 1)
+                                    }
                                 }
+                                Box(Modifier.fillMaxWidth().height(1.dp).background(ChatBorder))
                             }
                         }
                     }
                 }
             } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { selected = null; messages = emptyList() }) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Quay lại")
+                val active = selected!!
+                val peerName = if (active.isGroup) active.title else displayName(peerProfile)
+                Row(
+                    Modifier.fillMaxWidth().height(58.dp).background(ChatWhite)
+                        .border(width = 0.dp, color = ChatWhite).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { selected = null; messages = emptyList(); peerProfile = null }) {
+                        Icon(Icons.Outlined.ArrowBack, contentDescription = "Quay lại", tint = ChatInk)
                     }
-                    Column {
-                        Text(selected!!.title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text(if (selected!!.isGroup) "Nhóm MuChi" else "Trò chuyện riêng", color = Color.Gray, fontSize = 12.sp)
+                    ChatAvatar(peerName, 36)
+                    Text(
+                        peerName,
+                        modifier = Modifier.padding(start = 9.dp).weight(1f),
+                        fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = ChatInk, maxLines = 1
+                    )
+                    if (!active.isGroup && peerProfile != null) {
+                        IconButton(onClick = {
+                            nicknameDraft = nicknames[peerProfile!!.userId].orEmpty()
+                            showNicknameDialog = true
+                        }) { Icon(Icons.Outlined.Edit, contentDescription = "Sửa biệt danh", tint = ChatMuted) }
                     }
                 }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(ChatBorder))
                 LazyColumn(
-                    Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp),
+                    Modifier.weight(1f).fillMaxWidth().background(ChatWhite).padding(horizontal = 14.dp, vertical = 8.dp),
                     reverseLayout = false
                 ) {
                     items(messages, key = { it.id }) { message ->
@@ -259,43 +367,103 @@ fun ChatScreen(auth: SupabaseAuth) {
                             Text(
                                 message.body,
                                 modifier = Modifier
-                                    .background(
-                                        if (mine) Color(0xFFDCEBFF) else Color(0xFFECEFF3),
-                                        RoundedCornerShape(16.dp)
+                                    .widthInChatBubble()
+                                    .clip(
+                                        if (mine) RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 4.dp)
+                                        else RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 4.dp, bottomEnd = 16.dp)
                                     )
-                                    .padding(horizontal = 12.dp, vertical = 9.dp),
-                                color = Color(0xFF182230),
+                                    .background(if (mine) ChatInk else ChatSurface)
+                                    .padding(horizontal = 13.dp, vertical = 9.dp),
+                                color = if (mine) ChatWhite else ChatInk,
                                 fontSize = 14.sp
                             )
                         }
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
+                Row(
+                    Modifier.fillMaxWidth().background(ChatWhite).imePadding().padding(horizontal = 12.dp, vertical = 8.dp)
+                        .height(44.dp).clip(CircleShape).background(ChatSurface).padding(start = 15.dp, end = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BasicTextField(
                         value = draft, onValueChange = { draft = it },
                         modifier = Modifier.weight(1f),
-                        label = { Text("Tin nhắn") }
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = ChatInk),
+                        decorationBox = { inner ->
+                            Box {
+                                if (draft.isEmpty()) Text("Nhắn tin...", color = ChatMuted, fontSize = 14.sp)
+                                inner()
+                            }
+                        }
                     )
                     IconButton(
                         enabled = draft.isNotBlank() && !busy,
                         onClick = {
-                            val active = selected ?: return@IconButton
+                            val current = selected ?: return@IconButton
                             val text = draft
                             launchAction {
-                                repo.sendMessage(active.id, myId ?: error("Chưa xác định tài khoản"), text)
+                                repo.sendMessage(current.id, myId ?: error("Chưa xác định tài khoản"), text)
                                 draft = ""
                                 refreshMessages()
                                 refreshConversations()
                             }
-                        }
-                    ) { Icon(Icons.Rounded.Send, contentDescription = "Gửi") }
+                        },
+                        modifier = Modifier.size(34.dp).clip(CircleShape).background(ChatInk)
+                    ) {
+                        Icon(Icons.Outlined.Send, contentDescription = "Gửi", tint = ChatWhite, modifier = Modifier.size(17.dp))
+                    }
                 }
             }
             error?.let {
-                Spacer(Modifier.height(6.dp))
-                Text(it, color = Color(0xFFB3261E), fontSize = 12.sp)
+                Text(it, color = Color(0xFFB3261E), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
-            if (busy) Text("Đang xử lý…", color = Color.Gray, fontSize = 11.sp)
+            if (busy) Text("Đang xử lý…", color = ChatMuted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp))
         }
     }
+
+    if (showNicknameDialog && peerProfile != null) {
+        AlertDialog(
+            onDismissRequest = { showNicknameDialog = false },
+            title = { Text("Đặt biệt danh") },
+            text = {
+                OutlinedTextField(
+                    value = nicknameDraft,
+                    onValueChange = { nicknameDraft = it },
+                    singleLine = true,
+                    label = { Text("Biệt danh") },
+                    placeholder = { Text(peerProfile?.displayName ?: "Tên hiển thị") }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = peerProfile!!.userId
+                    val clean = nicknameDraft.trim()
+                    if (clean.isBlank()) preferences.edit().remove(id).apply()
+                    else preferences.edit().putString(id, clean).apply()
+                    nicknames = nicknames.toMutableMap().apply {
+                        if (clean.isBlank()) remove(id) else put(id, clean)
+                    }
+                    showNicknameDialog = false
+                }) { Text("Lưu") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNicknameDialog = false }) { Text("Hủy") }
+            }
+        )
+    }
 }
+
+@Composable
+private fun ChatAvatar(name: String, size: Int) {
+    val initial = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+    Box(
+        Modifier.size(size.dp).clip(CircleShape).background(ChatSurface),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(initial, color = ChatInk, fontWeight = FontWeight.SemiBold, fontSize = (size * 0.38f).sp)
+    }
+}
+
+private fun Modifier.widthInChatBubble(): Modifier =
+    this.then(Modifier.fillMaxWidth(0.82f))
