@@ -1,9 +1,11 @@
 package com.contentautomation.update
 
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import com.cundong.utils.PatchUtils
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -36,20 +38,12 @@ data class AvailableUpdate(
 
 class AppUpdateManager(private val context: Context) {
     private val client = OkHttpClient()
-    private val manifestUrl =
-        "https://github.com/chinhly212/Poco/releases/latest/download/update.json"
+    private val githubApi = "https://api.github.com/repos/chinhly212/Poco"
 
     suspend fun checkForUpdate(): AvailableUpdate? = withContext(Dispatchers.IO) {
         clearTemporaryUpdateFiles()
 
-        val request = Request.Builder().url(manifestUrl).get().build()
-        val json = client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IOException("Không thể kiểm tra cập nhật (HTTP ${response.code})")
-            }
-            response.body?.string() ?: throw IOException("Máy chủ cập nhật không trả dữ liệu")
-        }
-
+        val json = readLatestReleaseAsset("update.json")
         val manifest = Gson().fromJson(json, UpdateManifest::class.java)
             ?: throw IOException("Thông tin cập nhật không hợp lệ")
         if (manifest.versionCode <= installedVersionCode()) return@withContext null
@@ -111,6 +105,51 @@ class AppUpdateManager(private val context: Context) {
         fullApk
     }
 
+    /**
+     * GitHub browser_download_url có thể trả HTTP 403 qua redirect CDN.
+     * Tra cứu asset ID từ Releases API rồi tải bằng endpoint chính thức của GitHub.
+     */
+    private fun readLatestReleaseAsset(fileName: String): String {
+        val assetUrl = latestReleaseAssetApiUrl(fileName)
+        val request = Request.Builder()
+            .url(assetUrl)
+            .header("Accept", "application/octet-stream")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .get()
+            .build()
+        return client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("Không thể tải $fileName (HTTP ${response.code})")
+            }
+            response.body?.string() ?: throw IOException("Tệp $fileName không có dữ liệu")
+        }
+    }
+
+    private fun latestReleaseAssetApiUrl(fileName: String): String {
+        val request = Request.Builder()
+            .url("$githubApi/releases/latest")
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .get()
+            .build()
+        val releaseJson = client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("Không thể lấy thông tin bản phát hành (HTTP ${response.code})")
+            }
+            response.body?.string() ?: throw IOException("GitHub không trả thông tin bản phát hành")
+        }
+
+        val release = JsonParser.parseString(releaseJson).asJsonObject
+        val assets = release.getAsJsonArray("assets")
+            ?: throw IOException("Bản phát hành không có danh sách tệp")
+        val asset = assets.firstOrNull {
+            it.asJsonObject.get("name")?.asString == fileName
+        }?.asJsonObject ?: throw IOException("Không tìm thấy tệp $fileName trong bản phát hành")
+        val assetId = asset.get("id")?.asLong
+            ?: throw IOException("GitHub không trả mã tệp $fileName")
+        return "$githubApi/releases/assets/$assetId"
+    }
+
     private fun clearTemporaryUpdateFiles() {
         context.cacheDir.listFiles()
             ?.filter {
@@ -154,8 +193,16 @@ class AppUpdateManager(private val context: Context) {
 
     private fun download(url: String, destination: File) {
         destination.parentFile?.mkdirs()
-        val request = Request.Builder().url(url).get().build()
+        val fileName = Uri.parse(url).lastPathSegment
+            ?: throw IOException("Đường dẫn tệp cập nhật không hợp lệ")
         try {
+            val assetUrl = latestReleaseAssetApiUrl(fileName)
+            val request = Request.Builder()
+                .url(assetUrl)
+                .header("Accept", "application/octet-stream")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .get()
+                .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     throw IOException("Tải cập nhật thất bại (HTTP ${response.code})")
