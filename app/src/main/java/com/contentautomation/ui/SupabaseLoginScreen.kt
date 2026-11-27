@@ -37,7 +37,7 @@ fun SupabaseLoginScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(if (isSignUp) "Tạo tài khoản Mu Chi" else "Đăng nhập Mu Chi")
+        Text(if (isSignUp) "Tạo tài khoản MuChi" else "Đăng nhập MuChi")
         Spacer(Modifier.height(20.dp))
         OutlinedTextField(
             value = email,
