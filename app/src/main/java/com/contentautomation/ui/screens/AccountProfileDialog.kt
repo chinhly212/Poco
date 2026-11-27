@@ -19,11 +19,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Slider
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,7 +38,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
-import kotlin.math.max
 
 @Composable
 fun AccountProfileDialog(
@@ -50,6 +52,8 @@ fun AccountProfileDialog(
     var displayName by remember(initialProfile) { mutableStateOf(initialProfile?.displayName.orEmpty()) }
     var nickname by remember(initialProfile) { mutableStateOf(initialProfile?.nickname.orEmpty()) }
     var selectedImage by remember { mutableStateOf<Uri?>(null) }
+    var cropZoom by remember { mutableFloatStateOf(1f) }
+    var showCropEditor by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -59,6 +63,8 @@ fun AccountProfileDialog(
                 context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             selectedImage = uri
+            cropZoom = 1f
+            showCropEditor = true
         }
     }
 
@@ -73,7 +79,8 @@ fun AccountProfileDialog(
                             AsyncImage(
                                 model = selectedImage ?: initialProfile?.avatarUrl,
                                 contentDescription = "Ảnh đại diện",
-                                modifier = Modifier.size(76.dp).clip(CircleShape)
+                                modifier = Modifier.size(76.dp).clip(CircleShape),
+                                contentScale = ContentScale.Crop
                             )
                         } else {
                             Box(Modifier.size(76.dp).clip(CircleShape).background(Color(0xFFF4F4F5)), contentAlignment = Alignment.Center) {
@@ -105,13 +112,13 @@ fun AccountProfileDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = !saving, onClick = {
+            TextButton(enabled = !saving && !showCropEditor, onClick = {
                 scope.launch {
                     saving = true
                     error = null
                     try {
                         val avatarUrl = selectedImage?.let { uri ->
-                            val bytes = withContext(Dispatchers.IO) { compressAvatar(context, uri) }
+                            val bytes = withContext(Dispatchers.IO) { compressAvatar(context, uri, cropZoom) }
                             repository.uploadAvatar(bytes)
                         } ?: initialProfile?.avatarUrl
                         repository.updateMyProfile(displayName, nickname, avatarUrl)
@@ -129,9 +136,40 @@ fun AccountProfileDialog(
             TextButton(enabled = !saving, onClick = onDismiss) { Text("Hủy") }
         }
     )
+
+    if (showCropEditor && selectedImage != null) {
+        AlertDialog(
+            onDismissRequest = { showCropEditor = false; selectedImage = null },
+            title = { Text("Căn chỉnh ảnh đại diện") },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    AsyncImage(
+                        model = selectedImage,
+                        contentDescription = "Xem trước ảnh đại diện hình tròn",
+                        modifier = Modifier.size(220.dp).clip(CircleShape).graphicsLayer { scaleX = cropZoom; scaleY = cropZoom },
+                        contentScale = ContentScale.Crop
+                    )
+                    Text("Phóng to hoặc thu nhỏ ảnh trong khung tròn", fontSize = 12.sp, color = Color(0xFF71717A))
+                    Slider(value = cropZoom, onValueChange = { cropZoom = it }, valueRange = 1f..3f)
+                    Text("Điều chỉnh tỷ lệ ảnh", fontSize = 12.sp, color = Color(0xFF71717A))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showCropEditor = false }) { Text("Dùng ảnh này") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCropEditor = false; selectedImage = null }) { Text("Chọn lại") }
+            }
+        )
+    }
+
 }
 
-private fun compressAvatar(context: android.content.Context, uri: Uri): ByteArray {
+private fun compressAvatar(context: android.content.Context, uri: Uri, zoom: Float): ByteArray {
     val resolver = context.contentResolver
     val source = if (Build.VERSION.SDK_INT >= 28) {
         ImageDecoder.createSource(resolver, uri)
@@ -145,12 +183,12 @@ private fun compressAvatar(context: android.content.Context, uri: Uri): ByteArra
         @Suppress("DEPRECATION")
         MediaStore.Images.Media.getBitmap(resolver, uri)
     }
-    val maxDimension = max(bitmap.width, bitmap.height)
-    val scale = minOf(1f, 512f / maxDimension.toFloat())
-    val resized = if (scale < 1f) Bitmap.createScaledBitmap(
-        bitmap, (bitmap.width * scale).toInt().coerceAtLeast(1),
-        (bitmap.height * scale).toInt().coerceAtLeast(1), true
-    ) else bitmap
+    val side = (minOf(bitmap.width, bitmap.height) / zoom.coerceIn(1f, 3f)).toInt().coerceAtLeast(1)
+    val left = ((bitmap.width - side) / 2).coerceAtLeast(0)
+    val top = ((bitmap.height - side) / 2).coerceAtLeast(0)
+    val square = Bitmap.createBitmap(bitmap, left, top, side, side)
+    val resized = Bitmap.createScaledBitmap(square, 512, 512, true)
+    if (square !== bitmap) square.recycle()
     var quality = 82
     var bytes: ByteArray
     do {
@@ -159,7 +197,7 @@ private fun compressAvatar(context: android.content.Context, uri: Uri): ByteArra
         bytes = output.toByteArray()
         quality -= 8
     } while (bytes.size > 900 * 1024 && quality >= 50)
-    if (resized !== bitmap) resized.recycle()
+    resized.recycle()
     bitmap.recycle()
     require(bytes.size <= 1024 * 1024) { "Ảnh quá lớn. Hãy chọn ảnh khác." }
     return bytes
