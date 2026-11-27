@@ -15,6 +15,21 @@ create table if not exists public.profiles (
     updated_at timestamptz not null default now()
 );
 
+-- Also handle projects where public.profiles already existed with a partial schema.
+alter table public.profiles
+    add column if not exists user_id uuid references auth.users(id) on delete cascade,
+    add column if not exists account_id text,
+    add column if not exists display_name text not null default '',
+    add column if not exists nickname text not null default '',
+    add column if not exists avatar_url text,
+    add column if not exists updated_at timestamptz not null default now();
+
+create unique index if not exists muchi_profiles_user_id_uidx
+    on public.profiles(user_id);
+create unique index if not exists muchi_profiles_account_id_uidx
+    on public.profiles(account_id)
+    where account_id is not null;
+
 alter table public.profiles enable row level security;
 grant select on public.profiles to authenticated;
 
