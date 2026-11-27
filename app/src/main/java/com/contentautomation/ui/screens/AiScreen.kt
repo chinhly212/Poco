@@ -1,39 +1,32 @@
 package com.contentautomation.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Text
 import androidx.compose.material3.IconButton
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.Send
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.AiChatMessage
 import com.contentautomation.ui.MainViewModel
@@ -43,6 +36,11 @@ import com.contentautomation.video.MediaStoreSaver
 import kotlinx.coroutines.launch
 
 private data class AiChatLine(val text: String, val fromUser: Boolean)
+
+private val AiBg = Color(0xFFF9FAFB)
+private val AiInk = Color(0xFF18181B)
+private val AiMuted = Color(0xFF71717A)
+private val AiLine = Color(0xFFE4E4E7)
 
 @Composable
 fun AiScreen(vm: MainViewModel) {
@@ -60,135 +58,20 @@ fun AiScreen(vm: MainViewModel) {
 
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    var serverOnline by remember { mutableStateOf<Boolean?>(null) }
-    var serverStatusLine by remember { mutableStateOf("Đang kết nối…") }
 
     LaunchedEffect(Unit) {
         val savedMessages = runCatching { chatDao.getAll() }.getOrElse { emptyList() }
         lines.clear()
         lines.addAll(savedMessages.map { AiChatLine(it.message, it.fromUser) })
-
         runCatching { server.getHealth() }
-            .onSuccess { health ->
-                serverOnline = true
-                serverStatusLine = if (health.aiReady || vm.getSavedApiKeys().isNotEmpty()) {
-                    "Trợ lý sẵn sàng"
-                } else {
-                    "Chưa kết nối mô hình AI"
-                }
-            }
-            .onFailure {
-                serverOnline = false
-                serverStatusLine = "Trợ lý đang gặp sự cố kết nối"
-            }
-
-        if (lines.isEmpty()) {
-            appendLine(
-                AiChatLine(
-                    "Xin chào chủ nhân! Tôi là trợ lý riêng của bạn. Tôi sẽ cố gắng trả lời tự nhiên, ngắn gọn và đúng điều bạn cần. Bạn có thể trò chuyện hoặc gửi đường dẫn video để tôi tìm và tải giúp.",
-                    false
-                )
-            )
-        }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text("MuChi AI", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(
-                    serverStatusLine,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (serverOnline == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            TextButton(
-                enabled = !busy,
-                onClick = {
-                    scope.launch {
-                        runCatching { chatDao.deleteAll() }
-                            .onSuccess { lines.clear() }
-                            .onFailure {
-                                vm.reportAiIssue(
-                                    "Không xóa được lịch sử chat",
-                                    it.message ?: it.javaClass.simpleName
-                                )
-                            }
-                    }
-                }
-            ) {
-                Text("Xóa toàn bộ")
-            }
-        }
-
-        Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            lines.forEach { line ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = if (line.fromUser) Arrangement.End else Arrangement.Start
-                ) {
-                    Surface(
-                        color = if (line.fromUser) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surfaceVariant,
-                        shape = MaterialTheme.shapes.large,
-                        modifier = Modifier.fillMaxWidth(0.88f)
-                    ) {
-                        Text(
-                            line.text,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (line.fromUser) MaterialTheme.colorScheme.onPrimaryContainer
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-            if (busy) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 2.dp)
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp
-                    )
-                    Text("Đang suy nghĩ…", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedTextField(
-                value = input,
-                onValueChange = { input = it },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Nhắn tin hoặc dán link video…") },
-                maxLines = 4,
-                enabled = !busy
-            )
-            IconButton(
-                enabled = !busy && input.isNotBlank(),
-                onClick = {
-                    val prompt = input.trim()
-                    if (prompt.isNotEmpty()) {
-                        input = ""
-                        busy = true
-                        scope.launch {
+    fun submitPrompt() {
+        val prompt = input.trim()
+        if (prompt.isEmpty() || busy) return
+        input = ""
+        busy = true
+        scope.launch {
                             appendLine(AiChatLine(prompt, true))
                             val sourceUrls = Regex("""https?://[^\s<>]+""")
                                 .findAll(prompt)
@@ -296,13 +179,165 @@ fun AiScreen(vm: MainViewModel) {
                                 busy = false
                             }
                         }
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().background(AiBg),
+        verticalArrangement = Arrangement.Top
+    ) {
+        // Header 52dp, trắng, đường phân cách mảnh.
+        Box(
+            modifier = Modifier.fillMaxWidth().height(52.dp)
+                .background(Color.White)
+                .border(width = 0.dp, color = Color.Transparent)
+        ) {
+            Box(Modifier.fillMaxWidth().height(1.dp).align(Alignment.BottomCenter).background(AiLine))
+            Text(
+                text = "MuChi AI",
+                modifier = Modifier.align(Alignment.Center),
+                color = AiInk,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            IconButton(
+                onClick = {
+                    if (!busy) scope.launch {
+                        runCatching { chatDao.deleteAll() }
+                            .onSuccess { lines.clear() }
+                            .onFailure {
+                                vm.reportAiIssue("Không xóa được lịch sử chat", it.message ?: it.javaClass.simpleName)
+                            }
                     }
-                }
+                },
+                enabled = !busy,
+                modifier = Modifier.align(Alignment.CenterEnd).size(48.dp)
             ) {
-                Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Gửi")
+                Icon(
+                    Icons.Outlined.DeleteOutline,
+                    contentDescription = "Xóa lịch sử chat",
+                    tint = AiMuted,
+                    modifier = Modifier.size(21.dp)
+                )
             }
         }
-        Spacer(Modifier.height(2.dp))
+
+        if (lines.isEmpty()) {
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier.size(54.dp).clip(CircleShape)
+                        .background(Color.White).border(1.dp, AiLine, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = AiInk, modifier = Modifier.size(25.dp))
+                }
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    "Tôi có thể giúp gì cho bạn hôm nay?",
+                    color = AiInk,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(22.dp))
+                listOf("Tải video từ đường dẫn", "Kiểm tra trạng thái quét", "Giúp tôi sử dụng MuChi").forEach { suggestion ->
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White)
+                            .border(1.dp, AiLine, RoundedCornerShape(8.dp))
+                            .clickable(enabled = !busy) {
+                                input = when (suggestion) {
+                                    "Tải video từ đường dẫn" -> "Tôi muốn tải video từ đường dẫn: "
+                                    "Kiểm tra trạng thái quét" -> "Kiểm tra trạng thái quét hiện tại"
+                                    else -> "Hướng dẫn tôi sử dụng MuChi"
+                                }
+                            }
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                    ) {
+                        Text(suggestion, color = AiInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                lines.forEach { line ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = if (line.fromUser) Arrangement.End else Arrangement.Start
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(if (line.fromUser) 0.88f else 0.94f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (line.fromUser) Color(0xFFF1F1F3) else Color.White)
+                                .border(1.dp, AiLine, RoundedCornerShape(14.dp))
+                                .padding(horizontal = 13.dp, vertical = 11.dp)
+                        ) {
+                            Text(line.text, color = AiInk, fontSize = 14.sp, lineHeight = 20.sp)
+                        }
+                    }
+                }
+                if (busy) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(start = 4.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp, color = AiMuted)
+                        Text("Đang suy nghĩ…", color = AiMuted, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        // Thanh nhập liệu tích hợp nút gửi bên trong.
+        Row(
+            modifier = Modifier.fillMaxWidth().background(AiBg)
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color.White)
+                    .border(1.dp, Color(0xFFD4D4D8), RoundedCornerShape(24.dp))
+                    .padding(start = 16.dp, end = 7.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (input.isEmpty()) {
+                        Text("Nhắn tin hoặc dán link...", color = Color(0xFFA1A1AA), fontSize = 13.sp, maxLines = 1)
+                    }
+                    BasicTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !busy,
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = AiInk, fontSize = 14.sp)
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier.size(32.dp).clip(CircleShape)
+                        .background(if (input.isNotBlank() && !busy) AiInk else Color(0xFFA1A1AA))
+                        .clickable(enabled = input.isNotBlank() && !busy) { submitPrompt() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = "Gửi tin nhắn", tint = Color.White, modifier = Modifier.size(17.dp))
+                }
+            }
+        }
     }
 }
 
