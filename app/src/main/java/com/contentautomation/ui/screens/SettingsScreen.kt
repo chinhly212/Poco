@@ -25,6 +25,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import com.contentautomation.data.db.entity.SourceAccount
+import com.contentautomation.data.remote.PocoChatProfile
+import com.contentautomation.data.remote.PocoChatRepository
+import com.contentautomation.data.remote.SupabaseAuth
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.outlined.Person
 import com.contentautomation.ui.DriveUiState
 import com.contentautomation.ui.models.StorageInfo
 import java.util.Locale
@@ -40,6 +45,7 @@ private val SettingsRed = Color(0xFFDC2626)
 
 @Composable
 fun SettingsScreen(
+    auth: SupabaseAuth,
     deviceId: String,
     accounts: List<SourceAccount>,
     appVersion: String,
@@ -69,6 +75,11 @@ fun SettingsScreen(
     onLogoutDouyin: () -> Unit,
     onLogoutKuaishou: () -> Unit
 ) {
+    val context = LocalContext.current
+    val profileRepo = remember(context, auth) { PocoChatRepository(context.applicationContext, auth) }
+    var profile by remember { mutableStateOf<PocoChatProfile?>(null) }
+    var showProfileEditor by remember { mutableStateOf(false) }
+    LaunchedEffect(auth) { runCatching { profileRepo.myProfile() }.onSuccess { profile = it } }
     val douyin = accounts.count { it.platform.equals("douyin", true) }
     val kuaishou = accounts.count { it.platform.equals("kuaishou", true) }
     var confirmLogout by remember { mutableStateOf(false) }
@@ -81,6 +92,32 @@ fun SettingsScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SettingsWhite)
+                .border(1.dp, SettingsBorder, RoundedCornerShape(14.dp))
+                .clickable { showProfileEditor = true }.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (!profile?.avatarUrl.isNullOrBlank()) {
+                coil.compose.AsyncImage(
+                    model = profile?.avatarUrl,
+                    contentDescription = "Ảnh đại diện",
+                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(28.dp))
+                )
+            } else {
+                Box(Modifier.size(56.dp).clip(RoundedCornerShape(28.dp)).background(SettingsBg), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Person, contentDescription = null, tint = SettingsMuted, modifier = Modifier.size(27.dp))
+                }
+            }
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Text("Thông tin tài khoản", fontSize = 11.sp, color = SettingsMuted, fontWeight = FontWeight.SemiBold)
+                Text(profile?.displayName?.ifBlank { "Chưa đặt tên" } ?: "Đang tải hồ sơ…", fontSize = 15.sp, color = SettingsInk, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text("Biệt danh: ${profile?.nickname?.takeIf { it.isNotBlank() } ?: "Chưa đặt"}", fontSize = 11.sp, color = SettingsMuted, maxLines = 1)
+                Text("ID: ${profile?.accountId ?: "Đang tải…"}", fontSize = 11.sp, color = SettingsMuted, maxLines = 1)
+            }
+            Icon(Icons.Outlined.ChevronRight, contentDescription = "Chỉnh sửa hồ sơ", tint = SettingsMuted)
+        }
+
         SettingsGroup("Tài khoản & Nguồn dữ liệu") {
             Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Tổng: ${accounts.size}  •  Douyin: $douyin  •  Kuaishou: $kuaishou",
@@ -206,6 +243,15 @@ fun SettingsScreen(
             Text("Đăng xuất tài khoản", fontSize = 14.sp, color = SettingsRed, fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.height(8.dp))
+    }
+
+    if (showProfileEditor) {
+        AccountProfileDialog(
+            auth = auth,
+            initialProfile = profile,
+            onDismiss = { showProfileEditor = false },
+            onSaved = { profile = it; showProfileEditor = false }
+        )
     }
 
     if (confirmLogout) {
