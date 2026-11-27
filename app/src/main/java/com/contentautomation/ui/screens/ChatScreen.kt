@@ -6,7 +6,6 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +36,7 @@ import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -470,47 +470,70 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
     }
 
     if (showAppearanceDialog) {
-        AlertDialog(
+        ModalBottomSheet(
             onDismissRequest = { showAppearanceDialog = false },
-            title = { Text("Tùy chỉnh phòng Chat") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Màu bong bóng tin nhắn của bạn", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        listOf(
-                            "Đen" to Color(0xFF18181B),
-                            "Xanh navy" to Color(0xFF1E3A8A),
-                            "Xanh rêu" to Color(0xFF365A40),
-                            "Tím than" to Color(0xFF43305D)
-                        ).forEach { (label, color) ->
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(
-                                    Modifier.size(34.dp).clip(CircleShape).background(color)
-                                        .border(if (ownBubbleColor == color) 3.dp else 1.dp, if (ownBubbleColor == color) Color(0xFF9CA3AF) else ChatBorder, CircleShape)
-                                        .clickable {
-                                            ownBubbleColor = color
-                                            appearancePrefs.edit().putInt("own_bubble_color", color.toArgb()).apply()
-                                        }
-                                )
-                                Text(label, fontSize = 9.sp, color = ChatMuted)
-                            }
+            containerColor = ChatWhite,
+            contentColor = ChatInk
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text("Tùy chỉnh phòng Chat", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = ChatInk)
+                Text("Màu bong bóng tin nhắn của bạn", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ChatMuted)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(
+                        "Đen" to Color(0xFF18181B),
+                        "Xanh navy" to Color(0xFF1E3A8A),
+                        "Xanh rêu" to Color(0xFF365A40),
+                        "Tím than" to Color(0xFF43305D)
+                    ).forEach { (label, color) ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(
+                                Modifier.size(42.dp).clip(CircleShape).background(color)
+                                    .border(
+                                        if (ownBubbleColor == color) 3.dp else 1.dp,
+                                        if (ownBubbleColor == color) Color(0xFF9CA3AF) else ChatBorder,
+                                        CircleShape
+                                    )
+                                    .clickable {
+                                        ownBubbleColor = color
+                                        appearancePrefs.edit().putInt("own_bubble_color", color.toArgb()).apply()
+                                    }
+                            )
+                            Text(label, fontSize = 10.sp, color = ChatMuted)
                         }
                     }
-                    TextButton(onClick = { backgroundPicker.launch(arrayOf("image/*")) }) {
-                        Icon(Icons.Outlined.Image, contentDescription = null)
-                        Text(" Chọn ảnh nền từ điện thoại")
-                    }
-                    if (!chatBackgroundUri.isNullOrBlank()) {
-                        TextButton(onClick = {
-                            chatBackgroundUri = null
-                            appearancePrefs.edit().remove("chat_background_uri").apply()
-                        }) { Text("Xóa ảnh nền") }
-                    }
-                    Text("Ảnh nền được lưu trên thiết bị này; lớp phủ tối nhẹ giúp nội dung dễ đọc.", fontSize = 11.sp, color = ChatMuted)
                 }
-            },
-            confirmButton = { TextButton(onClick = { showAppearanceDialog = false }) { Text("Xong") } }
-        )
+                Box(
+                    Modifier.fillMaxWidth().height(1.dp).background(ChatBorder)
+                )
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .clickable { backgroundPicker.launch(arrayOf("image/*")) }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Image, contentDescription = null, tint = ChatInk)
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Text("Chọn ảnh nền từ điện thoại", fontSize = 14.sp, color = ChatInk, fontWeight = FontWeight.Medium)
+                        Text("Ảnh chỉ lưu trên thiết bị này", fontSize = 11.sp, color = ChatMuted)
+                    }
+                    Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = ChatMuted)
+                }
+                if (!chatBackgroundUri.isNullOrBlank()) {
+                    TextButton(onClick = {
+                        chatBackgroundUri = null
+                        appearancePrefs.edit().remove("chat_background_uri").apply()
+                    }) { Text("Xóa ảnh nền", color = ChatMuted) }
+                }
+                Text("Lớp phủ tối nhẹ giúp nội dung tin nhắn luôn dễ đọc.", fontSize = 11.sp, color = ChatMuted)
+            }
+        }
     }
 
     if (showNicknameDialog && peerProfile != null) {
