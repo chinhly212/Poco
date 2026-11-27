@@ -199,6 +199,7 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
     fun displayName(profile: PocoChatProfile?): String {
         if (profile == null) return selected?.title?.takeIf { it.isNotBlank() } ?: "Cuộc trò chuyện"
         return nicknames[profile.userId]
+            ?: profile.nickname.takeIf { it.isNotBlank() }
             ?: profile.displayName.takeIf { it.isNotBlank() }
             ?: profile.accountId.takeIf { it.isNotBlank() }
             ?: profile.username.takeIf { it.isNotBlank() }
@@ -306,7 +307,7 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
                             ) {
                                 ChatAvatar(profile.displayName.ifBlank { profile.accountId }, 44, profile.avatarUrl)
                                 Column(Modifier.weight(1f).padding(start = 11.dp)) {
-                                    Text(profile.displayName.ifBlank { profile.accountId.ifBlank { profile.userId } }, fontWeight = FontWeight.SemiBold, color = ChatInk, fontSize = 14.sp)
+                                    Text(profile.nickname.ifBlank { profile.displayName }.ifBlank { profile.accountId.ifBlank { profile.userId } }, fontWeight = FontWeight.SemiBold, color = ChatInk, fontSize = 14.sp)
                                     Text("${profile.accountId}  ·  @${profile.username}", fontSize = 12.sp, color = ChatMuted)
                                 }
                                 if (groupMode) {
