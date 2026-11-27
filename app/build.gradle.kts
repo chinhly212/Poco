@@ -184,6 +184,8 @@ dependencies {
     // ==============================
 
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.7")
+    // FFmpegKit references this Android exception formatter at runtime.
+    implementation("com.arthenica:smart-exception-java:0.2.1")
 
     // Google Identity authorization for per-user Google Drive access
     implementation("com.google.android.gms:play-services-auth:22.0.0")
