@@ -22,6 +22,32 @@ sealed interface UpdateUiState {
     data class Failed(val update: AvailableUpdate, val message: String) : UpdateUiState
 }
 
+private fun vietnameseReleaseNotes(notes: String): String {
+    val original = notes.trim()
+    if (original.isBlank()) return "Sửa lỗi và cải thiện độ ổn định của ứng dụng."
+
+    // Giữ nguyên nội dung tiếng Việt do quy trình phát hành tạo ra.
+    if (
+        original.contains("Khắc phục", ignoreCase = true) ||
+        original.contains("Cải thiện", ignoreCase = true) ||
+        original.contains("Sửa lỗi", ignoreCase = true)
+    ) return original
+
+    val normalized = original.lowercase()
+    return when {
+        normalized.contains("403") || normalized.contains("bad_jwt") ->
+            "• Khắc phục lỗi HTTP 403 khi sử dụng Chat và đăng xuất tài khoản.\n" +
+            "• Cải thiện xử lý phiên đăng nhập khi mã xác thực hết hạn.\n" +
+            "• Đảm bảo có thể đăng xuất trên thiết bị ngay cả khi máy chủ từ chối yêu cầu."
+
+        normalized.contains("updater") || normalized.contains("update") ->
+            "• Cải thiện tính năng kiểm tra và cập nhật phiên bản trực tiếp trong ứng dụng.\n" +
+            "• Tăng độ ổn định khi tải và xác minh tệp cập nhật."
+
+        else -> "• Sửa lỗi và cải thiện độ ổn định của ứng dụng."
+    }
+}
+
 @Composable
 fun AppUpdateDialog(
     state: UpdateUiState,
@@ -51,11 +77,7 @@ fun AppUpdateDialog(
                 text = {
                     Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
                         Text("Phiên bản ${state.update.manifest.versionName}")
-                        Text(
-                            state.update.manifest.releaseNotes.ifBlank {
-                                "Sửa lỗi và cải thiện độ ổn định."
-                            }
-                        )
+                        Text(vietnameseReleaseNotes(state.update.manifest.releaseNotes))
                     }
                 },
                 confirmButton = {
