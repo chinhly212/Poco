@@ -120,18 +120,27 @@ class SupabaseAuth(context: Context) {
     suspend fun signOut(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val token = currentAccessToken()
+
+            // Xóa phiên trên thiết bị trước để người dùng luôn đăng xuất được,
+            // kể cả khi Supabase từ chối thu hồi phiên cũ bằng HTTP 403.
+            clearSession()
+
             if (!token.isNullOrBlank()) {
-                val request = Request.Builder()
-                    .url("$SUPABASE_URL/auth/v1/logout")
-                    .addHeader("apikey", SUPABASE_PUBLISHABLE_KEY)
-                    .addHeader("Authorization", "Bearer $token")
-                    .post("".toRequestBody(null))
-                    .build()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) error("Đăng xuất Supabase thất bại (HTTP ${response.code}).")
+                runCatching {
+                    val request = Request.Builder()
+                        .url("$SUPABASE_URL/auth/v1/logout?scope=local")
+                        .addHeader("apikey", SUPABASE_PUBLISHABLE_KEY)
+                        .addHeader("Authorization", "Bearer $token")
+                        .post("".toRequestBody(null))
+                        .build()
+                    client.newCall(request).execute().use { response ->
+                        // Thu hồi phiên phía máy chủ là best-effort; phiên cục bộ
+                        // đã được xóa nên lỗi mạng/403 không khóa thao tác đăng xuất.
+                        response.body?.close()
+                    }
                 }
             }
-            clearSession()
+            Unit
         }
     }
 

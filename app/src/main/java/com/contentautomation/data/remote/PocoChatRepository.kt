@@ -59,24 +59,42 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
 
         var accessToken = token()
         var response = client.newCall(buildRequest(accessToken)).execute()
-        if (response.code == 401) {
+        var responseText = response.body?.string().orEmpty()
+
+        // Supabase đôi khi trả 403 bad_jwt thay vì 401 khi access token cũ.
+        // Chỉ refresh với 403 có dấu hiệu lỗi JWT; không refresh lỗi RLS/quyền truy cập.
+        val authRejected = response.code == 401 ||
+            (response.code == 403 && runCatching {
+                val json = JSONObject(responseText)
+                val detail = listOf(
+                    json.optString("code"),
+                    json.optString("error"),
+                    json.optString("error_code"),
+                    json.optString("message"),
+                    json.optString("msg"),
+                    json.optString("details")
+                ).joinToString(" ").lowercase()
+                detail.contains("jwt") || detail.contains("token") ||
+                    detail.contains("bad_jwt") || detail.contains("invalid_credentials")
+            }.getOrDefault(false))
+
+        if (authRejected) {
             response.close()
-            accessToken = auth.refreshSession().getOrElse {
-                error("Phiên POCO hết hạn và không thể làm mới. Hãy đăng nhập lại.")
+            accessToken = auth.refreshSession().getOrElse { refreshError ->
+                error("Phiên MuChi không còn hợp lệ (HTTP ${response.code}) và không thể làm mới: ${refreshError.message ?: "hãy đăng nhập lại"}.")
             }.accessToken
             response = client.newCall(buildRequest(accessToken)).execute()
+            responseText = response.body?.string().orEmpty()
         }
+
         response.use {
-            val responseText = it.body?.string().orEmpty()
             if (!it.isSuccessful) {
                 val detail = runCatching {
-                    JSONObject(responseText).optString("message").ifBlank {
-                        JSONObject(responseText).optString("details").ifBlank {
-                            JSONObject(responseText).optString("hint")
-                        }
-                    }
+                    val json = JSONObject(responseText)
+                    listOf("message", "msg", "error_description", "details", "hint", "error", "code")
+                        .firstNotNullOfOrNull { key -> json.optString(key).takeIf(String::isNotBlank) }
                 }.getOrDefault("")
-                error(detail.ifBlank { "Máy chủ POCO trả HTTP ${it.code}" })
+                error((detail ?: "").ifBlank { "Máy chủ POCO trả HTTP ${it.code}" })
             }
             responseText
         }
