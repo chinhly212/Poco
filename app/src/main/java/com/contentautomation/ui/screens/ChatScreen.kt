@@ -170,7 +170,14 @@ fun ChatScreen(auth: SupabaseAuth, onDetailChanged: (Boolean) -> Unit = {}) {
             while (true) {
                 runCatching {
                     refreshConversations()
-                    if (selected != null) refreshMessages()
+                    val activeConversation = selected
+                    val currentUser = myId
+                    if (activeConversation != null) {
+                        refreshMessages()
+                        if (!activeConversation.isGroup && currentUser != null) {
+                            peerProfile = repo.conversationPeer(activeConversation.id, currentUser)
+                        }
+                    }
                 }.onFailure { error = it.message ?: "Không thể đồng bộ Chat." }
                 delay(3500)
             }
