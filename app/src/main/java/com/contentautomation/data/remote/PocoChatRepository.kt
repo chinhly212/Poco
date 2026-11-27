@@ -18,7 +18,8 @@ data class PocoChatConversation(
     val title: String,
     val isGroup: Boolean,
     val updatedAt: String,
-    val lastMessage: String = ""
+    val lastMessage: String = "",
+    val avatarUrl: String? = null
 )
 data class PocoChatMessage(
     val id: String,
@@ -236,7 +237,7 @@ class PocoChatRepository(context: Context, private val auth: SupabaseAuth = Supa
                 ?: peer?.userId
             val title = if (group) o.optString("title").ifBlank { "Nhóm POCO" }
                 else profileTitle ?: o.optString("title").ifBlank { "Cuộc trò chuyện" }
-            PocoChatConversation(id, title, group, o.optString("updated_at"), lastMessageByConversation[id].orEmpty())
+            PocoChatConversation(id, title, group, o.optString("updated_at"), lastMessageByConversation[id].orEmpty(), peer?.avatarUrl)
         }
     }
 
