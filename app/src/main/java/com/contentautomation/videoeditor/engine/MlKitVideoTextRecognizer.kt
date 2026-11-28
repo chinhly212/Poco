@@ -31,7 +31,7 @@ class MlKitVideoTextRecognizer : VideoTextRecognizer {
     ): List<OcrSegment> {
         require(sampleIntervalMs > 0L) { "Khoảng lấy mẫu phải lớn hơn 0." }
         val language = sourceLanguage.trim().lowercase()
-        val chineseOnly = language.contains("中文") || language.contains("chinese") ||
+        val chineseOnly = language.contains("中文") || language.contains("chinese") || language.contains("trung") ||
             language == "zh" || language.startsWith("zh-")
         val latinOnly = language.contains("latin") || language.contains("việt") ||
             language.contains("vietnamese") || language == "vi" || language.startsWith("vi-")
