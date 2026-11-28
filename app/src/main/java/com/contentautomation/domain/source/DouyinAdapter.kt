@@ -62,16 +62,23 @@ class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter
                 val result = runCatching { JSONObject(responseText) }.getOrNull()
                 if (!response.isSuccessful || result?.optString("status") != "success") {
                     val serverDetail = result?.optString("detail")?.takeIf { it.isNotBlank() }
+                    val contentType = response.header("Content-Type").orEmpty().lowercase()
+                    val isHtmlError = contentType.contains("text/html") ||
+                        responseText.contains("<html", ignoreCase = true) ||
+                        responseText.contains("@font-face", ignoreCase = true)
                     val responsePreview = responseText
                         .replace(Regex("<[^>]*>"), " ")
                         .replace(Regex("\\s+"), " ")
                         .trim()
                         .take(500)
                     val detail = serverDetail
-                        ?: responsePreview.takeIf { it.isNotBlank() }?.let {
-                            "Máy chủ quét Douyin trả HTTP ${response.code}: $it"
+                        ?: if (isHtmlError) {
+                            "Máy chủ Render trả trang lỗi HTML thay vì JSON (HTTP ${response.code}). Yêu cầu quét chưa được xử lý; hãy thử lại sau khi máy chủ ổn định."
+                        } else {
+                            responsePreview.takeIf { it.isNotBlank() }?.let {
+                                "Máy chủ quét Douyin trả HTTP ${response.code}: $it"
+                            } ?: "Máy chủ quét Douyin trả HTTP ${response.code} nhưng không có nội dung phản hồi."
                         }
-                        ?: "Máy chủ quét Douyin trả HTTP ${response.code} nhưng không có nội dung phản hồi."
                     throw SourceUnavailableException(detail)
                 }
 
