@@ -89,7 +89,8 @@ class DouyinBulkDownloadWorker(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            val permanent = runAttemptCount >= 2
+            target.delete()
+            val permanent = runAttemptCount >= 3
             app.database.sourceVideoDao().updateStatusError(
                 video.id,
                 if (permanent) VideoStatus.FAILED.name else VideoStatus.RETRY_PENDING.name,
