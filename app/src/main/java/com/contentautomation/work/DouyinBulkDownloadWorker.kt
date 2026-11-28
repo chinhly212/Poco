@@ -128,7 +128,7 @@ class DouyinBulkDownloadWorker(
                 if (permanent) VideoStatus.FAILED.name else VideoStatus.RETRY_PENDING.name,
                 error.message
             )
-            if (permanent) Result.failure(workDataOf("video_id" to video.id, "external_video_id" to video.externalVideoId, "message" to (error.message ?: "Tải video thất bại."))) else Result.retry()
+            if (permanent) Result.success(workDataOf("video_id" to video.id, "external_video_id" to video.externalVideoId, "message" to (error.message ?: "Tải video thất bại."), "progress_percent" to 0, "download_failed" to true)) else Result.retry()
         }
     }
 
@@ -175,11 +175,12 @@ class DouyinBulkDownloadWorker(
 
     companion object {
         private const val KEY_VIDEO_ID = "video_id"
+        private const val KEY_EXTERNAL_VIDEO_ID = "external_video_id"
         private const val UNIQUE_QUEUE_NAME = "muchi-douyin-sequential-download-queue"
 
-        fun enqueue(context: Context, videoId: String) {
+        fun enqueue(context: Context, videoId: String, externalVideoId: String) {
             val request = OneTimeWorkRequestBuilder<DouyinBulkDownloadWorker>()
-                .setInputData(workDataOf(KEY_VIDEO_ID to videoId))
+                .setInputData(workDataOf(KEY_VIDEO_ID to videoId, KEY_EXTERNAL_VIDEO_ID to externalVideoId))
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.CONNECTED)
