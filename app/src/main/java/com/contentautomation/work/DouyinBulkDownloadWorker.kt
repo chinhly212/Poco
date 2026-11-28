@@ -46,6 +46,15 @@ class DouyinBulkDownloadWorker(
         val account = app.database.sourceAccountDao().findById(video.sourceAccountId)
             ?: return@withContext Result.failure()
 
+        setProgress(
+            workDataOf(
+                "message" to "Đang chuẩn bị tải video Douyin…",
+                "video_id" to video.id,
+                "bytes_downloaded" to 0L,
+                "total_bytes" to -1L,
+                "progress_percent" to 0
+            )
+        )
         if (!app.awaitMediaEngines()) return@withContext Result.retry()
         setForeground(createForegroundInfo(videoId, "Đang chuẩn bị tải video Douyin…"))
         val workDir = File(applicationContext.cacheDir, "MuChi/DouyinArchive/$videoId").apply { mkdirs() }
