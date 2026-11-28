@@ -61,6 +61,8 @@ import com.contentautomation.ui.components.ScreenColumn
 import com.contentautomation.videoeditor.domain.SrtCodec
 import com.contentautomation.videoeditor.domain.SubtitleCue
 import com.contentautomation.videoeditor.engine.AndroidDeviceResourceMonitor
+import com.contentautomation.videoeditor.engine.AiSubtitleTranslator
+import com.contentautomation.ui.MainViewModel
 import com.contentautomation.videoeditor.engine.MlKitVideoTextRecognizer
 import com.contentautomation.videoeditor.engine.SherpaOnnxChineseModelManager
 import com.contentautomation.videoeditor.engine.SherpaOnnxVideoSpeechRecognizer
@@ -76,6 +78,7 @@ private val EditSurface = Color.White
 
 @Composable
 fun EditScreen(
+    vm: MainViewModel,
     selectedVideoName: String?,
     selectedVideoUri: Uri?,
     onImportVideo: () -> Unit
@@ -103,6 +106,7 @@ fun EditScreen(
     var isOcrRunning by remember { mutableStateOf(false) }
     var isSpeechModelDownloading by remember { mutableStateOf(false) }
     var isSpeechRunning by remember { mutableStateOf(false) }
+    var isTranslationRunning by remember { mutableStateOf(false) }
     val speechModelManager = remember(context) { SherpaOnnxChineseModelManager(context) }
     var hasSpeechModel by remember(context) { mutableStateOf(speechModelManager.isInstalled()) }
     val processingProfile = when (selectedProfile) {
@@ -323,8 +327,41 @@ fun EditScreen(
                     Text(if (isOcrRunning) "Đang nhận diện..." else "Quét chữ trong video")
                 }
             }
-            WorkflowRow("Dịch theo ngữ cảnh", "Giữ cách xưng hô và mạch hội thoại", Icons.Outlined.Language)
-            GText("OCR offline hỗ trợ Latin/Việt và Trung. STT dùng mô hình offline tiếng Trung/Anh tải riêng; mốc thời gian hiện chia theo cửa sổ 10 giây.", 11.sp, color = EditMuted)
+            WorkflowRow("Dịch theo ngữ cảnh", "Dùng API AI đã lưu trong Cài đặt > API", Icons.Outlined.Language, status = "AI API")
+            Button(
+                onClick = {
+                    if (isTranslationRunning || subtitles.isEmpty()) return@Button
+                    isTranslationRunning = true
+                    statusMessage = "Đang dịch phụ đề theo từng nhóm..."
+                    val sourceCues = subtitles.toList()
+                    coroutineScope.launch {
+                        val result = runCatching {
+                            withContext(Dispatchers.IO) {
+                                AiSubtitleTranslator().translate(
+                                    cues = sourceCues,
+                                    sourceLanguage = sourceLanguage,
+                                    targetLanguage = targetLanguage,
+                                    apiKeys = vm.getSavedApiKeys()
+                                )
+                            }
+                        }
+                        result.onSuccess { translated ->
+                            subtitles.clear()
+                            subtitles.addAll(translated)
+                            statusMessage = "Đã dịch \${translated.size} đoạn phụ đề sang \${targetLanguage}."
+                        }.onFailure {
+                            statusMessage = "Dịch phụ đề thất bại: \${it.message ?: "Lỗi không xác định"}"
+                        }
+                        isTranslationRunning = false
+                    }
+                },
+                enabled = subtitles.isNotEmpty() && !isTranslationRunning,
+                colors = ButtonDefaults.buttonColors(containerColor = EditInk),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isTranslationRunning) "Đang dịch phụ đề..." else "Dịch toàn bộ \${subtitles.size} đoạn")
+            }
+            GText("OCR offline hỗ trợ Latin/Việt và Trung. STT hiện dùng mô hình offline tiếng Trung/Anh; mốc thời gian chia theo cửa sổ 10 giây. Dịch cần API AI đã cấu hình.", 11.sp, color = EditMuted)
         }
 
         SectionCard {
@@ -459,14 +496,14 @@ private fun SectionTitle(title: String, icon: androidx.compose.ui.graphics.vecto
 }
 
 @Composable
-private fun WorkflowRow(title: String, detail: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+private fun WorkflowRow(title: String, detail: String, icon: androidx.compose.ui.graphics.vector.ImageVector, status: String = "Chưa nối") {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         androidx.compose.material3.Icon(icon, contentDescription = null, tint = EditMuted, modifier = Modifier.size(20.dp))
         Column(Modifier.weight(1f).padding(start = 9.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             GText(title, 12.sp, weight = FontWeight.Medium, color = EditInk)
             GText(detail, 10.sp, color = EditMuted)
         }
-        GText("Chưa nối", 10.sp, color = EditMuted)
+        GText(status, 10.sp, color = EditMuted)
     }
 }
 
