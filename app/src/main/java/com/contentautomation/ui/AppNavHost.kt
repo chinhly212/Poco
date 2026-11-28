@@ -16,6 +16,7 @@ import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
 import com.google.api.services.drive.DriveScopes
+import android.content.Intent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -62,7 +63,6 @@ import com.contentautomation.ui.models.ErrorKind
 import com.contentautomation.ui.screens.HomeScreen
 import com.contentautomation.ui.screens.AiScreen
 import com.contentautomation.ui.screens.SettingsScreen
-import com.contentautomation.ui.screens.SystemScreen
 import com.contentautomation.ui.screens.ApiSettingsScreen
 import com.contentautomation.ui.screens.ChatScreen
 import com.contentautomation.ui.screens.EditScreen
@@ -365,7 +365,10 @@ fun AppNavHost(vm: MainViewModel) {
                         systemOn = isSystemRunning,
                         errors = uiErrors,
                         jobs = pipelineJobs,
-                        vm = vm,\n                        onScanNow = { vm.scanNow() },\n                        onPauseJob = { vm.pauseJob(it) },\n                        onResumeJob = { vm.resumeJob(it) },
+                        vm = vm,
+                        onScanNow = { vm.scanNow() },
+                        onPauseJob = { vm.pauseJob(it) },
+                        onResumeJob = { vm.resumeJob(it) },
 
                         onToggleSystem = {
                             vm.setSystemRunning(
