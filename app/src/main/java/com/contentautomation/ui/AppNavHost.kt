@@ -412,6 +412,7 @@ fun AppNavHost(vm: MainViewModel) {
                 composable(MuChiRoutes.EDIT) {
                     EditScreen(
                         selectedVideoName = selectedEditorVideoName,
+                        selectedVideoUri = selectedEditorVideoUri,
                         onImportVideo = { editorVideoPicker.launch(arrayOf("video/*")) }
                     )
                 }
