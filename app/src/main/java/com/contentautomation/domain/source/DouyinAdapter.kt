@@ -158,9 +158,14 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
 
             fun stringField(vararg keys: String): String? {
                 for (key in keys) {
-                    val pattern = Regex("""["']${Regex.escape(key)}["']\s*:\s*["']([^"']{1,1000})["']""", RegexOption.IGNORE_CASE)
+                    // Douyin sometimes embeds escaped JSON inside HTML script data.
+                    val pattern = Regex("""\\?["']${Regex.escape(key)}\\?["']\s*:\s*\\?["']([^"']{1,1000})\\?["']""", RegexOption.IGNORE_CASE)
                     val value = pattern.find(html)?.groupValues?.getOrNull(1)
-                        ?.replace("\\u002F", "/")?.replace("\\u0026", "&")?.trim()
+                        ?.replace("\\\"", "\"")
+                        ?.replace("\\/", "/")
+                        ?.replace("\\u002F", "/")
+                        ?.replace("\\u0026", "&")
+                        ?.trim()
                     if (!value.isNullOrBlank() && value != "null") return value
                 }
                 return null
@@ -184,8 +189,18 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
                 throw SourceUnavailableException("Chưa lấy được mã hồ sơ Douyin (sec_uid). Hãy dùng link trang cá nhân, không dùng ID hiển thị.")
             }
 
-            val nickname = stringField("nickname", "user_name", "display_name")
-                ?: throw SourceUnavailableException("Đã mở được hồ sơ nhưng Douyin không trả tên tài khoản.")
+            val pageTitle = Regex("""<title[^>]*>(.*?)</title>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                .find(html)?.groupValues?.getOrNull(1)
+                ?.replace(Regex("""<[^>]+>"""), "")
+                ?.replace("&quot;", "\"")
+                ?.replace("&amp;", "&")
+                ?.substringBefore(" - 抖音")
+                ?.removeSuffix("的抖音")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() && !it.contains("登录") && !it.contains("抖音") }
+            val nickname = stringField("nickname", "nick_name", "user_name", "display_name")
+                ?: pageTitle
+                ?: throw SourceUnavailableException("Đã mở được hồ sơ nhưng Douyin không cung cấp trường tên tài khoản trong dữ liệu hồ sơ.")
             val avatar = stringField("avatar_larger", "avatar_url", "avatar_thumb", "avatar")
                 ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
             SourceProfileInfo(
