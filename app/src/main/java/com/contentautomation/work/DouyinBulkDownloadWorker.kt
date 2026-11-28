@@ -208,6 +208,7 @@ class DouyinBulkDownloadWorker(
                 )
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .addTag("muchi-douyin-archive-download")
+                .addTag("muchi-douyin-video:$externalVideoId")
                 .build()
             // One unique chain serializes all selected downloads.
             WorkManager.getInstance(context)
