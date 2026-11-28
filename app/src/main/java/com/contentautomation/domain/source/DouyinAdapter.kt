@@ -150,7 +150,8 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
             val nextCursor = result.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
             hasMore = result.optBoolean("has_more") && !nextCursor.isNullOrBlank() && nextCursor != cursor
             onPage(videos.values.toList(), videos.size, hasMore)
-            cursor = nextCursor ?: break
+            if (nextCursor == null) break
+            cursor = nextCursor
         }
         if (videos.isEmpty()) {
             throw SourceUnavailableException("Douyin không có video công khai hoặc máy chủ chưa đọc được danh sách.")
