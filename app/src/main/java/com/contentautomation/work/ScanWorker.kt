@@ -31,7 +31,10 @@ class ScanWorker(
                 return@withContext Result.retry()
             }
 
+            // Douyin is now handled by the manual full-channel picker. Keep the
+            // existing automatic daily scan only for Kuaishou.
             val accounts = db.sourceAccountDao().getEnabled()
+                .filter { !it.platform.equals("DOUYIN", ignoreCase = true) }
 
             var scanned = 0
             var discovered = 0
@@ -44,11 +47,11 @@ class ScanWorker(
             val dayEnd = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
 
             if (accounts.isEmpty()) {
-                setProgress(workDataOf("phase" to "completed", "progress" to 100, "message" to "Chưa có kênh nào được bật."))
+                setProgress(workDataOf("phase" to "completed", "progress" to 100, "message" to "Chưa có kênh Kuaishou nào được bật để quét tự động."))
                 return@withContext Result.success(workDataOf("scanned_accounts" to 0, "discovered_videos" to 0, "queued_jobs" to 0, "failed_accounts" to 0))
             }
 
-            setProgress(workDataOf("phase" to "scanning", "progress" to 0, "message" to "Bắt đầu kiểm tra video đăng hôm nay: $today"))
+            setProgress(workDataOf("phase" to "scanning", "progress" to 0, "message" to "Bắt đầu kiểm tra video Kuaishou đăng hôm nay: $today"))
 
             for ((accountIndex, account) in accounts.withIndex()) {
                 setProgress(workDataOf(
