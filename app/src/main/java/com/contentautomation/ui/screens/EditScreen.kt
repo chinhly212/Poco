@@ -203,6 +203,77 @@ fun EditScreen(
                 singleLine = true
             )
             WorkflowRow("Nhận diện lời nói (STT)", "Tạo văn bản kèm mốc thời gian", Icons.Outlined.Mic)
+            Button(
+                onClick = {
+                    if (isSpeechModelDownloading || hasSpeechModel) return@Button
+                    isSpeechModelDownloading = true
+                    statusMessage = "Đang tải mô hình STT tiếng Trung/Anh (~82 MB)..."
+                    coroutineScope.launch {
+                        val result = runCatching { speechModelManager.download() }
+                        hasSpeechModel = speechModelManager.isInstalled()
+                        statusMessage = if (result.isSuccess && hasSpeechModel) {
+                            "Đã cài mô hình STT offline tiếng Trung/Anh."
+                        } else {
+                            "Tải mô hình STT thất bại: " + (result.exceptionOrNull()?.message ?: "Không xác minh được mô hình")
+                        }
+                        isSpeechModelDownloading = false
+                    }
+                },
+                enabled = !hasSpeechModel && !isSpeechModelDownloading,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    when {
+                        hasSpeechModel -> "Đã cài mô hình STT tiếng Trung/Anh"
+                        isSpeechModelDownloading -> "Đang tải mô hình STT..."
+                        else -> "Tải mô hình STT tiếng Trung/Anh (~82 MB)"
+                    }
+                )
+            }
+            Button(
+                onClick = {
+                    val videoUri = selectedVideoUri ?: return@Button
+                    if (isSpeechRunning) return@Button
+                    isSpeechRunning = true
+                    statusMessage = "Đang tách âm thanh và nhận diện lời nói..."
+                    coroutineScope.launch {
+                        val result = runCatching {
+                            withContext(Dispatchers.IO) {
+                                SherpaOnnxVideoSpeechRecognizer(speechModelManager).recognize(
+                                    context = context,
+                                    videoUri = videoUri,
+                                    profile = processingProfile,
+                                    sourceLanguage = sourceLanguage
+                                )
+                            }
+                        }
+                        result.onSuccess { found ->
+                            val nextId = (subtitles.maxOfOrNull { it.id } ?: 0L) + 1L
+                            subtitles.addAll(found.mapIndexed { index, item ->
+                                SubtitleCue(
+                                    id = nextId + index,
+                                    startMs = item.startMs,
+                                    endMs = item.endMs.coerceAtLeast(item.startMs + 500L),
+                                    sourceText = item.text
+                                )
+                            })
+                            statusMessage = if (found.isEmpty()) {
+                                "STT hoàn tất: không nhận diện được lời nói."
+                            } else {
+                                "STT hoàn tất: " + found.size + " đoạn. Mốc thời gian hiện chia theo cửa sổ 30 giây."
+                            }
+                        }.onFailure {
+                            statusMessage = "STT thất bại: " + (it.message ?: "Lỗi không xác định")
+                        }
+                        isSpeechRunning = false
+                    }
+                },
+                enabled = selectedVideoUri != null && hasSpeechModel && !isSpeechRunning,
+                colors = ButtonDefaults.buttonColors(containerColor = EditInk),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isSpeechRunning) "Đang nhận diện lời nói..." else "Nhận diện lời nói trong video")
+            }
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 WorkflowRow("Nhận diện chữ trong hình (OCR)", "ML Kit chạy trực tiếp trên điện thoại", Icons.Outlined.TextFields)
                 Button(
@@ -253,7 +324,7 @@ fun EditScreen(
                 }
             }
             WorkflowRow("Dịch theo ngữ cảnh", "Giữ cách xưng hô và mạch hội thoại", Icons.Outlined.Language)
-            GText("OCR offline: chế độ tự động chạy mô hình Latin và Trung; có thể chọn riêng Tiếng Trung hoặc Tiếng Việt. STT, dịch và lồng tiếng sẽ được kết nối tiếp.", 11.sp, color = EditMuted)
+            GText("OCR offline hỗ trợ Latin/Việt và Trung. STT dùng mô hình offline tiếng Trung/Anh tải riêng; mốc thời gian hiện chia theo cửa sổ 30 giây.", 11.sp, color = EditMuted)
         }
 
         SectionCard {
