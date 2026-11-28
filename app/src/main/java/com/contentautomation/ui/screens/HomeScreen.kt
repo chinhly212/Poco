@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -112,9 +114,21 @@ private fun SystemCard(systemOn: Boolean, onToggle: () -> Unit) {
 @Composable
 private fun PipelineCard(jobs: List<PipelineJob>, onOpenWork: () -> Unit) {
     val running = jobs.count { it.status == PipelineStatus.RUNNING }
-    val pending = jobs.count { it.status == PipelineStatus.PENDING }
+    val pending = jobs.count { it.status == PipelineStatus.PENDING || it.status == PipelineStatus.PAUSED }
     val done = jobs.count { it.status == PipelineStatus.DONE }
     val failed = jobs.count { it.status == PipelineStatus.FAILED }
+    val activeIndex = when {
+        running > 0 -> 1
+        pending > 0 -> 2
+        done > 0 -> 3
+        failed > 0 -> 4
+        else -> 0
+    }
+    val progress by animateFloatAsState(
+        targetValue = activeIndex / 4f,
+        animationSpec = tween(durationMillis = 450),
+        label = "home_status_progress"
+    )
     val shape = RoundedCornerShape(10.dp)
 
     Column(
@@ -146,34 +160,32 @@ private fun PipelineCard(jobs: List<PipelineJob>, onOpenWork: () -> Unit) {
             )
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MetricTile("Tổng", jobs.size, Ink, Modifier.weight(1f))
-            MetricTile("Đang chạy", running, Blue, Modifier.weight(1f))
-            MetricTile("Chờ", pending, Muted, Modifier.weight(1f))
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MetricTile("Đã lưu", done, SuccessGreen, Modifier.weight(1f))
-            MetricTile("Lỗi", failed, ErrorRed, Modifier.weight(1f))
-            Spacer(Modifier.weight(1f))
+        Box(
+            Modifier.fillMaxWidth().height(7.dp)
+                .clip(RoundedCornerShape(99.dp))
+                .background(Color(0xFFE4E4E7))
+        ) {
+            Box(
+                Modifier.fillMaxWidth(progress.coerceIn(0f, 1f))
+                    .fillMaxHeight()
+                    .background(
+                        when (activeIndex) {
+                            1 -> Blue
+                            2 -> Muted
+                            3 -> SuccessGreen
+                            4 -> ErrorRed
+                            else -> Color(0xFFE4E4E7)
+                        }
+                    )
+            )
         }
 
-        val completion = if (jobs.isEmpty()) 0f else done.toFloat() / jobs.size
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                GText("Tỷ lệ hoàn thành", 11.sp, color = Muted)
-                GText("${(completion * 100).toInt()}%", 11.sp, weight = FontWeight.SemiBold, color = Ink)
-            }
-            Box(
-                Modifier.fillMaxWidth().height(6.dp)
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(Color(0xFFE4E4E7))
-            ) {
-                Box(
-                    Modifier.fillMaxWidth(completion.coerceIn(0f, 1f))
-                        .fillMaxHeight()
-                        .background(SuccessGreen)
-                )
-            }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            HomeStatusItem("Tổng", jobs.size, Ink, activeIndex == 0 || jobs.isNotEmpty(), Modifier.weight(1f))
+            HomeStatusItem("Đang chạy", running, Blue, activeIndex >= 1 && running > 0, Modifier.weight(1f))
+            HomeStatusItem("Chờ", pending, Muted, activeIndex >= 2 && pending > 0, Modifier.weight(1f))
+            HomeStatusItem("Đã lưu", done, SuccessGreen, activeIndex >= 3 && done > 0, Modifier.weight(1f))
+            HomeStatusItem("Lỗi", failed, ErrorRed, activeIndex >= 4 && failed > 0, Modifier.weight(1f))
         }
 
         if (jobs.isEmpty()) {
@@ -212,21 +224,31 @@ private fun PipelineCard(jobs: List<PipelineJob>, onOpenWork: () -> Unit) {
 }
 
 @Composable
-private fun MetricTile(label: String, value: Int, valueColor: Color, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(8.dp)
+private fun HomeStatusItem(
+    label: String,
+    count: Int,
+    color: Color,
+    emphasized: Boolean,
+    modifier: Modifier = Modifier
+) {
     Column(
-        modifier
-            .aspectRatio(1f)
-            .clip(shape)
-            .background(Color.White)
-            .border(1.dp, Line, shape)
-            .padding(9.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.Start
+        modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
-        GText(value.toString(), 20.sp, weight = FontWeight.Bold, color = valueColor)
-        Spacer(Modifier.height(3.dp))
-        GText(label, 11.sp, color = Muted)
+        GText(
+            count.toString(),
+            14.sp,
+            weight = if (emphasized) FontWeight.Bold else FontWeight.Medium,
+            color = if (emphasized) color else Muted
+        )
+        GText(
+            label,
+            9.sp,
+            weight = if (emphasized) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (emphasized) color else Muted,
+            maxLines = 1
+        )
     }
 }
 
