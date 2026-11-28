@@ -12,7 +12,6 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.contentautomation.ContentAutomationApp
 import com.contentautomation.data.db.entity.VideoStatus
-import com.contentautomation.video.AiVideoServerClient
 import com.contentautomation.video.MediaStoreSaver
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -48,26 +47,31 @@ class DouyinBulkDownloadWorker(
             app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.DOWNLOADING.name)
             target.delete()
 
-            val downloadedByServer = try {
-                AiVideoServerClient().downloadVideo(video.sourceUrl, target)
-                target.exists() && target.length() > 0L
-            } catch (_: Exception) {
-                target.delete()
-                false
-            }
-
-            if (!downloadedByServer) {
-                val cookie = app.prefs.getSecret("platform_cookie_douyin")
+            val cookie = app.prefs.getSecret("platform_cookie_douyin").orEmpty()
+            val cookieFile = File.createTempFile("muchi-douyin-download-", ".cookies", applicationContext.cacheDir)
+            try {
+                val cookieLines = cookie.split(";").mapNotNull { part ->
+                    val pair = part.trim().split("=", limit = 2)
+                    if (pair.size != 2 || pair[0].isBlank()) null
+                    else ".douyin.com\tTRUE\t/\tTRUE\t0\t${pair[0].trim()}\t${pair[1].trim()}"
+                }
+                if (cookieLines.isNotEmpty()) {
+                    cookieFile.writeText("# Netscape HTTP Cookie File\n" + cookieLines.joinToString("\n"), Charsets.UTF_8)
+                }
                 YoutubeDL.getInstance().execute(
                     YoutubeDLRequest(video.sourceUrl).apply {
-                        if (!cookie.isNullOrBlank()) addOption("--add-headers", "Cookie: $cookie")
+                        if (cookieLines.isNotEmpty()) addOption("--cookies", cookieFile.absolutePath)
                         addOption("--no-playlist")
                         addOption("--force-ipv4")
                         addOption("--retries", "3")
+                        addOption("--socket-timeout", "30")
+                        addOption("--no-warnings")
                         addOption("-o", outputTemplate)
                         addOption("-f", "best")
                     }
                 )
+            } finally {
+                cookieFile.delete()
             }
 
             val downloaded = if (target.exists() && target.length() > 0L) target else {
