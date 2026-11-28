@@ -24,7 +24,7 @@ Only Windows-specific packaging, Windows DLLs, PySide6 widgets, CUDA/NVENC and C
 - UI: Jetpack Compose, touch-first portrait layout with landscape workspace support.
 - Video playback/preview: AndroidX Media3.
 - Export: Android MediaCodec hardware encoders where supported; FFmpeg Android build as a compatibility/fallback path. Never assume NVIDIA NVENC exists on Android.
-- STT: Sherpa-ONNX Android runtime selected (`com.github.k2-fsa.sherpa-onnx:sherpa-onnx:v2.0.3`). Next: add optional Chinese Paraformer model installer, decode source-video audio to 16 kHz mono PCM, and run offline recognition in bounded chunks. Do not bundle large model weights in the APK.
+- STT: Sherpa-ONNX Android runtime selected. An optional verified Chinese/English Paraformer model downloader (about 82 MB) and FFmpeg-based video-audio extraction to 16 kHz mono PCM are implemented. Offline inference runs in bounded 10-second chunks. The model does not provide word/phrase timestamps, so current cue times are approximate chunk windows; Vietnamese speech recognition is not supported by this model. Do not bundle model weights in the APK.
 - OCR: evaluate ML Kit Text Recognition and an ONNX OCR path; allow frame sampling/cropping to control cost.
 - Translation: retain provider abstraction and CapCap's dialogue-context/prompt behavior; local/offline translation is optional and model-size gated.
 - TTS: Android-compatible local Piper/Sherpa-ONNX voices first, with optional network TTS providers. Do not require a paid API for the editor to open or edit.
@@ -61,6 +61,6 @@ Use device resources, but do so adaptively:
 - Subtitle cue model and SRT import/export are implemented.
 - OCR is implemented on-device with ML Kit Latin/Vietnamese and Chinese models; automatic mode runs both recognizers.
 - Device RAM/thermal/CPU profiling and Low/Balanced/Performance presets are wired.
-- STT runtime dependency (Sherpa-ONNX v2.0.3) has been added; the model installer, audio decoder and actual recognition path are still in progress.
+- STT runtime, optional SHA-256-verified Chinese/English model download, audio extraction, and offline recognition path have been added; latest Android CI build is pending.
 - Contextual translation, dubbing/TTS, audio mixing, timeline editing and final video export remain unimplemented; UI labels are scaffolding and must not report false completion.
 - No APK has been built or device-tested for this feature.
