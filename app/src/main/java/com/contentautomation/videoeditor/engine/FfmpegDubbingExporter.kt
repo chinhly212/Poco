@@ -5,6 +5,7 @@ import android.net.Uri
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
 import com.contentautomation.videoeditor.domain.SubtitleCue
+import com.contentautomation.videoeditor.domain.SrtCodec
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -30,6 +31,8 @@ class FfmpegDubbingExporter(private val context: Context) {
         val stamp = System.currentTimeMillis()
         val inputVideo = File(workDir, "source-$stamp.mp4")
         val outputVideo = File(workDir, "dubbed-$stamp.mp4")
+        val subtitleFile = File(workDir, "subtitles-$stamp.srt")
+        val hasSubtitles = cues.any { it.displayText(useTranslation = true).isNotBlank() }
 
         try {
             context.contentResolver.openInputStream(videoUri)?.use { input ->
@@ -47,6 +50,10 @@ class FfmpegDubbingExporter(private val context: Context) {
             val baseArgs = mutableListOf<String>()
             baseArgs += listOf("-y", "-i", inputVideo.absolutePath)
             audioFiles.forEach { baseArgs += listOf("-i", it.absolutePath) }
+            if (hasSubtitles) {
+                subtitleFile.writeText(SrtCodec.format(cues, useTranslation = true), Charsets.UTF_8)
+                baseArgs += listOf("-i", subtitleFile.absolutePath)
+            }
 
             fun buildArguments(includeOriginalAudio: Boolean): List<String> {
                 val filters = mutableListOf<String>()
@@ -67,17 +74,23 @@ class FfmpegDubbingExporter(private val context: Context) {
                         "dropout_transition=0:normalize=0[aout]"
                 }
 
-                return baseArgs + listOf(
+                val outputArgs = mutableListOf(
                     "-filter_complex", filters.joinToString(";"),
                     "-map", "0:v:0",
                     "-map", "[aout]",
                     "-c:v", "copy",
                     "-c:a", "aac",
-                    "-b:a", "192k",
+                    "-b:a", "192k"
+                )
+                if (hasSubtitles) {
+                    outputArgs += listOf("-map", "${audioFiles.size + 1}:s:0", "-c:s", "mov_text")
+                }
+                outputArgs += listOf(
                     "-movflags", "+faststart",
                     "-f", "mp4",
                     outputVideo.absolutePath
                 )
+                return baseArgs + outputArgs
             }
 
             var session = FFmpegKit.executeWithArguments(buildArguments(includeOriginalAudio = true).toTypedArray())
@@ -104,6 +117,7 @@ class FfmpegDubbingExporter(private val context: Context) {
         } finally {
             inputVideo.delete()
             outputVideo.delete()
+            subtitleFile.delete()
         }
     }
 }
