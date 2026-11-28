@@ -62,6 +62,8 @@ import com.contentautomation.videoeditor.domain.SrtCodec
 import com.contentautomation.videoeditor.domain.SubtitleCue
 import com.contentautomation.videoeditor.engine.AndroidDeviceResourceMonitor
 import com.contentautomation.videoeditor.engine.MlKitVideoTextRecognizer
+import com.contentautomation.videoeditor.engine.SherpaOnnxChineseModelManager
+import com.contentautomation.videoeditor.engine.SherpaOnnxVideoSpeechRecognizer
 import com.contentautomation.videoeditor.domain.ProcessingProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -99,6 +101,10 @@ fun EditScreen(
 
         val coroutineScope = rememberCoroutineScope()
     var isOcrRunning by remember { mutableStateOf(false) }
+    var isSpeechModelDownloading by remember { mutableStateOf(false) }
+    var isSpeechRunning by remember { mutableStateOf(false) }
+    val speechModelManager = remember(context) { SherpaOnnxChineseModelManager(context) }
+    var hasSpeechModel by remember(context) { mutableStateOf(speechModelManager.isInstalled()) }
     val processingProfile = when (selectedProfile) {
         "Tiết kiệm" -> ProcessingProfile.LOW_MEMORY
         "Hiệu năng" -> ProcessingProfile.PERFORMANCE
