@@ -120,16 +120,6 @@ class PipelineWorker(
                         throw IllegalStateException("Video tải về rỗng.")
                     }
 
-                    val sourceDisplayName = "MuChi_Goc_${video.id.take(8)}.mp4"
-                    val sourceUri = MediaStoreSaver(applicationContext)
-                        .saveVideoToGallery(downloaded, sourceDisplayName)
-                    DriveBackupWorker.enqueue(
-                        applicationContext,
-                        sourceUri,
-                        sourceDisplayName,
-                        "video_${video.id}_source"
-                    )
-
                     db.sourceVideoDao().updateStatus(video.id, VideoStatus.PROCESSING_VIDEO.name)
                     next(PipelineStage.ANALYZE, "Đã tải video không logo, lưu vào điện thoại và đưa vào hàng đợi sao lưu Drive.")
                 }
@@ -144,7 +134,16 @@ class PipelineWorker(
                     if (!result.success || !optimized.exists() || optimized.length() <= 0L) {
                         throw IllegalStateException(result.errorMessage ?: "Không thể tối ưu video nguồn.")
                     }
-                    next(PipelineStage.SPEECH_TO_TEXT, "Đã tối ưu video. Chờ nhận diện lời nói.")
+                    val sourceDisplayName = "MuChi_Goc_${video.id.take(8)}.mp4"
+                    val sourceUri = MediaStoreSaver(applicationContext)
+                        .saveVideoToGallery(optimized, sourceDisplayName)
+                    DriveBackupWorker.enqueue(
+                        applicationContext,
+                        sourceUri,
+                        sourceDisplayName,
+                        "video_${video.id}_source"
+                    )
+                    next(PipelineStage.SPEECH_TO_TEXT, "Đã tối ưu video không logo, lưu vào điện thoại và đưa vào hàng đợi sao lưu Drive.")
                 }
 
                 PipelineStage.SPEECH_TO_TEXT -> {

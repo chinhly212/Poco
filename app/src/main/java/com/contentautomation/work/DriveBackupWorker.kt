@@ -12,6 +12,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.contentautomation.data.remote.GoogleDriveClient
+import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
 
 /** Uploads a video already saved in MediaStore; WorkManager persists and retries it. */
@@ -39,6 +40,8 @@ class DriveBackupWorker(
                     "backup_key" to backupKey
                 )
             )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             setProgress(
                 workDataOf(
