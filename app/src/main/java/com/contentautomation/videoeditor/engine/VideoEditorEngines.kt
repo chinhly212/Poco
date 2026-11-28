@@ -73,7 +73,7 @@ data class ExportRequest(
 
 interface VideoSpeechRecognizer {
     suspend fun capability(context: Context): EngineCapability
-    suspend fun recognize(videoUri: Uri, profile: ProcessingProfile): List<SpeechSegment>
+    suspend fun recognize(context: Context, videoUri: Uri, profile: ProcessingProfile, sourceLanguage: String): List<SpeechSegment>
 }
 
 interface VideoTextRecognizer {
