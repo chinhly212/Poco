@@ -124,12 +124,16 @@ class DouyinBulkDownloadWorker(
                     } else {
                         "Đang tải trực tiếp · $percent%"
                     }
+                    // yt-dlp writes to the final file or its temporary .part file.
+                    // Report real bytes instead of incorrectly treating percent as bytes.
+                    val partial = File(target.absolutePath + ".part")
+                    val bytesOnDisk = maxOf(target.length(), partial.length())
                     setProgressAsync(workDataOf(
                         "message" to message,
                         "video_id" to video.id,
                         "external_video_id" to video.externalVideoId,
-                        "bytes_downloaded" to percent.toLong(),
-                        "total_bytes" to 100L,
+                        "bytes_downloaded" to bytesOnDisk,
+                        "total_bytes" to -1L,
                         "progress_percent" to percent
                     ))
                     setForegroundAsync(createForegroundInfo(videoId, message))
@@ -161,8 +165,24 @@ class DouyinBulkDownloadWorker(
             )
             app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.SAVED_TO_PHONE.name)
             setForeground(createForegroundInfo(videoId, "Đã lưu video vào Movies"))
-            setProgress(workDataOf("message" to "Đã lưu video vào Movies · ${downloadedBytes} byte", "video_id" to video.id, "external_video_id" to video.externalVideoId, "progress_percent" to 100))
-            Result.success(workDataOf("saved_uri" to savedUri.toString(), "display_name" to displayName, "video_id" to video.id, "external_video_id" to video.externalVideoId, "progress_percent" to 100))
+            setProgress(workDataOf(
+                "message" to "Đã lưu video vào Movies · ${formatBytes(downloadedBytes)}",
+                "video_id" to video.id,
+                "external_video_id" to video.externalVideoId,
+                "bytes_downloaded" to downloadedBytes,
+                "total_bytes" to downloadedBytes,
+                "progress_percent" to 100
+            ))
+            Result.success(workDataOf(
+                "saved_uri" to savedUri.toString(),
+                "display_name" to displayName,
+                "video_id" to video.id,
+                "external_video_id" to video.externalVideoId,
+                "bytes_downloaded" to downloadedBytes,
+                "total_bytes" to downloadedBytes,
+                "progress_percent" to 100,
+                "message" to "Đã lưu video vào Movies · ${formatBytes(downloadedBytes)}"
+            ))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
