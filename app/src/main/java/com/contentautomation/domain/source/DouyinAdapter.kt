@@ -152,10 +152,6 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
             if (!(host == "douyin.com" || host.endsWith(".douyin.com") || host == "iesdouyin.com" || host.endsWith(".iesdouyin.com"))) {
                 throw SourceUnavailableException("Liên kết không dẫn tới trang cá nhân Douyin.")
             }
-            if (!finalUri.pathSegments.contains("user")) {
-                throw SourceUnavailableException("Liên kết bạn dán không phải trang cá nhân Douyin. Hãy sao chép link hồ sơ của người dùng.")
-            }
-
             fun stringField(vararg keys: String): String? {
                 for (key in keys) {
                     // Douyin sometimes embeds escaped JSON inside HTML script data.
@@ -182,9 +178,11 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
             // Resolve sec_uid from the redirected profile URL first, then from Douyin's
             // embedded page data. Short links (v.douyin.com/...) commonly redirect,
             // and the final URL is not guaranteed to retain the /user/ path.
+            // The scan endpoint requires Douyin's canonical sec_uid format.
+            // Keep profile extraction and scan validation consistent.
             fun normalizeSecUid(candidate: String?): String? =
                 candidate?.trim()?.trim('"', '\'', '/', '\\')
-                    ?.takeIf { it.matches(Regex("""[A-Za-z0-9._~-]{12,256}""")) }
+                    ?.takeIf { it.startsWith("MS4wLjAB") && it.matches(Regex("""MS4wLjAB[A-Za-z0-9_-]{8,240}""")) }
 
             fun secUidFromUri(rawUrl: String): String? {
                 val uri = runCatching { android.net.Uri.parse(rawUrl) }.getOrNull() ?: return null
