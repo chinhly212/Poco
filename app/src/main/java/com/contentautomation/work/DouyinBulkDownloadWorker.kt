@@ -11,7 +11,6 @@ import androidx.core.app.NotificationCompat
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
@@ -57,7 +56,28 @@ class DouyinBulkDownloadWorker(
             target.delete()
             setForeground(createForegroundInfo(videoId, "Đang yêu cầu máy chủ phân giải video Douyin…"))
             setProgress(workDataOf("message" to "Đang phân giải video Douyin…", "video_id" to video.id))
-            val downloadResult = AiVideoServerClient().downloadVideo(video.sourceUrl, target)
+            val downloadResult = AiVideoServerClient().downloadVideo(video.sourceUrl, target) { received, total ->
+                val percent = if (total != null && total > 0L) {
+                    ((received * 100L) / total).toInt().coerceIn(0, 99)
+                } else 0
+                val receivedLabel = formatBytes(received)
+                val totalLabel = total?.takeIf { it > 0L }?.let(::formatBytes)
+                val message = if (totalLabel != null) {
+                    "Đang tải video · $receivedLabel / $totalLabel"
+                } else {
+                    "Đang tải video · $receivedLabel"
+                }
+                setProgress(
+                    workDataOf(
+                        "message" to message,
+                        "video_id" to video.id,
+                        "bytes_downloaded" to received,
+                        "total_bytes" to (total ?: -1L),
+                        "progress_percent" to percent
+                    )
+                )
+                setForeground(createForegroundInfo(videoId, message))
+            }
             val downloaded = target.takeIf { it.isFile && it.length() > 0L }
                 ?: throw IllegalStateException("Máy chủ không trả file video hợp lệ.")
             if (downloadResult.bytesWritten != downloaded.length()) {
@@ -100,6 +120,15 @@ class DouyinBulkDownloadWorker(
         }
     }
 
+    private fun formatBytes(value: Long): String {
+        if (value < 1024L) return "$value B"
+        val units = listOf("KB", "MB", "GB", "TB")
+        var amount = value.toDouble()
+        var index = -1
+        do { amount /= 1024.0; index++ } while (amount >= 1024.0 && index < units.lastIndex)
+        return String.format(java.util.Locale.getDefault(), "%.1f %s", amount, units[index])
+    }
+
     private fun createForegroundInfo(videoId: String, message: String): ForegroundInfo {
         val channelId = "muchi_douyin_downloads"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -134,8 +163,6 @@ class DouyinBulkDownloadWorker(
 
     companion object {
         private const val KEY_VIDEO_ID = "video_id"
-        private const val DOWNLOAD_LANES = 3
-
         fun enqueue(context: Context, videoId: String) {
             val request = OneTimeWorkRequestBuilder<DouyinBulkDownloadWorker>()
                 .setInputData(workDataOf(KEY_VIDEO_ID to videoId))
@@ -147,12 +174,8 @@ class DouyinBulkDownloadWorker(
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .addTag("muchi-douyin-archive-download")
                 .build()
-            val lane = Math.floorMod(videoId.hashCode(), DOWNLOAD_LANES)
-            WorkManager.getInstance(context).enqueueUniqueWork(
-                "muchi-douyin-download-lane-$lane",
-                ExistingWorkPolicy.APPEND_OR_REPLACE,
-                request
-            )
+            // Enqueue independent requests: WorkManager can run selected videos concurrently.
+            WorkManager.getInstance(context).enqueue(request)
         }
     }
 }
