@@ -85,7 +85,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _douyinDownloadProgress.value = infos
             .filter { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }
             .mapNotNull { info ->
-                val videoId = info.inputData.getString("video_id") ?: return@mapNotNull null
+                val videoId = info.progress.getString("video_id") ?: info.id.toString()
                 DouyinDownloadProgressUiState(
                     videoId = videoId,
                     state = info.state,
