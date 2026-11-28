@@ -83,7 +83,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val douyinDownloadObserver = Observer<List<WorkInfo>> { infos ->
         _douyinDownloadProgress.value = infos
-            .takeLast(100)
             .mapNotNull { info ->
                 val videoId = info.progress.getString("external_video_id")
                     ?: info.outputData.getString("external_video_id")
