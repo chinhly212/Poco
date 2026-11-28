@@ -311,12 +311,16 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
                 scanJson.optJSONObject("profile")
             }.getOrNull()
 
+            val pageTitleName = pageTitle
+                ?.substringBefore(" - 抖音")
+                ?.substringBefore("的抖音")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() && it != "抖音" && it != "登录" }
             val nickname = feedProfile?.optString("nickname")
                 ?.takeIf { it.isNotBlank() && it != "null" }
                 ?: feedProfile?.optString("unique_id")?.takeIf { it.isNotBlank() && it != "null" }
-                ?: stringField("nickname", "nick_name", "user_name", "display_name")
-                ?: pageTitle
-                ?: throw SourceUnavailableException("Douyin không trả tên chủ kênh thật. Hãy thử đăng nhập lại rồi xác minh hồ sơ.")
+                ?: pageTitleName
+                ?: throw SourceUnavailableException("Douyin không trả tên chủ kênh thật từ dữ liệu tác giả. Hãy thử quét lại sau khi máy chủ kết nối được Douyin.")
             val avatar = feedProfile?.optString("avatar_url")?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
                 ?: stringField("avatar_larger", "avatar_url", "avatar_thumb", "avatar")
                     ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
