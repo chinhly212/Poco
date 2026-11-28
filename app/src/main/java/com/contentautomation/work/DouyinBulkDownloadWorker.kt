@@ -43,9 +43,29 @@ class DouyinBulkDownloadWorker(
         val videoId = inputData.getString(KEY_VIDEO_ID)
             ?: return@withContext Result.failure()
         val video = app.database.sourceVideoDao().findById(videoId)
-            ?: return@withContext Result.failure()
+            ?: return@withContext Result.success(
+                workDataOf(
+                    "external_video_id" to inputData.getString(KEY_EXTERNAL_VIDEO_ID).orEmpty(),
+                    "message" to "Video không còn trong danh sách tải.",
+                    "download_failed" to true
+                )
+            )
         val account = app.database.sourceAccountDao().findById(video.sourceAccountId)
-            ?: return@withContext Result.failure()
+            ?: run {
+                app.database.sourceVideoDao().updateStatusError(
+                    video.id,
+                    VideoStatus.FAILED.name,
+                    "Không tìm thấy tài khoản Douyin."
+                )
+                return@withContext Result.success(
+                    workDataOf(
+                        "video_id" to video.id,
+                        "external_video_id" to video.externalVideoId,
+                        "message" to "Không tìm thấy tài khoản Douyin.",
+                        "download_failed" to true
+                    )
+                )
+            }
 
         setProgress(
             workDataOf(
