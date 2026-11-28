@@ -138,6 +138,7 @@ class DouyinBulkDownloadWorker(
             }
             val downloaded = target.takeIf { it.isFile && it.length() > 0L }
                 ?: throw IllegalStateException("Douyin không trả file video hợp lệ về điện thoại.")
+            val downloadedBytes = downloaded.length()
             setForeground(createForegroundInfo(videoId, "Đã tải trực tiếp · đang lưu vào Movies…"))
             setProgress(workDataOf("message" to "Đã tải trực tiếp · đang lưu vào Movies…", "video_id" to video.id, "external_video_id" to video.externalVideoId))
 
@@ -159,7 +160,7 @@ class DouyinBulkDownloadWorker(
             )
             app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.SAVED_TO_PHONE.name)
             setForeground(createForegroundInfo(videoId, "Đã lưu video vào Movies"))
-            setProgress(workDataOf("message" to "Đã lưu video vào Movies · ${downloaded.length()} byte", "video_id" to video.id, "external_video_id" to video.externalVideoId, "progress_percent" to 100))
+            setProgress(workDataOf("message" to "Đã lưu video vào Movies · ${downloadedBytes} byte", "video_id" to video.id, "external_video_id" to video.externalVideoId, "progress_percent" to 100))
             Result.success(workDataOf("saved_uri" to savedUri.toString(), "display_name" to displayName, "video_id" to video.id, "external_video_id" to video.externalVideoId, "progress_percent" to 100))
         } catch (cancelled: CancellationException) {
             throw cancelled
