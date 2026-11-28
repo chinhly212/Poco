@@ -795,6 +795,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         }
                         video.id
                     }
+                    dao.updateStatus(videoId, VideoStatus.DOWNLOADING.name)
                     com.contentautomation.work.DouyinBulkDownloadWorker.enqueue(application, videoId)
                     queued++
                 }
