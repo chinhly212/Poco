@@ -120,14 +120,14 @@ class PipelineWorker(
                         throw IllegalStateException("Video tải về rỗng.")
                     }
 
-                    val sourceDisplayName = "MuChi_Goc_\${video.id.take(8)}.mp4"
+                    val sourceDisplayName = "MuChi_Goc_${video.id.take(8)}.mp4"
                     val sourceUri = MediaStoreSaver(applicationContext)
                         .saveVideoToGallery(downloaded, sourceDisplayName)
                     DriveBackupWorker.enqueue(
                         applicationContext,
                         sourceUri,
                         sourceDisplayName,
-                        "video_\${video.id}_source"
+                        "video_${video.id}_source"
                     )
 
                     db.sourceVideoDao().updateStatus(video.id, VideoStatus.PROCESSING_VIDEO.name)
@@ -241,14 +241,14 @@ class PipelineWorker(
                         throw IllegalStateException("Không tìm thấy video đã ghép tiếng Việt để xuất.")
                     }
 
-                    val processedDisplayName = "MuChi_VI_\${video.id.take(8)}.mp4"
+                    val processedDisplayName = "MuChi_VI_${video.id.take(8)}.mp4"
                     val savedUri = MediaStoreSaver(applicationContext)
                         .saveVideoToGallery(dubbed, processedDisplayName)
                     DriveBackupWorker.enqueue(
                         applicationContext,
                         savedUri,
                         processedDisplayName,
-                        "video_\${video.id}_processed"
+                        "video_${video.id}_processed"
                     )
 
                     val processedDao = db.processedVideoDao()

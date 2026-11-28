@@ -169,7 +169,7 @@ class GoogleDriveClient(context: Context) {
             val escapedKey = backupKey.replace("'", "\\'")
             val query = "trashed = false and appProperties has { key='muchi_backup_key' and value='$escapedKey' }"
             val existing = getJson(
-                "https://www.googleapis.com/drive/v3/files?q=\${Uri.encode(query)}&pageSize=1&fields=files(id,name,mimeType,size,modifiedTime)"
+                "https://www.googleapis.com/drive/v3/files?q=${Uri.encode(query)}&pageSize=1&fields=files(id,name,mimeType,size,modifiedTime)"
             ).optJSONArray("files")
             if (existing != null && existing.length() > 0) {
                 val item = existing.getJSONObject(0)
@@ -200,7 +200,7 @@ class GoogleDriveClient(context: Context) {
             .post(metadata.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
             .build()
         val uploadUrl = http.newCall(initiate).execute().use { response ->
-            if (!response.isSuccessful) error("Không thể khởi tạo tải lên (HTTP \${response.code}).")
+            if (!response.isSuccessful) error("Không thể khởi tạo tải lên (HTTP ${response.code}).")
             response.header("Location") ?: error("Google Drive không trả đường dẫn tải lên.")
         }
         val streamBody = object : RequestBody() {
@@ -219,7 +219,7 @@ class GoogleDriveClient(context: Context) {
             .build()
         http.newCall(uploadRequest).execute().use { response ->
             val responseText = response.body?.string().orEmpty()
-            if (!response.isSuccessful) error("Tải lên thất bại HTTP \${response.code}: \${responseText.take(250)}")
+            if (!response.isSuccessful) error("Tải lên thất bại HTTP ${response.code}: ${responseText.take(250)}")
             val item = JSONObject(responseText)
             DriveFileItem(
                 item.getString("id"),
@@ -238,7 +238,7 @@ class GoogleDriveClient(context: Context) {
 
         val query = "name = 'MuChi Auto Backup' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         val found = getJson(
-            "https://www.googleapis.com/drive/v3/files?q=\${Uri.encode(query)}&pageSize=5&fields=files(id)"
+            "https://www.googleapis.com/drive/v3/files?q=${Uri.encode(query)}&pageSize=5&fields=files(id)"
         ).optJSONArray("files")
         val existingId = found?.takeIf { it.length() > 0 }
             ?.getJSONObject(0)?.optString("id")?.takeIf { it.isNotBlank() }
@@ -252,12 +252,12 @@ class GoogleDriveClient(context: Context) {
             .put("mimeType", "application/vnd.google-apps.folder")
         val request = Request.Builder()
             .url("https://www.googleapis.com/drive/v3/files?fields=id")
-            .header("Authorization", "Bearer \${token()}")
+            .header("Authorization", "Bearer ${token()}")
             .post(metadata.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
             .build()
         val folderId = http.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) error("Không tạo được thư mục sao lưu Drive (HTTP \${response.code}).")
+            if (!response.isSuccessful) error("Không tạo được thư mục sao lưu Drive (HTTP ${response.code}).")
             JSONObject(body).optString("id").takeIf { it.isNotBlank() }
                 ?: error("Google Drive không trả mã thư mục sao lưu.")
         }

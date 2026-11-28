@@ -32,14 +32,14 @@ class MediaStoreSaver(private val context: Context) {
     private suspend fun findExistingVideo(displayName: String, expectedBytes: Long): Uri? =
         withContext(Dispatchers.IO) {
             val projection = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.SIZE)
-            val selection = "\${MediaStore.Video.Media.DISPLAY_NAME}=? AND \${MediaStore.Video.Media.RELATIVE_PATH}=?"
-            val args = arrayOf(displayName, "\${Environment.DIRECTORY_MOVIES}/")
+            val selection = "${MediaStore.Video.Media.DISPLAY_NAME}=? AND ${MediaStore.Video.Media.RELATIVE_PATH}=?"
+            val args = arrayOf(displayName, "${Environment.DIRECTORY_MOVIES}/")
             context.contentResolver.query(
                 MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
                 projection,
                 selection,
                 args,
-                "\${MediaStore.Video.Media.DATE_ADDED} DESC"
+                "${MediaStore.Video.Media.DATE_ADDED} DESC"
             )?.use { cursor ->
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
                 val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
