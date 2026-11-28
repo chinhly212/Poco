@@ -154,6 +154,9 @@ dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
 
+    // Offline speech recognition runtime (native Android ARM64/ARMv7)
+    implementation("com.github.k2-fsa.sherpa-onnx:sherpa-onnx:v2.0.3")
+
     // ==============================
     // Network
     // ==============================
