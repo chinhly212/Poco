@@ -3,16 +3,19 @@ package com.contentautomation.domain.source
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
-import java.time.LocalDate
-import java.time.ZoneId
+import java.io.File
 
 class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter(cookieDirectory) {
+
+    private val cookieDirectoryPath = cookieDirectory ?: File(System.getProperty("java.io.tmpdir") ?: "/data/local/tmp")
 
     private companion object {
         const val PAGE_SIZE = 20
@@ -44,69 +47,92 @@ class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter
         if (!accountIdentifier.startsWith("MS4wLjAB")) {
             throw SourceUnavailableException("Mã hồ sơ Douyin chưa được xác minh. Hãy xóa kênh và thêm lại bằng link trang cá nhân.")
         }
+        val cookie = cookieHeader.orEmpty()
+        if (cookie.isBlank()) {
+            throw SourceUnavailableException("Phiên đăng nhập Douyin chưa có cookie. Hãy đăng nhập lại trong Cài đặt.")
+        }
+
+        val directory = cookieDirectoryPath
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw SourceUnavailableException("Không thể tạo thư mục tạm để xử lý phiên Douyin.")
+        }
+        val cookieFile = File.createTempFile("muchi-douyin-", ".cookies", directory)
         try {
-            val payload = JSONObject()
-                .put("sec_uid", accountIdentifier)
-                .put("cookie", cookieHeader.orEmpty())
-                .put("since_timestamp", 0L)
-                .put("max_items", 600)
-                .put("cursor", "0")
-            val request = Request.Builder()
-                .url("https://ai-video-server-59tj.onrender.com/douyin/profile/videos")
-                .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .header("Accept", "application/json")
-                .build()
-
-            profileClient.newCall(request).execute().use { response ->
-                val responseText = response.body?.string().orEmpty()
-                val result = runCatching { JSONObject(responseText) }.getOrNull()
-                if (!response.isSuccessful || result?.optString("status") != "success") {
-                    val serverDetail = result?.optString("detail")?.takeIf { it.isNotBlank() }
-                    val contentType = response.header("Content-Type").orEmpty().lowercase()
-                    val isHtmlError = contentType.contains("text/html") ||
-                        responseText.contains("<html", ignoreCase = true) ||
-                        responseText.contains("@font-face", ignoreCase = true)
-                    val responsePreview = responseText
-                        .replace(Regex("<[^>]*>"), " ")
-                        .replace(Regex("\\s+"), " ")
-                        .trim()
-                        .take(500)
-                    val detail = serverDetail
-                        ?: if (isHtmlError) {
-                            "Máy chủ Render trả trang lỗi HTML thay vì JSON (HTTP ${response.code}). Yêu cầu quét chưa được xử lý; hãy thử lại sau khi máy chủ ổn định."
-                        } else {
-                            responsePreview.takeIf { it.isNotBlank() }?.let {
-                                "Máy chủ quét Douyin trả HTTP ${response.code}: $it"
-                            } ?: "Máy chủ quét Douyin trả HTTP ${response.code} nhưng không có nội dung phản hồi."
-                        }
-                    throw SourceUnavailableException(detail)
-                }
-
-                val entries = result.optJSONArray("videos")
-                    ?: throw SourceUnavailableException("Máy chủ không trả danh sách video Douyin.")
-                val collected = linkedMapOf<String, SourceVideoItem>()
-                for (index in 0 until entries.length()) {
-                    val item = entries.optJSONObject(index) ?: continue
-                    val id = item.optString("id").takeIf { it.isNotBlank() && it != "null" } ?: continue
-                    val url = item.optString("url").takeIf { it.startsWith("http") }
-                        ?: "https://www.douyin.com/video/$id"
-                    val timestamp = item.optLong("published_at", 0L).takeIf { it > 0L }
-                    collected.putIfAbsent(id, SourceVideoItem(
-                        id = id,
-                        url = url,
-                        title = item.optString("title").takeIf { it.isNotBlank() && it != "null" },
-                        description = item.optString("description").takeIf { it.isNotBlank() && it != "null" },
-                        publishedAt = timestamp
-                    ))
-                }
-                collected.values.toList()
+            val cookieLines = cookie.split(";").mapNotNull { part ->
+                val pair = part.trim().split("=", limit = 2)
+                if (pair.size != 2 || pair[0].isBlank()) null
+                else ".douyin.com\tTRUE\t/\tTRUE\t0\t${pair[0].trim()}\t${pair[1].trim()}"
             }
+            if (cookieLines.isEmpty()) {
+                throw SourceUnavailableException("Cookie Douyin không hợp lệ. Hãy đăng nhập lại.")
+            }
+            cookieFile.writeText("# Netscape HTTP Cookie File\n" + cookieLines.joinToString("\n"), Charsets.UTF_8)
+
+            val request = YoutubeDLRequest(profileUrl(accountIdentifier)).apply {
+                addOption("--cookies", cookieFile.absolutePath)
+                addOption("--flat-playlist")
+                addOption("--dump-single-json")
+                addOption("--playlist-end", "600")
+                addOption("--skip-download")
+                addOption("--ignore-errors")
+                addOption("--force-ipv4")
+                addOption("--socket-timeout", "30")
+                addOption("--retries", "3")
+                addOption("--extractor-retries", "3")
+                addOption("--retry-sleep", "http:1:3")
+                addOption("--no-warnings")
+            }
+
+            val output = YoutubeDL.getInstance().execute(request).out.trim()
+            if (output.isBlank()) {
+                throw SourceUnavailableException("Douyin không trả dữ liệu danh sách video cho bộ quét trên điện thoại.")
+            }
+            val root = runCatching { JSONObject(output) }.getOrElse {
+                throw SourceUnavailableException("Dữ liệu Douyin trả về không phải JSON hợp lệ: ${it.message}")
+            }
+            val entries = root.optJSONArray("entries")
+            val sourceEntries = entries ?: org.json.JSONArray().put(root)
+            val collected = linkedMapOf<String, SourceVideoItem>()
+
+            for (index in 0 until sourceEntries.length()) {
+                val item = sourceEntries.optJSONObject(index) ?: continue
+                val id = item.optString("id").takeIf { it.isNotBlank() && it != "null" } ?: continue
+                val pageUrl = item.optString("webpage_url")
+                    .takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                    ?: item.optString("original_url")
+                        .takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                    ?: item.optString("url")
+                        .takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                    ?: videoUrl(id)
+                val seconds = item.optLong("timestamp", 0L)
+                val publishedAt = when {
+                    seconds > 10_000_000_000L -> seconds
+                    seconds > 0L -> seconds * 1000L
+                    else -> null
+                }
+                collected.putIfAbsent(id, SourceVideoItem(
+                    id = id,
+                    url = pageUrl,
+                    title = item.optString("title").takeIf { it.isNotBlank() && it != "null" },
+                    description = item.optString("description").takeIf { it.isNotBlank() && it != "null" },
+                    publishedAt = publishedAt
+                ))
+            }
+
+            if (collected.isEmpty()) {
+                throw SourceUnavailableException(
+                    "Bộ quét trên điện thoại đã mở hồ sơ nhưng không lấy được video. Douyin có thể đã thay đổi cơ chế xác minh; cần kiểm tra phiên đăng nhập hoặc cập nhật bộ giải mã."
+                )
+            }
+            collected.values.toList()
         } catch (e: CancellationException) {
             throw e
         } catch (e: SourceUnavailableException) {
             throw e
         } catch (e: Exception) {
-            throw SourceUnavailableException("Không thể quét danh sách video Douyin qua máy chủ: ${e.message ?: "lỗi kết nối"}", e)
+            throw SourceUnavailableException("Không thể quét video Douyin trực tiếp trên điện thoại: ${e.message ?: "lỗi không xác định"}", e)
+        } finally {
+            cookieFile.delete()
         }
     }
 
