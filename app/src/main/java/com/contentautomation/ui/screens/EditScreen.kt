@@ -427,13 +427,37 @@ fun EditScreen(
                 subtitles.forEachIndexed { index, cue ->
                     Column(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            GText("#${index + 1}  ${SrtCodec.formatTimestamp(cue.startMs)}", 10.sp, weight = FontWeight.SemiBold, color = EditMuted)
+                            GText("Đoạn #${index + 1}", 10.sp, weight = FontWeight.SemiBold, color = EditMuted)
                             Spacer(Modifier.weight(1f))
                             Text(
                                 "Xóa",
                                 modifier = Modifier.clickable { subtitles.remove(cue) }.padding(5.dp),
                                 color = EditMuted,
                                 fontSize = 11.sp
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = SrtCodec.formatTimestamp(cue.startMs),
+                                onValueChange = { value ->
+                                    parseEditorTimecode(value)?.let { time ->
+                                        if (time < cue.endMs) subtitles[index] = cue.copy(startMs = time)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                label = { Text("Bắt đầu") },
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                value = SrtCodec.formatTimestamp(cue.endMs),
+                                onValueChange = { value ->
+                                    parseEditorTimecode(value)?.let { time ->
+                                        if (time > cue.startMs) subtitles[index] = cue.copy(endMs = time)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                label = { Text("Kết thúc") },
+                                singleLine = true
                             )
                         }
                         OutlinedTextField(
@@ -497,7 +521,7 @@ fun EditScreen(
             }
             WorkflowRow("Phối âm thanh", "Ghép giọng đọc với video và nhạc nền", Icons.Outlined.AudioFile)
             GText(
-                "Mỗi câu được tạo thành một tệp WAV riêng. Hiện đã tạo giọng đọc; ghép vào video và xuất thành phẩm là bước engine tiếp theo.",
+                "Mỗi câu được tạo thành một tệp WAV riêng. Có thể chỉnh mốc thời gian và nội dung từng câu trước khi xuất MP4.",
                 11.sp,
                 color = EditMuted
             )
@@ -556,6 +580,17 @@ fun EditScreen(
         }
         GText(statusMessage, 11.sp, color = EditMuted)
     }
+}
+
+private fun parseEditorTimecode(value: String): Long? {
+    val match = Regex("""^(\\d{2,}):(\\d{2}):(\\d{2})[,.](\\d{3})$""")
+        .matchEntire(value.trim()) ?: return null
+    val hours = match.groupValues[1].toLongOrNull() ?: return null
+    val minutes = match.groupValues[2].toLongOrNull() ?: return null
+    val seconds = match.groupValues[3].toLongOrNull() ?: return null
+    val millis = match.groupValues[4].toLongOrNull() ?: return null
+    if (minutes > 59L || seconds > 59L) return null
+    return hours * 3_600_000L + minutes * 60_000L + seconds * 1_000L + millis
 }
 
 @Composable
