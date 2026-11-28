@@ -246,8 +246,7 @@ private fun HomeStatusItem(
             label,
             9.sp,
             weight = if (emphasized) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (emphasized) color else Muted,
-            maxLines = 1
+            color = if (emphasized) color else Muted
         )
     }
 }
