@@ -127,6 +127,8 @@ class DouyinBulkDownloadWorker(
                         "message" to message,
                         "video_id" to video.id,
                         "external_video_id" to video.externalVideoId,
+                        "bytes_downloaded" to percent.toLong(),
+                        "total_bytes" to 100L,
                         "progress_percent" to percent
                     ))
                     setForegroundAsync(createForegroundInfo(videoId, message))
