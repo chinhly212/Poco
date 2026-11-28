@@ -212,7 +212,8 @@ fun EditScreen(
                                         context = context,
                                         videoUri = videoUri,
                                         sampleIntervalMs = 1500L,
-                                        profile = processingProfile
+                                        profile = processingProfile,
+                                        sourceLanguage = sourceLanguage
                                     )
                                 }
                             }
@@ -246,7 +247,7 @@ fun EditScreen(
                 }
             }
             WorkflowRow("Dịch theo ngữ cảnh", "Giữ cách xưng hô và mạch hội thoại", Icons.Outlined.Language)
-            GText("OCR chạy offline bằng mô hình Latin tích hợp, hỗ trợ văn bản tiếng Việt. STT, dịch và lồng tiếng sẽ được kết nối tiếp.", 11.sp, color = EditMuted)
+            GText("OCR offline: chế độ tự động chạy mô hình Latin và Trung; có thể chọn riêng Tiếng Trung hoặc Tiếng Việt. STT, dịch và lồng tiếng sẽ được kết nối tiếp.", 11.sp, color = EditMuted)
         }
 
         SectionCard {
