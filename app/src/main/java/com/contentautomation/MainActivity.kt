@@ -11,7 +11,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,7 +31,6 @@ import com.contentautomation.update.AppUpdateManager
 import com.contentautomation.update.AvailableUpdate
 import kotlinx.coroutines.launch
 import java.io.File
-import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     private var pendingInstallFile: File? = null
@@ -108,11 +106,23 @@ class MainActivity : ComponentActivity() {
 
             Box(modifier = Modifier.fillMaxSize()) {
                 if (showSplash) {
-                    Image(
-                        painter = painterResource(id = R.drawable.muchi_splash),
-                        contentDescription = "Mu Chi",
+                    AndroidView(
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+                        factory = { context ->
+                            VideoView(context).apply {
+                                setVideoPath("android.resource://${context.packageName}/${R.raw.muchi_splash}")
+                                setOnPreparedListener { player ->
+                                    player.isLooping = false
+                                    player.setVolume(0f, 0f)
+                                    start()
+                                }
+                                setOnCompletionListener { showSplash = false }
+                                setOnErrorListener { _, _, _ ->
+                                    showSplash = false
+                                    true
+                                }
+                            }
+                        }
                     )
                 } else {
                     AppNavHost(vm)
