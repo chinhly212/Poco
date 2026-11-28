@@ -94,10 +94,10 @@ class DouyinBulkDownloadWorker(
                 val cookieLines = cookieHeader.split(";").mapNotNull { part ->
                     val pair = part.trim().split("=", limit = 2)
                     if (pair.size != 2 || pair[0].isBlank()) null
-                    else ".douyin.com\\tTRUE\\t/\\tTRUE\\t0\\t${pair[0].trim()}\\t${pair[1].trim()}"
+                    else ".douyin.com\tTRUE\t/\tTRUE\t0\t${pair[0].trim()}\t${pair[1].trim()}"
                 }
                 if (cookieLines.isEmpty()) throw IllegalStateException("Phiên Douyin không có cookie hợp lệ.")
-                cookieFile.writeText("# Netscape HTTP Cookie File\\n" + cookieLines.joinToString("\\n"), Charsets.UTF_8)
+                cookieFile.writeText("# Netscape HTTP Cookie File\n" + cookieLines.joinToString("\n"), Charsets.UTF_8)
                 val request = YoutubeDLRequest(video.sourceUrl).apply {
                     addOption("--format", "best[ext=mp4]/best")
                     addOption("--merge-output-format", "mp4")
