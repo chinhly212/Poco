@@ -2,6 +2,7 @@ package com.contentautomation
 
 import android.app.Application
 import android.util.Log
+import androidx.work.Configuration
 import com.contentautomation.data.db.AppDatabase
 import com.contentautomation.data.prefs.AppPreferences
 import com.yausername.ffmpeg.FFmpeg
@@ -13,8 +14,16 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.util.concurrent.Executors
 
-class ContentAutomationApp : Application() {
+class ContentAutomationApp : Application(), Configuration.Provider {
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setMaxSchedulerLimit(20)
+            .setExecutor(Executors.newFixedThreadPool(6))
+            .build()
+
 
     private val applicationScope =
         CoroutineScope(SupervisorJob() + Dispatchers.IO)
