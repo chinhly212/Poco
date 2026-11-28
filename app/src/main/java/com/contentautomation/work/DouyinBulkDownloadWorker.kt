@@ -116,7 +116,7 @@ class DouyinBulkDownloadWorker(
                     addOption("--cookies", cookieFile.absolutePath)
                     addOption("--newline")
                 }
-                YoutubeDL.getInstance().execute(request) { progress, etaInSeconds ->
+                YoutubeDL.getInstance().execute(request) { progress, etaInSeconds, _ ->
                     val percent = progress.toInt().coerceIn(0, 99)
                     val message = if (etaInSeconds > 0L) {
                         "Đang tải trực tiếp · $percent% · còn khoảng ${etaInSeconds}s"
