@@ -29,7 +29,7 @@ class AndroidTextToSpeechDubbingEngine(private val context: Context) {
         val outputDir = File(context.filesDir, "muchi-dubbing").apply { mkdirs() }
         check(outputDir.isDirectory) { "Không tạo được thư mục âm thanh lồng tiếng." }
 
-        val tts = createEngine()
+        val tts = createInitializedEngine()
         try {
             val locale = resolveLocale(language)
             val availability = tts.isLanguageAvailable(locale)
@@ -96,31 +96,6 @@ class AndroidTextToSpeechDubbingEngine(private val context: Context) {
             tts.stop()
             tts.shutdown()
         }
-    }
-
-    private suspend fun createEngine(): TextToSpeech {
-        val initialized = CompletableDeferred<TextToSpeech>()
-        val engine = TextToSpeech(context.applicationContext) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                // The instance is supplied below after construction.
-            } else {
-                initialized.completeExceptionally(
-                    IllegalStateException("Không khởi tạo được Android Text-to-Speech.")
-                )
-            }
-        }
-        // Initialization callback can arrive after the constructor returns.
-        // A short listener bridge avoids blocking the main thread.
-        val ready = CompletableDeferred<Unit>()
-        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = Unit
-            override fun onDone(utteranceId: String?) = Unit
-            override fun onError(utteranceId: String?) = Unit
-        })
-        // TextToSpeech initialization is asynchronous; wait for its callback
-        // using a second instance-free latch set by the callback below.
-        engine.shutdown()
-        return createInitializedEngine()
     }
 
     private suspend fun createInitializedEngine(): TextToSpeech {
