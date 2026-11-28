@@ -151,7 +151,7 @@ class DouyinBulkDownloadWorker(
             )
             app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.SAVED_TO_PHONE.name)
             setForeground(createForegroundInfo(videoId, "Đã lưu video vào Movies"))
-            setProgress(workDataOf("message" to "Đã lưu video vào Movies · ${downloadResult.bytesWritten} byte", "video_id" to video.id, "external_video_id" to video.externalVideoId, "progress_percent" to 100))
+            setProgress(workDataOf("message" to "Đã lưu video vào Movies · ${downloaded.length()} byte", "video_id" to video.id, "external_video_id" to video.externalVideoId, "progress_percent" to 100))
             Result.success(workDataOf("saved_uri" to savedUri.toString(), "display_name" to displayName, "video_id" to video.id, "external_video_id" to video.externalVideoId, "progress_percent" to 100))
         } catch (cancelled: CancellationException) {
             throw cancelled
