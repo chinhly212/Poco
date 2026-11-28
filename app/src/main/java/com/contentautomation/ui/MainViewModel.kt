@@ -767,31 +767,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 var skipped = 0
                 for (item in selected) {
                     val existing = dao.findByAccountAndExternalId(account.id, item.id)
-                    if (existing != null) {
-                        skipped++
-                        continue
-                    }
-                    val video = SourceVideo(
-                        sourceAccountId = account.id,
-                        externalVideoId = item.id,
-                        sourceUrl = item.url,
-                        title = item.title,
-                        descriptionZh = item.description,
-                        publishedAt = item.publishedAt,
-                        status = VideoStatus.NEW.name
-                    )
-                    val inserted = dao.insert(video)
-                    if (inserted == -1L) {
-                        skipped++
+                    val videoId = if (existing != null) {
+                        if (existing.status == VideoStatus.SAVED_TO_PHONE.name ||
+                            existing.status == VideoStatus.DOWNLOADING.name
+                        ) {
+                            skipped++
+                            continue
+                        }
+                        existing.id
                     } else {
-                        com.contentautomation.work.DouyinBulkDownloadWorker.enqueue(application, video.id)
-                        queued++
+                        val video = SourceVideo(
+                            sourceAccountId = account.id,
+                            externalVideoId = item.id,
+                            sourceUrl = item.url,
+                            title = item.title,
+                            descriptionZh = item.description,
+                            publishedAt = item.publishedAt,
+                            status = VideoStatus.NEW.name
+                        )
+                        val inserted = dao.insert(video)
+                        if (inserted == -1L) {
+                            skipped++
+                            continue
+                        }
+                        video.id
                     }
+                    com.contentautomation.work.DouyinBulkDownloadWorker.enqueue(application, videoId)
+                    queued++
                 }
                 _douyinLibrary.update {
                     it.copy(
                         loading = false,
-                        message = "Đã xác nhận $queued video để tải${if (skipped > 0) " · $skipped video đã có trong thư viện nên được bỏ qua" else ""}."
+                        message = "Đã xác nhận $queued video để tải trực tiếp về điện thoại${if (skipped > 0) " · $skipped video đang tải hoặc đã lưu nên được bỏ qua" else ""}."
                     )
                 }
             } catch (e: Exception) {
