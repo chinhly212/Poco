@@ -105,7 +105,7 @@ class SherpaOnnxVideoSpeechRecognizer(
         pcmFile: File
     ): List<SpeechSegment> {
         val sampleRate = 16_000
-        val chunkSamples = sampleRate * 30
+        val chunkSamples = sampleRate * 10
         val bytesPerChunk = chunkSamples * 2
         val output = mutableListOf<SpeechSegment>()
         RandomAccessFile(pcmFile, "r").use { audio ->
