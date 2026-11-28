@@ -87,10 +87,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .mapNotNull { info ->
                 val videoId = info.progress.getString("external_video_id")
                     ?: info.outputData.getString("external_video_id")
+                    ?: info.inputData.getString("external_video_id")
                     ?: info.progress.getString("video_id")
                     ?: info.outputData.getString("video_id")
                     ?: info.id.toString()
-                val percent = if (info.state == WorkInfo.State.SUCCEEDED) 100
+                val percent = if (info.state == WorkInfo.State.SUCCEEDED && !info.outputData.getBoolean("download_failed", false)) 100
                     else info.progress.getInt("progress_percent", 0).coerceIn(0, 100)
                 val message = info.progress.getString("message")
                     ?: info.outputData.getString("message")
@@ -845,7 +846,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         video.id
                     }
                     dao.updateStatus(videoId, VideoStatus.DOWNLOADING.name)
-                    com.contentautomation.work.DouyinBulkDownloadWorker.enqueue(application, videoId)
+                    com.contentautomation.work.DouyinBulkDownloadWorker.enqueue(application, videoId, item.id)
                     queued++
                 }
                 _douyinLibrary.update {
