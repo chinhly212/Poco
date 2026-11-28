@@ -24,7 +24,7 @@ Only Windows-specific packaging, Windows DLLs, PySide6 widgets, CUDA/NVENC and C
 - UI: Jetpack Compose, touch-first portrait layout with landscape workspace support.
 - Video playback/preview: AndroidX Media3.
 - Export: Android MediaCodec hardware encoders where supported; FFmpeg Android build as a compatibility/fallback path. Never assume NVIDIA NVENC exists on Android.
-- STT: evaluate Sherpa-ONNX / ONNX Runtime Android and supported Whisper runtimes. Keep model downloads optional and expose model size before download.
+- STT: Sherpa-ONNX Android runtime selected (`com.github.k2-fsa.sherpa-onnx:sherpa-onnx:v2.0.3`). Next: add optional Chinese Paraformer model installer, decode source-video audio to 16 kHz mono PCM, and run offline recognition in bounded chunks. Do not bundle large model weights in the APK.
 - OCR: evaluate ML Kit Text Recognition and an ONNX OCR path; allow frame sampling/cropping to control cost.
 - Translation: retain provider abstraction and CapCap's dialogue-context/prompt behavior; local/offline translation is optional and model-size gated.
 - TTS: Android-compatible local Piper/Sherpa-ONNX voices first, with optional network TTS providers. Do not require a paid API for the editor to open or edit.
@@ -57,5 +57,10 @@ Use device resources, but do so adaptively:
 
 - Dedicated branch: `feature/capcap-android-editor`.
 - Initial Android subtitle domain core added: `videoeditor/domain/SubtitleCue.kt`.
-- No UI route, recognition engine, translation engine, TTS engine, or export pipeline has been wired yet.
+- Edit route and video picker/preview are wired into MUCHI.
+- Subtitle cue model and SRT import/export are implemented.
+- OCR is implemented on-device with ML Kit Latin/Vietnamese and Chinese models; automatic mode runs both recognizers.
+- Device RAM/thermal/CPU profiling and Low/Balanced/Performance presets are wired.
+- STT runtime dependency (Sherpa-ONNX v2.0.3) has been added; the model installer, audio decoder and actual recognition path are still in progress.
+- Contextual translation, dubbing/TTS, audio mixing, timeline editing and final video export remain unimplemented; UI labels are scaffolding and must not report false completion.
 - No APK has been built or device-tested for this feature.
