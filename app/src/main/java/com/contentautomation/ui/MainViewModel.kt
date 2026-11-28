@@ -695,6 +695,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     ?.takeIf { it.isNotBlank() }
                     ?: throw IllegalStateException("Phiên Douyin chưa kết nối. Hãy đăng nhập Douyin trong Cài đặt.")
 
+                if (!application.awaitMediaEngines()) {
+                    throw IllegalStateException("Bộ tải video trên điện thoại chưa khởi động xong. Hãy thử lại sau ít phút.")
+                }
                 val adapter = com.contentautomation.domain.source.DouyinAdapter(application.filesDir)
                 val videos = adapter.getLatestVideos(account.accountIdentifier, cookie).distinctBy { it.id }
                 val dao = application.database.sourceVideoDao()
