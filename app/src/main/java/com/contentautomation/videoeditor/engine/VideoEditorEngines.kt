@@ -78,7 +78,7 @@ interface VideoSpeechRecognizer {
 
 interface VideoTextRecognizer {
     suspend fun capability(context: Context): EngineCapability
-    suspend fun recognize(videoUri: Uri, sampleIntervalMs: Long, profile: ProcessingProfile): List<OcrSegment>
+    suspend fun recognize(context: Context, videoUri: Uri, sampleIntervalMs: Long, profile: ProcessingProfile): List<OcrSegment>
 }
 
 interface ContextualTranslator {
