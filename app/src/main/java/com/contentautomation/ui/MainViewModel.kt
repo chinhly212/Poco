@@ -16,6 +16,7 @@ import com.contentautomation.data.remote.GoogleDriveClient
 import com.contentautomation.data.remote.UserSupportRepository
 import com.contentautomation.data.remote.DriveAccountInfo
 import com.contentautomation.data.remote.DriveFileItem
+import com.contentautomation.domain.source.SourceVideoItem
 import android.net.Uri
 import com.contentautomation.service.AutomationForegroundService
 import com.contentautomation.ui.models.*
@@ -49,6 +50,14 @@ data class ScanProgressUiState(
     val message: String = "Chưa chạy quét kênh."
 )
 
+data class DouyinChannelLibraryUiState(
+    val accountId: String? = null,
+    val accountName: String = "",
+    val loading: Boolean = false,
+    val videos: List<SourceVideoItem> = emptyList(),
+    val message: String? = null
+)
+
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val application = app as ContentAutomationApp
@@ -56,6 +65,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _scanProgress = MutableStateFlow(ScanProgressUiState())
     val scanProgress = _scanProgress.asStateFlow()
+
+    private val _douyinLibrary = MutableStateFlow(DouyinChannelLibraryUiState())
+    val douyinLibrary = _douyinLibrary.asStateFlow()
 
     private val scanWorkObserver = Observer<List<WorkInfo>> { infos ->
         val info = infos.lastOrNull()
@@ -661,6 +673,103 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         require(allowed) { "Liên kết này không thuộc nền tảng $platform đã chọn." }
         return value.substringBefore("#")
+    }
+
+
+    // DOUYIN FULL-CHANNEL LIBRARY: scan every available page, then let the user choose downloads.
+
+    fun scanDouyinChannel(accountId: String) {
+        viewModelScope.launch {
+            _douyinLibrary.value = DouyinChannelLibraryUiState(
+                accountId = accountId,
+                loading = true,
+                message = "Đang lấy toàn bộ video của kênh Douyin…"
+            )
+            try {
+                val account = application.database.sourceAccountDao().findById(accountId)
+                    ?: throw IllegalArgumentException("Không tìm thấy kênh Douyin.")
+                require(account.platform.equals("DOUYIN", ignoreCase = true)) {
+                    "Chức năng này chỉ dành cho kênh Douyin."
+                }
+                val cookie = application.prefs.getSecret("platform_cookie_douyin")
+                    ?.takeIf { it.isNotBlank() }
+                    ?: throw IllegalStateException("Phiên Douyin chưa kết nối. Hãy đăng nhập Douyin trong Cài đặt.")
+                val adapter = com.contentautomation.domain.source.DouyinAdapter(application.filesDir)
+                val videos = adapter.getLatestVideos(account.accountIdentifier, cookie).distinctBy { it.id }
+                _douyinLibrary.value = DouyinChannelLibraryUiState(
+                    accountId = account.id,
+                    accountName = account.accountName,
+                    loading = false,
+                    videos = videos,
+                    message = if (videos.isEmpty()) "Không tìm thấy video nào hoặc Douyin không trả dữ liệu." else "Đã quét ${videos.size} video. Hãy chọn video muốn tải."
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _douyinLibrary.value = DouyinChannelLibraryUiState(
+                    accountId = accountId,
+                    loading = false,
+                    message = e.message ?: "Không thể quét kênh Douyin."
+                )
+            }
+        }
+    }
+
+    fun downloadSelectedDouyinVideos(videoIds: Set<String>) {
+        val snapshot = _douyinLibrary.value
+        val accountId = snapshot.accountId ?: return
+        val selected = snapshot.videos.filter { it.id in videoIds }
+        if (selected.isEmpty()) {
+            _douyinLibrary.update { it.copy(message = "Bạn chưa chọn video nào.") }
+            return
+        }
+        viewModelScope.launch {
+            _douyinLibrary.update { it.copy(loading = true, message = "Đang đưa video đã chọn vào hàng đợi tải…") }
+            try {
+                val account = application.database.sourceAccountDao().findById(accountId)
+                    ?: throw IllegalArgumentException("Không tìm thấy kênh Douyin.")
+                val dao = application.database.sourceVideoDao()
+                var queued = 0
+                var skipped = 0
+                for (item in selected) {
+                    val existing = dao.findByAccountAndExternalId(account.id, item.id)
+                    if (existing != null) {
+                        skipped++
+                        continue
+                    }
+                    val video = SourceVideo(
+                        sourceAccountId = account.id,
+                        externalVideoId = item.id,
+                        sourceUrl = item.url,
+                        title = item.title,
+                        descriptionZh = item.description,
+                        publishedAt = item.publishedAt,
+                        status = VideoStatus.NEW.name
+                    )
+                    val inserted = dao.insert(video)
+                    if (inserted == -1L) {
+                        skipped++
+                    } else {
+                        DownloadWorker.enqueue(application, video.id)
+                        queued++
+                    }
+                }
+                _douyinLibrary.update {
+                    it.copy(
+                        loading = false,
+                        message = "Đã xác nhận $queued video để tải${if (skipped > 0) " · $skipped video đã có trong thư viện nên được bỏ qua" else ""}."
+                    )
+                }
+            } catch (e: Exception) {
+                _douyinLibrary.update {
+                    it.copy(loading = false, message = e.message ?: "Không thể tạo hàng đợi tải video.")
+                }
+            }
+        }
+    }
+
+    fun clearDouyinLibrary() {
+        _douyinLibrary.value = DouyinChannelLibraryUiState()
     }
 
     // RETRY FAILED DOWNLOADS
