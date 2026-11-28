@@ -63,6 +63,7 @@ import com.contentautomation.videoeditor.domain.SubtitleCue
 import com.contentautomation.videoeditor.engine.AndroidDeviceResourceMonitor
 import com.contentautomation.videoeditor.engine.AiSubtitleTranslator
 import com.contentautomation.videoeditor.engine.AndroidTextToSpeechDubbingEngine
+import com.contentautomation.videoeditor.engine.FfmpegDubbingExporter
 import com.contentautomation.ui.MainViewModel
 import com.contentautomation.videoeditor.engine.MlKitVideoTextRecognizer
 import com.contentautomation.videoeditor.engine.SherpaOnnxChineseModelManager
@@ -109,6 +110,7 @@ fun EditScreen(
     var isSpeechRunning by remember { mutableStateOf(false) }
     var isTranslationRunning by remember { mutableStateOf(false) }
     var isDubbingRunning by remember { mutableStateOf(false) }
+    var isExportRunning by remember { mutableStateOf(false) }
     val speechModelManager = remember(context) { SherpaOnnxChineseModelManager(context) }
     var hasSpeechModel by remember(context) { mutableStateOf(speechModelManager.isInstalled()) }
     val processingProfile = when (selectedProfile) {
@@ -142,6 +144,32 @@ fun EditScreen(
                 } ?: error("Không thể tạo tệp phụ đề.")
             }.onSuccess { statusMessage = "Đã xuất tệp SRT." }
                 .onFailure { statusMessage = it.message ?: "Xuất SRT thất bại." }
+        }
+    }
+
+    val exportVideoLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("video/mp4")
+    ) { uri ->
+        if (uri != null) {
+            val videoUri = selectedVideoUri
+            if (videoUri == null) {
+                statusMessage = "Hãy chọn video nguồn trước khi xuất."
+            } else if (!isExportRunning) {
+                isExportRunning = true
+                statusMessage = "Đang ghép giọng đọc và đóng gói video MP4..."
+                val exportCues = subtitles.toList()
+                coroutineScope.launch {
+                    val result = runCatching {
+                        FfmpegDubbingExporter(context).export(videoUri, exportCues, uri)
+                    }
+                    result.onSuccess {
+                        statusMessage = "Đã xuất video MP4 có giọng lồng tiếng."
+                    }.onFailure {
+                        statusMessage = "Xuất video thất bại: ${it.message ?: "Lỗi không xác định"}"
+                    }
+                    isExportRunning = false
+                }
+            }
         }
     }
 
@@ -510,9 +538,21 @@ fun EditScreen(
                 11.sp,
                 color = EditMuted
             )
-            OutlinedButton(onClick = { statusMessage = "Chưa thể xuất video: pipeline nhận diện, lồng tiếng và render chưa được kết nối." }, modifier = Modifier.fillMaxWidth()) {
-                Text("Xuất video (chờ tích hợp engine)")
+            Button(
+                onClick = { exportVideoLauncher.launch("muchi-dubbed.mp4") },
+                enabled = selectedVideoUri != null &&
+                    subtitles.any { !it.voiceAudioPath.isNullOrBlank() } &&
+                    !isExportRunning,
+                colors = ButtonDefaults.buttonColors(containerColor = EditInk),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isExportRunning) "Đang xuất video..." else "Xuất video MP4 có lồng tiếng")
             }
+            GText(
+                "Bản xuất hiện giữ nguyên hình ảnh video và tạo một track âm thanh lồng tiếng theo mốc thời gian. Âm thanh gốc chưa được phối trộn vào track này.",
+                11.sp,
+                color = EditMuted
+            )
         }
         GText(statusMessage, 11.sp, color = EditMuted)
     }
