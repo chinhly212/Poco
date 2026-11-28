@@ -58,8 +58,8 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
         cookieHeader: String?
     ): List<SourceVideoItem> = withContext(Dispatchers.IO) {
         val secUid = accountIdentifier.trim().substringAfterLast("/").substringBefore("?")
-        if (!secUid.startsWith("MS4wLjAB")) {
-            throw SourceUnavailableException("Mã hồ sơ Douyin không hợp lệ. Cần sec_uid dạng MS4wLjAB…")
+        if (!Regex("""[A-Za-z0-9._~-]{12,256}""").matches(secUid)) {
+            throw SourceUnavailableException("Mã hồ sơ Douyin không hợp lệ. Hãy dùng sec_uid hoặc đường dẫn trang cá nhân.")
         }
         val cookie = cookieHeader.orEmpty()
         if (cookie.isBlank()) {
@@ -183,9 +183,9 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
                 segments.indexOf("user").takeIf { it >= 0 }?.let { segments.getOrNull(it + 1) }
             }
             val secUid = stringField("sec_uid", "secUid", "sec_user_id")
-                ?: Regex("""/user/(MS4wLjAB[A-Za-z0-9_-]+)""").find(resolvedUrl)?.groupValues?.getOrNull(1)
-                ?: pathId?.takeIf { it.startsWith("MS4wLjAB") }
-            if (secUid.isNullOrBlank() || !secUid.startsWith("MS4wLjAB")) {
+                ?: Regex("""/user/([A-Za-z0-9._~-]{12,256})""").find(resolvedUrl)?.groupValues?.getOrNull(1)
+                ?: pathId?.takeIf { Regex("""[A-Za-z0-9._~-]{12,256}""").matches(it) }
+            if (secUid.isNullOrBlank() || !Regex("""[A-Za-z0-9._~-]{12,256}""").matches(secUid)) {
                 throw SourceUnavailableException("Chưa lấy được mã hồ sơ Douyin (sec_uid). Hãy dùng link trang cá nhân, không dùng ID hiển thị.")
             }
 
