@@ -145,7 +145,22 @@ fun AppNavHost(vm: MainViewModel) {
         Toast.makeText(context, if (granted) "Đã cấp quyền." else "Bạn chưa cấp quyền. Có thể bật lại trong Cài đặt Android.", Toast.LENGTH_LONG).show()
     }
 
-    var selectedEditorVideoName by remember { mutableStateOf<String?>(null) }\n    var selectedEditorVideoUri by remember { mutableStateOf<Uri?>(null) }\n    val editorVideoPicker = rememberLauncherForActivityResult(\n        ActivityResultContracts.OpenDocument()\n    ) { uri: Uri? ->\n        if (uri != null) {\n            runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }\n            selectedEditorVideoUri = uri\n            selectedEditorVideoName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->\n                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)\n                if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null\n            } ?: "video"\n        }\n    }\n\n    val driveUploadLauncher = rememberLauncherForActivityResult(
+    var selectedEditorVideoName by remember { mutableStateOf<String?>(null) }
+    var selectedEditorVideoUri by remember { mutableStateOf<Uri?>(null) }
+    val editorVideoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            selectedEditorVideoUri = uri
+            selectedEditorVideoName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+            } ?: "video"
+        }
+    }
+
+    val driveUploadLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
@@ -350,7 +365,7 @@ fun AppNavHost(vm: MainViewModel) {
                         systemOn = isSystemRunning,
                         errors = uiErrors,
                         jobs = pipelineJobs,
-                        onOpenWork = { navigateTo(MuChiRoutes.WORK) },
+                        vm = vm,\n                        onScanNow = { vm.scanNow() },\n                        onPauseJob = { vm.pauseJob(it) },\n                        onResumeJob = { vm.resumeJob(it) },
 
                         onToggleSystem = {
                             vm.setSystemRunning(
