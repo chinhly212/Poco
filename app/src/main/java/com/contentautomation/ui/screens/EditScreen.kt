@@ -41,6 +41,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +61,11 @@ import com.contentautomation.ui.components.ScreenColumn
 import com.contentautomation.videoeditor.domain.SrtCodec
 import com.contentautomation.videoeditor.domain.SubtitleCue
 import com.contentautomation.videoeditor.engine.AndroidDeviceResourceMonitor
+import com.contentautomation.videoeditor.engine.MlKitVideoTextRecognizer
+import com.contentautomation.videoeditor.domain.ProcessingProfile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val EditInk = Color(0xFF18181B)
 private val EditMuted = Color(0xFF71717A)
@@ -89,6 +95,14 @@ fun EditScreen(
                 com.contentautomation.videoeditor.domain.ProcessingProfile.PERFORMANCE -> "Hiệu năng"
             }
         )
+    }
+
+        val coroutineScope = rememberCoroutineScope()
+    var isOcrRunning by remember { mutableStateOf(false) }
+    val processingProfile = when (selectedProfile) {
+        "Tiết kiệm" -> ProcessingProfile.LOW_MEMORY
+        "Hiệu năng" -> ProcessingProfile.PERFORMANCE
+        else -> ProcessingProfile.BALANCED
     }
 
     val importSrtLauncher = rememberLauncherForActivityResult(
@@ -183,9 +197,56 @@ fun EditScreen(
                 singleLine = true
             )
             WorkflowRow("Nhận diện lời nói (STT)", "Tạo văn bản kèm mốc thời gian", Icons.Outlined.Mic)
-            WorkflowRow("Nhận diện chữ trong hình (OCR)", "Quét chữ xuất hiện trên khung hình", Icons.Outlined.TextFields)
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                WorkflowRow("Nhận diện chữ trong hình (OCR)", "ML Kit chạy trực tiếp trên điện thoại", Icons.Outlined.TextFields)
+                Button(
+                    onClick = {
+                        val videoUri = selectedVideoUri
+                        if (videoUri == null || isOcrRunning) return@Button
+                        isOcrRunning = true
+                        statusMessage = "Đang quét chữ trong video..."
+                        coroutineScope.launch {
+                            val result = runCatching {
+                                withContext(Dispatchers.IO) {
+                                    MlKitVideoTextRecognizer().recognize(
+                                        context = context,
+                                        videoUri = videoUri,
+                                        sampleIntervalMs = 1500L,
+                                        profile = processingProfile
+                                    )
+                                }
+                            }
+                            result.onSuccess { found ->
+                                val nextId = (subtitles.maxOfOrNull { it.id } ?: 0L) + 1L
+                                val converted = found.mapIndexed { index, item ->
+                                    SubtitleCue(
+                                        id = nextId + index,
+                                        startMs = item.startMs,
+                                        endMs = item.endMs.coerceAtLeast(item.startMs + 500L),
+                                        sourceText = item.text
+                                    )
+                                }
+                                subtitles.addAll(converted)
+                                statusMessage = if (converted.isEmpty()) {
+                                    "OCR hoàn tất: không tìm thấy chữ trong video."
+                                } else {
+                                    "OCR hoàn tất: đã nhận diện ${converted.size} đoạn chữ."
+                                }
+                            }.onFailure {
+                                statusMessage = "OCR thất bại: ${it.message ?: "Lỗi không xác định"}"
+                            }
+                            isOcrRunning = false
+                        }
+                    },
+                    enabled = selectedVideoUri != null && !isOcrRunning,
+                    colors = ButtonDefaults.buttonColors(containerColor = EditInk),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (isOcrRunning) "Đang nhận diện..." else "Quét chữ trong video")
+                }
+            }
             WorkflowRow("Dịch theo ngữ cảnh", "Giữ cách xưng hô và mạch hội thoại", Icons.Outlined.Language)
-            GText("Các engine STT/OCR/dịch đang là phần tích hợp tiếp theo; giao diện chưa giả lập kết quả xử lý.", 11.sp, color = EditMuted)
+            GText("OCR chạy offline bằng mô hình Latin tích hợp, hỗ trợ văn bản tiếng Việt. STT, dịch và lồng tiếng sẽ được kết nối tiếp.", 11.sp, color = EditMuted)
         }
 
         SectionCard {
