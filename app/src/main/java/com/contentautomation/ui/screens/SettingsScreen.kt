@@ -10,9 +10,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -194,6 +191,14 @@ fun SettingsScreen(
                         Column(Modifier.weight(1f)) {
                             Text(account.accountName.ifBlank { account.accountIdentifier }, fontSize = 13.sp, color = SettingsInk, fontWeight = FontWeight.SemiBold, maxLines = 1)
                             Text("${account.platform.uppercase(Locale.ROOT)} · ${account.accountIdentifier}", fontSize = 11.sp, color = SettingsMuted, maxLines = 1)
+                            val profileStats = buildList {
+                                account.profileVideoCount?.let { add("Video: ${it}") }
+                                account.profileFollowerCount?.let { add("Follower: ${formatSettingsCount(it)}") }
+                                account.profileFollowingCount?.let { add("Following: ${formatSettingsCount(it)}") }
+                            }
+                            if (profileStats.isNotEmpty()) {
+                                Text(profileStats.joinToString(" · "), fontSize = 10.sp, color = SettingsMuted, maxLines = 1)
+                            }
                         }
                         if (account.platform.equals("DOUYIN", ignoreCase = true)) {
                             SmallAction("Quét video", { onScanDouyinChannel(account.id) })
@@ -455,13 +460,11 @@ private fun DouyinVideoPickerDialog(
                         Spacer(Modifier.weight(1f))
                         Text("Đã chọn ${selectedIds.size}", fontSize = 11.sp, color = SettingsMuted)
                     }
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
+                    LazyColumn(
                         modifier = Modifier.fillMaxWidth().heightIn(max = 390.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
-                        gridItems(state.videos, key = { it.id }) { video ->
+                        items(state.videos, key = { it.id }) { video ->
                             DouyinVideoSelectionTile(
                                 video = video,
                                 checked = video.id in selectedIds,
@@ -516,12 +519,20 @@ private fun DouyinVideoSelectionTile(
     progress: DouyinDownloadProgressUiState?,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Column(
+    Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp))
+            .background(SettingsWhite)
             .border(1.dp, if (checked) SettingsInk else SettingsBorder, RoundedCornerShape(9.dp))
             .clickable { onCheckedChange(!checked) }
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1.05f).background(SettingsBg)) {
+        Box(
+            Modifier.size(width = 108.dp, height = 76.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(SettingsBg)
+        ) {
             if (!video.thumbnailUrl.isNullOrBlank()) {
                 coil.compose.AsyncImage(
                     model = video.thumbnailUrl,
@@ -534,20 +545,22 @@ private fun DouyinVideoSelectionTile(
                     Text("Không có ảnh bìa", fontSize = 9.sp, color = SettingsMuted)
                 }
             }
-            Checkbox(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.align(Alignment.TopEnd))
         }
-        Text(
-            video.title?.takeIf { it.isNotBlank() } ?: "Video ${video.id}",
-            modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp),
-            fontSize = 10.sp,
-            color = SettingsInk,
-            maxLines = 2
-        )
-        if (progress != null) {
-            Text(progress.message, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                fontSize = 9.sp, color = SettingsMuted, maxLines = 2)
-            LinearProgressIndicator(progress = progress.percent / 100f, modifier = Modifier.fillMaxWidth())
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                video.title?.takeIf { it.isNotBlank() } ?: "Video ${video.id}",
+                fontSize = 11.sp,
+                color = SettingsInk,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2
+            )
+            Text(video.id, fontSize = 9.sp, color = SettingsMuted, maxLines = 1)
+            if (progress != null) {
+                Text(progress.message, fontSize = 9.sp, color = SettingsMuted, maxLines = 2)
+                LinearProgressIndicator(progress = progress.percent / 100f, modifier = Modifier.fillMaxWidth())
+            }
         }
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -597,6 +610,12 @@ private fun SmallAction(label: String, onClick: () -> Unit) {
         Modifier.clip(RoundedCornerShape(7.dp)).background(SettingsBg).clickable(onClick = onClick)
             .padding(horizontal = 9.dp, vertical = 6.dp)
     ) { Text(label, fontSize = 11.sp, color = SettingsInk, fontWeight = FontWeight.SemiBold) }
+}
+
+private fun formatSettingsCount(value: Long): String = when {
+    value >= 1_000_000 -> String.format(Locale.US, "%.1fM", value / 1_000_000.0)
+    value >= 1_000 -> String.format(Locale.US, "%.1fK", value / 1_000.0)
+    else -> value.toString()
 }
 
 private fun formatSettingsBytes(value: Long): String {
