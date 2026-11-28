@@ -9,7 +9,7 @@ plugins {
 configurations.configureEach {
     // Sherpa Android AAR already contains the JVM wrapper classes.
     // Exclude the separately published JVM jar from every dependency path.
-    exclude(group = "com.github.k2-fsa", module = "sherpa-onnx-jvm")
+    exclude(group = "com.github.k2-fsa.sherpa-onnx", module = "sherpa-onnx-jvm")
 }
 
 android {
