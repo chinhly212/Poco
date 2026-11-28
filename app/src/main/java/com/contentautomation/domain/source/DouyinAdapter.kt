@@ -30,7 +30,7 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
     private val scanClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(40, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.MINUTES)
             .writeTimeout(60, TimeUnit.SECONDS)
             .callTimeout(20, TimeUnit.MINUTES)
             .followRedirects(true)
