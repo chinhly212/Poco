@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
@@ -50,6 +51,7 @@ class DouyinBulkDownloadWorker(
             workDataOf(
                 "message" to "Đang chuẩn bị tải video Douyin…",
                 "video_id" to video.id,
+                "external_video_id" to video.externalVideoId,
                 "bytes_downloaded" to 0L,
                 "total_bytes" to -1L,
                 "progress_percent" to 0
@@ -64,7 +66,7 @@ class DouyinBulkDownloadWorker(
             app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.DOWNLOADING.name)
             target.delete()
             setForeground(createForegroundInfo(videoId, "Đang yêu cầu máy chủ phân giải video Douyin…"))
-            setProgress(workDataOf("message" to "Đang phân giải video Douyin…", "video_id" to video.id))
+            setProgress(workDataOf("message" to "Đang phân giải video Douyin…", "video_id" to video.id, "external_video_id" to video.externalVideoId))
             val downloadResult = AiVideoServerClient().downloadVideo(video.sourceUrl, target) { received, total ->
                 val percent = if (total != null && total > 0L) {
                     ((received * 100L) / total).toInt().coerceIn(0, 99)
@@ -80,6 +82,7 @@ class DouyinBulkDownloadWorker(
                     workDataOf(
                         "message" to message,
                         "video_id" to video.id,
+                        "external_video_id" to video.externalVideoId,
                         "bytes_downloaded" to received,
                         "total_bytes" to (total ?: -1L),
                         "progress_percent" to percent
@@ -93,7 +96,7 @@ class DouyinBulkDownloadWorker(
                 throw IllegalStateException("Kích thước video tải về không khớp dữ liệu đã nhận.")
             }
             setForeground(createForegroundInfo(videoId, "Đã nhận video · đang lưu vào Movies…"))
-            setProgress(workDataOf("message" to "Đã nhận video · đang lưu vào Movies…", "video_id" to video.id))
+            setProgress(workDataOf("message" to "Đã nhận video · đang lưu vào Movies…", "video_id" to video.id, "external_video_id" to video.externalVideoId))
 
             val safeAccount = account.accountName
                 .replace(Regex("[^a-zA-Z0-9_-]"), "_")
@@ -113,8 +116,8 @@ class DouyinBulkDownloadWorker(
             )
             app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.SAVED_TO_PHONE.name)
             setForeground(createForegroundInfo(videoId, "Đã lưu video vào Movies"))
-            setProgress(workDataOf("message" to "Đã lưu video vào Movies · ${downloadResult.bytesWritten} byte", "video_id" to video.id))
-            Result.success(workDataOf("saved_uri" to savedUri.toString(), "display_name" to displayName))
+            setProgress(workDataOf("message" to "Đã lưu video vào Movies · ${downloadResult.bytesWritten} byte", "video_id" to video.id, "external_video_id" to video.externalVideoId, "progress_percent" to 100))
+            Result.success(workDataOf("saved_uri" to savedUri.toString(), "display_name" to displayName, "video_id" to video.id, "external_video_id" to video.externalVideoId, "progress_percent" to 100))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -125,7 +128,7 @@ class DouyinBulkDownloadWorker(
                 if (permanent) VideoStatus.FAILED.name else VideoStatus.RETRY_PENDING.name,
                 error.message
             )
-            if (permanent) Result.failure() else Result.retry()
+            if (permanent) Result.failure(workDataOf("video_id" to video.id, "external_video_id" to video.externalVideoId, "message" to (error.message ?: "Tải video thất bại."))) else Result.retry()
         }
     }
 
@@ -172,6 +175,8 @@ class DouyinBulkDownloadWorker(
 
     companion object {
         private const val KEY_VIDEO_ID = "video_id"
+        private const val UNIQUE_QUEUE_NAME = "muchi-douyin-sequential-download-queue"
+
         fun enqueue(context: Context, videoId: String) {
             val request = OneTimeWorkRequestBuilder<DouyinBulkDownloadWorker>()
                 .setInputData(workDataOf(KEY_VIDEO_ID to videoId))
@@ -183,8 +188,10 @@ class DouyinBulkDownloadWorker(
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .addTag("muchi-douyin-archive-download")
                 .build()
-            // Enqueue independent requests: WorkManager can run selected videos concurrently.
-            WorkManager.getInstance(context).enqueue(request)
+            // One unique chain serializes all selected downloads.
+            WorkManager.getInstance(context)
+                .beginUniqueWork(UNIQUE_QUEUE_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+                .enqueue()
         }
     }
 }

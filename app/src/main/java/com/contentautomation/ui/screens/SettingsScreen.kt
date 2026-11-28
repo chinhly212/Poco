@@ -10,6 +10,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -42,6 +46,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.outlined.Person
 import com.contentautomation.ui.DriveUiState
 import com.contentautomation.ui.DouyinChannelLibraryUiState
+import com.contentautomation.ui.DouyinDownloadProgressUiState
+import androidx.work.WorkInfo
 import com.contentautomation.ui.models.StorageInfo
 import java.util.Locale
 import kotlinx.coroutines.launch
@@ -88,6 +94,7 @@ fun SettingsScreen(
     onLogoutDouyin: () -> Unit,
     onLogoutKuaishou: () -> Unit,
     douyinLibrary: DouyinChannelLibraryUiState,
+    douyinDownloadProgress: List<DouyinDownloadProgressUiState>,
     onScanDouyinChannel: (String) -> Unit,
     onDownloadSelectedDouyinVideos: (Set<String>) -> Unit,
     onClearDouyinLibrary: () -> Unit
@@ -124,7 +131,7 @@ fun SettingsScreen(
     val douyin = accounts.count { it.platform.equals("douyin", true) }
     val kuaishou = accounts.count { it.platform.equals("kuaishou", true) }
     var confirmLogout by remember { mutableStateOf(false) }
-    var selectedDouyinIds by remember(douyinLibrary.accountId, douyinLibrary.videos) { mutableStateOf(emptySet<String>()) }
+    var selectedDouyinIds by remember(douyinLibrary.accountId) { mutableStateOf(emptySet<String>()) }
     val shortId = remember(deviceId) {
         if (deviceId.length > 18) "${deviceId.take(8)}...${deviceId.takeLast(7)}" else deviceId
     }
@@ -402,6 +409,7 @@ fun SettingsScreen(
     if (douyinLibrary.accountId != null) {
         DouyinVideoPickerDialog(
             state = douyinLibrary,
+            downloadProgress = douyinDownloadProgress,
             selectedIds = selectedDouyinIds,
             onSelectionChanged = { selectedDouyinIds = it },
             onScanAgain = { douyinLibrary.accountId?.let(onScanDouyinChannel) },
@@ -415,32 +423,26 @@ fun SettingsScreen(
 @Composable
 private fun DouyinVideoPickerDialog(
     state: DouyinChannelLibraryUiState,
+    downloadProgress: List<DouyinDownloadProgressUiState>,
     selectedIds: Set<String>,
     onSelectionChanged: (Set<String>) -> Unit,
     onScanAgain: () -> Unit,
     onDownloadSelected: (Set<String>) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val progressByVideo = remember(downloadProgress) { downloadProgress.associateBy { it.videoId } }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text("Video của kênh Douyin", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "${state.accountName} · ${state.videos.size} video",
-                    fontSize = 11.sp,
-                    color = SettingsMuted
-                )
+                Text("${state.accountName} · ${state.videos.size} video", fontSize = 11.sp, color = SettingsMuted)
             }
         },
         text = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (state.loading) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth())
-                }
-                state.message?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, fontSize = 12.sp, color = SettingsMuted)
-                }
+                if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                state.message?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 12.sp, color = SettingsMuted) }
                 if (state.videos.isNotEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
@@ -453,18 +455,40 @@ private fun DouyinVideoPickerDialog(
                         Spacer(Modifier.weight(1f))
                         Text("Đã chọn ${selectedIds.size}", fontSize = 11.sp, color = SettingsMuted)
                     }
-                    LazyColumn(
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
                         modifier = Modifier.fillMaxWidth().heightIn(max = 390.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(state.videos, key = { it.id }) { video ->
-                            DouyinVideoSelectionRow(
+                        gridItems(state.videos, key = { it.id }) { video ->
+                            DouyinVideoSelectionTile(
                                 video = video,
                                 checked = video.id in selectedIds,
+                                progress = progressByVideo[video.id],
                                 onCheckedChange = { checked ->
                                     onSelectionChanged(if (checked) selectedIds + video.id else selectedIds - video.id)
                                 }
                             )
+                        }
+                    }
+                }
+                val visibleProgress = downloadProgress.filter {
+                    it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED ||
+                        it.state == WorkInfo.State.BLOCKED || it.state == WorkInfo.State.FAILED ||
+                        it.state == WorkInfo.State.SUCCEEDED
+                }
+                if (visibleProgress.isNotEmpty()) {
+                    Text("Tiến trình tải", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = SettingsInk)
+                    Column(
+                        Modifier.fillMaxWidth().heightIn(max = 120.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        visibleProgress.takeLast(30).forEach { item ->
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("${item.videoId} · ${item.message}", fontSize = 10.sp, color = SettingsMuted, maxLines = 2)
+                                LinearProgressIndicator(progress = item.percent / 100f, modifier = Modifier.fillMaxWidth())
+                            }
                         }
                     }
                 }
@@ -474,9 +498,7 @@ private fun DouyinVideoPickerDialog(
             TextButton(
                 enabled = !state.loading && selectedIds.isNotEmpty(),
                 onClick = { onDownloadSelected(selectedIds) }
-            ) {
-                Text(if (state.loading) "Đang xử lý…" else "Xác nhận tải (${selectedIds.size})")
-            }
+            ) { Text(if (state.loading) "Đang xử lý…" else "Xác nhận tải (${selectedIds.size})") }
         },
         dismissButton = {
             Row {
@@ -488,30 +510,43 @@ private fun DouyinVideoPickerDialog(
 }
 
 @Composable
-private fun DouyinVideoSelectionRow(
+private fun DouyinVideoSelectionTile(
     video: SourceVideoItem,
     checked: Boolean,
+    progress: DouyinDownloadProgressUiState?,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Row(
-        Modifier.fillMaxWidth().clickable { onCheckedChange(!checked) }.padding(vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp))
+            .border(1.dp, if (checked) SettingsInk else SettingsBorder, RoundedCornerShape(9.dp))
+            .clickable { onCheckedChange(!checked) }
     ) {
-        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
-        Column(Modifier.weight(1f)) {
-            Text(
-                video.title?.takeIf { it.isNotBlank() } ?: "Video ${video.id}",
-                fontSize = 12.sp,
-                color = SettingsInk,
-                maxLines = 2
-            )
-            Text(
-                video.publishedAt?.let {
-                    java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(java.util.Date(it))
-                } ?: video.id,
-                fontSize = 10.sp,
-                color = SettingsMuted
-            )
+        Box(Modifier.fillMaxWidth().aspectRatio(1.05f).background(SettingsBg)) {
+            if (!video.thumbnailUrl.isNullOrBlank()) {
+                coil.compose.AsyncImage(
+                    model = video.thumbnailUrl,
+                    contentDescription = "Ảnh bìa video ${video.id}",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Không có ảnh bìa", fontSize = 9.sp, color = SettingsMuted)
+                }
+            }
+            Checkbox(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.align(Alignment.TopEnd))
+        }
+        Text(
+            video.title?.takeIf { it.isNotBlank() } ?: "Video ${video.id}",
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp),
+            fontSize = 10.sp,
+            color = SettingsInk,
+            maxLines = 2
+        )
+        if (progress != null) {
+            Text(progress.message, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                fontSize = 9.sp, color = SettingsMuted, maxLines = 2)
+            LinearProgressIndicator(progress = progress.percent / 100f, modifier = Modifier.fillMaxWidth())
         }
     }
 }

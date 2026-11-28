@@ -57,9 +57,20 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
         accountIdentifier: String,
         cookieHeader: String?
     ): List<SourceVideoItem> = withContext(Dispatchers.IO) {
-        val secUid = accountIdentifier.trim().substringAfterLast("/").substringBefore("?")
-        if (!secUid.startsWith("MS4wLjAB")) {
-            throw SourceUnavailableException("Mã hồ sơ Douyin không hợp lệ. Cần sec_uid dạng MS4wLjAB…")
+        val rawIdentifier = accountIdentifier.trim()
+        val parsedIdentifier = runCatching { android.net.Uri.parse(rawIdentifier) }.getOrNull()
+        val secUid = listOf("sec_uid", "sec_user_id", "secUid")
+            .firstNotNullOfOrNull { key -> parsedIdentifier?.getQueryParameter(key) }
+            ?.let { android.net.Uri.decode(it) }
+            ?: parsedIdentifier?.pathSegments
+                ?.let { segments ->
+                    val userIndex = segments.indexOfFirst { it.equals("user", ignoreCase = true) }
+                    if (userIndex >= 0) segments.getOrNull(userIndex + 1) else null
+                }
+                ?.let { android.net.Uri.decode(it) }
+            ?: rawIdentifier.substringBefore('?').substringBefore('#').trim('/')
+        if (!secUid.matches(Regex("""[A-Za-z0-9._~-]{12,256}"""))) {
+            throw SourceUnavailableException("Mã sec_uid Douyin không hợp lệ. Hãy kết nối lại bằng link hồ sơ Douyin hoặc sec_uid đầy đủ.")
         }
         val cookie = cookieHeader.orEmpty()
         if (cookie.isBlank()) {
@@ -109,12 +120,17 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
             val title = item.optString("title").takeIf { it.isNotBlank() && it != "null" }
             val description = item.optString("description").takeIf { it.isNotBlank() && it != "null" }
             val publishedAt = item.optLong("published_at", 0L).takeIf { it > 0L }
+            val thumbnailUrl = listOf("thumbnail_url", "cover_url", "cover", "thumbnail")
+                .firstNotNullOfOrNull { key ->
+                    item.optString(key).takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                }
             videos.putIfAbsent(id, SourceVideoItem(
                 id = id,
                 url = url,
                 title = title,
                 description = description,
-                publishedAt = publishedAt
+                publishedAt = publishedAt,
+                thumbnailUrl = thumbnailUrl
             ))
         }
         if (videos.isEmpty()) {
@@ -182,7 +198,8 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
             // Keep profile extraction and scan validation consistent.
             fun normalizeSecUid(candidate: String?): String? =
                 candidate?.trim()?.trim('"', '\'', '/', '\\')
-                    ?.takeIf { it.startsWith("MS4wLjAB") && it.matches(Regex("""MS4wLjAB[A-Za-z0-9_-]{8,240}""")) }
+                    ?.let { android.net.Uri.decode(it) }
+                    ?.takeIf { it.matches(Regex("""[A-Za-z0-9._~-]{12,256}""")) }
 
             fun secUidFromUri(rawUrl: String): String? {
                 val uri = runCatching { android.net.Uri.parse(rawUrl) }.getOrNull() ?: return null
@@ -210,15 +227,20 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
 
             // Supports quoted/unquoted keys and sec_uid/secUid/sec_user_id spellings.
             val secUidPattern = Regex(
-                """(?is)["']?(?:sec_uid|secUid|sec_user_id)["']?\s*[:=]\s*["']([A-Za-z0-9._~-]{12,256})["']"""
+                """(?is)["']?(?:sec_uid|secUid|sec_user_id)["']?\s*[:=]\s*["']?([A-Za-z0-9._~-]{12,256})["']?"""
             )
             val secUidFromHtml = secUidPattern.find(normalizedHtml)
                 ?.groupValues?.getOrNull(1)
                 ?.let(::normalizeSecUid)
+            val secUidFromProfilePath = Regex(
+                """(?i)/user/([A-Za-z0-9._~-]{12,256})(?:[/?#"'\\]|$)"""
+            ).find(normalizedHtml)?.groupValues?.getOrNull(1)?.let(::normalizeSecUid)
 
             val secUid = secUidFromUri(resolvedUrl)
                 ?: secUidFromUri(identifier)
                 ?: secUidFromHtml
+                ?: secUidFromProfilePath
+                ?: normalizeSecUid(identifier)
                 ?: stringField("sec_uid", "secUid", "sec_user_id")?.let(::normalizeSecUid)
 
             if (secUid == null) {

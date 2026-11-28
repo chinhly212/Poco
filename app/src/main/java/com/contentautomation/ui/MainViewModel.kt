@@ -83,17 +83,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val douyinDownloadObserver = Observer<List<WorkInfo>> { infos ->
         _douyinDownloadProgress.value = infos
-            .filter { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }
+            .takeLast(100)
             .mapNotNull { info ->
-                val videoId = info.progress.getString("video_id") ?: info.id.toString()
+                val videoId = info.progress.getString("external_video_id")
+                    ?: info.outputData.getString("external_video_id")
+                    ?: info.progress.getString("video_id")
+                    ?: info.outputData.getString("video_id")
+                    ?: info.id.toString()
+                val percent = if (info.state == WorkInfo.State.SUCCEEDED) 100
+                    else info.progress.getInt("progress_percent", 0).coerceIn(0, 100)
+                val message = info.progress.getString("message")
+                    ?: info.outputData.getString("message")
+                    ?: when (info.state) {
+                        WorkInfo.State.SUCCEEDED -> "Đã lưu vào Movies"
+                        WorkInfo.State.FAILED -> "Tải thất bại"
+                        WorkInfo.State.CANCELLED -> "Đã hủy"
+                        WorkInfo.State.RUNNING -> "Đang chuẩn bị tải…"
+                        WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> "Đang chờ lượt tải…"
+                    }
                 DouyinDownloadProgressUiState(
                     videoId = videoId,
                     state = info.state,
                     downloadedBytes = info.progress.getLong("bytes_downloaded", 0L),
                     totalBytes = info.progress.getLong("total_bytes", -1L),
-                    percent = info.progress.getInt("progress_percent", 0).coerceIn(0, 100),
-                    message = info.progress.getString("message")
-                        ?: if (info.state == WorkInfo.State.RUNNING) "Đang chuẩn bị tải…" else "Đang chờ lượt tải…"
+                    percent = percent,
+                    message = message
                 )
             }
     }

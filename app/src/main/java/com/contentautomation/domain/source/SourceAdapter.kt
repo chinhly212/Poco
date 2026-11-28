@@ -5,7 +5,8 @@ data class SourceVideoItem(
     val url: String,
     val title: String?,
     val description: String?,
-    val publishedAt: Long?
+    val publishedAt: Long?,
+    val thumbnailUrl: String? = null
 )
 
 data class SourceProfileInfo(
