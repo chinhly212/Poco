@@ -179,12 +179,23 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
                 return null
             }
 
-            val pathId = finalUri.pathSegments.let { segments ->
-                segments.indexOf("user").takeIf { it >= 0 }?.let { segments.getOrNull(it + 1) }
+            fun secUidFromUrl(value: String): String? {
+                val uri = runCatching { android.net.Uri.parse(value) }.getOrNull() ?: return null
+                val segments = uri.pathSegments
+                val userIndex = segments.indexOf("user")
+                val pathValue = userIndex.takeIf { it >= 0 }?.let { segments.getOrNull(it + 1) }
+                val decodedPathValue = pathValue?.let { android.net.Uri.decode(it) }
+                return decodedPathValue?.takeIf { Regex("""[A-Za-z0-9._~-]{12,256}""").matches(it) }
             }
             val secUid = stringField("sec_uid", "secUid", "sec_user_id")
-                ?: Regex("""/user/([A-Za-z0-9._~-]{12,256})""").find(resolvedUrl)?.groupValues?.getOrNull(1)
-                ?: pathId?.takeIf { Regex("""[A-Za-z0-9._~-]{12,256}""").matches(it) }
+                ?.let { android.net.Uri.decode(it).trim() }
+                ?.takeIf { Regex("""[A-Za-z0-9._~-]{12,256}""").matches(it) }
+                ?: secUidFromUrl(resolvedUrl)
+                ?: secUidFromUrl(identifier)
+                ?: Regex("""["'](?:sec_uid|secUid|sec_user_id)["']\s*:\s*["']([^"']{12,256})["']""", RegexOption.IGNORE_CASE)
+                    .find(html)?.groupValues?.getOrNull(1)
+                    ?.let { android.net.Uri.decode(it).trim() }
+                    ?.takeIf { Regex("""[A-Za-z0-9._~-]{12,256}""").matches(it) }
             if (secUid.isNullOrBlank() || !Regex("""[A-Za-z0-9._~-]{12,256}""").matches(secUid)) {
                 throw SourceUnavailableException("Chưa lấy được mã hồ sơ Douyin (sec_uid). Hãy dùng link trang cá nhân, không dùng ID hiển thị.")
             }
