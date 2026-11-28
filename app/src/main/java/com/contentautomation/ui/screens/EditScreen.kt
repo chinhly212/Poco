@@ -59,6 +59,7 @@ import com.contentautomation.ui.components.GText
 import com.contentautomation.ui.components.ScreenColumn
 import com.contentautomation.videoeditor.domain.SrtCodec
 import com.contentautomation.videoeditor.domain.SubtitleCue
+import com.contentautomation.videoeditor.engine.AndroidDeviceResourceMonitor
 
 private val EditInk = Color(0xFF18181B)
 private val EditMuted = Color(0xFF71717A)
@@ -77,7 +78,18 @@ fun EditScreen(
     var targetLanguage by remember { mutableStateOf("Tiếng Việt") }
     var subtitleDraft by remember { mutableStateOf("") }
     var statusMessage by remember { mutableStateOf("Chọn video để bắt đầu dự án.") }
-    var selectedProfile by remember { mutableStateOf("Cân bằng") }
+    val resourceMonitor = remember { AndroidDeviceResourceMonitor() }
+    val resourceSnapshot = remember(context) { resourceMonitor.snapshot(context) }
+    val recommendedProfile = remember(resourceSnapshot) { resourceMonitor.recommendedProfile(resourceSnapshot) }
+    var selectedProfile by remember(recommendedProfile) {
+        mutableStateOf(
+            when (recommendedProfile) {
+                com.contentautomation.videoeditor.domain.ProcessingProfile.LOW_MEMORY -> "Tiết kiệm"
+                com.contentautomation.videoeditor.domain.ProcessingProfile.BALANCED -> "Cân bằng"
+                com.contentautomation.videoeditor.domain.ProcessingProfile.PERFORMANCE -> "Hiệu năng"
+            }
+        )
+    }
 
     val importSrtLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -270,7 +282,16 @@ fun EditScreen(
                     )
                 }
             }
-            GText("Hồ sơ đã chọn: $selectedProfile. Tự động kiểm tra RAM, khả năng tăng tốc và nhiệt độ sẽ được nối với bộ xử lý.", 11.sp, color = EditMuted)
+            GText(
+                "RAM còn trống: ${resourceSnapshot.availableMemoryBytes / 1_073_741_824.0} GB / ${resourceSnapshot.totalMemoryBytes / 1_073_741_824.0} GB • CPU: ${resourceSnapshot.cpuCoreCount} lõi",
+                11.sp,
+                color = EditMuted
+            )
+            GText(
+                "Hồ sơ đề xuất: $selectedProfile • Nhiệt độ hệ thống mức ${resourceSnapshot.thermalStatus}. GPU/NPU chỉ được dùng khi engine xác nhận hỗ trợ.",
+                11.sp,
+                color = EditMuted
+            )
             OutlinedButton(onClick = { statusMessage = "Chưa thể xuất video: pipeline nhận diện, lồng tiếng và render chưa được kết nối." }, modifier = Modifier.fillMaxWidth()) {
                 Text("Xuất video (chờ tích hợp engine)")
             }
