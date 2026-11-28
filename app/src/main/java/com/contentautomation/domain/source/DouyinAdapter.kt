@@ -16,7 +16,7 @@ class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter
 
     private companion object {
         const val PAGE_SIZE = 20
-        const val MAX_SCAN_PAGES = 20
+        const val MAX_SCAN_PAGES = 100
         const val PAGE_DELAY_MS = 900L
     }
 
@@ -45,17 +45,15 @@ class DouyinAdapter(cookieDirectory: java.io.File? = null) : YtDlpProfileAdapter
             throw SourceUnavailableException("Mã hồ sơ Douyin chưa được xác minh. Hãy xóa kênh và thêm lại bằng link trang cá nhân.")
         }
         try {
-            val sinceTimestamp = LocalDate.now(ZoneId.systemDefault())
-                .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
             val collected = linkedMapOf<String, SourceVideoItem>()
             var cursor = "0"
 
-            // Fetch one Douyin feed page per HTTP request; never request the full profile in one call.
+            // Fetch the full channel archive page-by-page; 100 pages × 20 items supports channels with 600+ videos.
             repeat(MAX_SCAN_PAGES) {
                 val payload = JSONObject()
                     .put("sec_uid", accountIdentifier)
                     .put("cookie", cookieHeader.orEmpty())
-                    .put("since_timestamp", sinceTimestamp)
+                    .put("since_timestamp", 0L)
                     .put("max_items", PAGE_SIZE)
                     .put("cursor", cursor)
                 val request = Request.Builder()
