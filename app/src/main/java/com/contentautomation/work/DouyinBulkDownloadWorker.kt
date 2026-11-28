@@ -87,6 +87,12 @@ class DouyinBulkDownloadWorker(
             target.delete()
             setForeground(createForegroundInfo(videoId, "Đang tải trực tiếp từ Douyin về điện thoại…"))
             setProgress(workDataOf("message" to "Đang phân giải video trên điện thoại…", "video_id" to video.id, "external_video_id" to video.externalVideoId))
+            if (!app.awaitMediaEngines()) {
+                throw IllegalStateException(
+                    ContentAutomationApp.engineInitializationError
+                        ?: "Bộ tải video trên điện thoại chưa sẵn sàng. Hãy thử lại."
+                )
+            }
             val cookieHeader = app.prefs.getSecret("platform_cookie_douyin").orEmpty()
             if (cookieHeader.isBlank()) throw IllegalStateException("Phiên Douyin đã hết hạn. Hãy đăng nhập lại trong Cài đặt.")
             val cookieFile = File(applicationContext.cacheDir, "douyin-${videoId}.cookies")
