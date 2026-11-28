@@ -16,6 +16,7 @@ import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
 import com.google.api.services.drive.DriveScopes
+import android.content.Intent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -28,7 +29,7 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.WorkOutline
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -62,15 +63,15 @@ import com.contentautomation.ui.models.ErrorKind
 import com.contentautomation.ui.screens.HomeScreen
 import com.contentautomation.ui.screens.AiScreen
 import com.contentautomation.ui.screens.SettingsScreen
-import com.contentautomation.ui.screens.SystemScreen
 import com.contentautomation.ui.screens.ApiSettingsScreen
 import com.contentautomation.ui.screens.ChatScreen
+import com.contentautomation.ui.screens.EditScreen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
 private object MuChiRoutes {
     const val HOME = "home"
-    const val WORK = "work"
+    const val EDIT = "edit"
     const val AI = "ai"
     const val CHAT = "chat"
     const val SETTINGS = "settings"
@@ -142,6 +143,21 @@ fun AppNavHost(vm: MainViewModel) {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         Toast.makeText(context, if (granted) "Đã cấp quyền." else "Bạn chưa cấp quyền. Có thể bật lại trong Cài đặt Android.", Toast.LENGTH_LONG).show()
+    }
+
+    var selectedEditorVideoName by remember { mutableStateOf<String?>(null) }
+    var selectedEditorVideoUri by remember { mutableStateOf<Uri?>(null) }
+    val editorVideoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            selectedEditorVideoUri = uri
+            selectedEditorVideoName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+            } ?: "video"
+        }
     }
 
     val driveUploadLauncher = rememberLauncherForActivityResult(
@@ -253,7 +269,7 @@ fun AppNavHost(vm: MainViewModel) {
 
     val selectedIndex = when (currentRoute) {
         MuChiRoutes.HOME -> 0
-        MuChiRoutes.WORK -> 1
+        MuChiRoutes.EDIT -> 1
         MuChiRoutes.AI -> 2
         MuChiRoutes.CHAT -> 3
         MuChiRoutes.SETTINGS, MuChiRoutes.API -> 4
@@ -313,7 +329,7 @@ fun AppNavHost(vm: MainViewModel) {
                             label = "Trang chủ",
                             icon = Icons.Outlined.Home
                         ),
-                        BottomItem(label = "Công việc", icon = Icons.Outlined.WorkOutline),
+                        BottomItem(label = "Edit", icon = Icons.Outlined.Edit),
                         BottomItem(label = "AI", icon = Icons.Outlined.AutoAwesome),
                         BottomItem(label = "Chat", icon = Icons.Outlined.ChatBubbleOutline),
                         BottomItem(label = "Cài đặt", icon = Icons.Outlined.Settings)
@@ -324,7 +340,7 @@ fun AppNavHost(vm: MainViewModel) {
                     onSelect = { index ->
                         when (index) {
                             0 -> navigateTo(MuChiRoutes.HOME)
-                            1 -> navigateTo(MuChiRoutes.WORK)
+                            1 -> navigateTo(MuChiRoutes.EDIT)
                             2 -> navigateTo(MuChiRoutes.AI)
                             3 -> navigateTo(MuChiRoutes.CHAT)
                             4 -> navigateTo(MuChiRoutes.SETTINGS)
@@ -349,7 +365,10 @@ fun AppNavHost(vm: MainViewModel) {
                         systemOn = isSystemRunning,
                         errors = uiErrors,
                         jobs = pipelineJobs,
-                        onOpenWork = { navigateTo(MuChiRoutes.WORK) },
+                        vm = vm,
+                        onScanNow = { vm.scanNow() },
+                        onPauseJob = { vm.pauseJob(it) },
+                        onResumeJob = { vm.resumeJob(it) },
 
                         onToggleSystem = {
                             vm.setSystemRunning(
@@ -390,13 +409,12 @@ fun AppNavHost(vm: MainViewModel) {
                     )
                 }
 
-                composable(MuChiRoutes.WORK) {
-                    SystemScreen(
+                composable(MuChiRoutes.EDIT) {
+                    EditScreen(
                         vm = vm,
-                        jobs = pipelineJobs,
-                        onScanNow = { vm.scanNow() },
-                        onPauseJob = { vm.pauseJob(it) },
-                        onResumeJob = { vm.resumeJob(it) }
+                        selectedVideoName = selectedEditorVideoName,
+                        selectedVideoUri = selectedEditorVideoUri,
+                        onImportVideo = { editorVideoPicker.launch(arrayOf("video/*")) }
                     )
                 }
 

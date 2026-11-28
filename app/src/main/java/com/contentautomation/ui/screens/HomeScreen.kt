@@ -30,6 +30,7 @@ import com.contentautomation.ui.components.GText
 import com.contentautomation.ui.components.ScreenColumn
 import com.contentautomation.ui.models.AppError
 import com.contentautomation.ui.models.ErrorKind
+import com.contentautomation.ui.MainViewModel
 
 private val PageBg = Color(0xFFF4F4F5)
 private val CardBg = Color(0xFFFFFFFF)
@@ -45,15 +46,18 @@ fun HomeScreen(
     systemOn: Boolean,
     errors: List<AppError>,
     jobs: List<PipelineJob>,
+    vm: MainViewModel,
+    onScanNow: () -> Unit,
+    onPauseJob: (String) -> Unit,
+    onResumeJob: (String) -> Unit,
     onToggleSystem: () -> Unit,
-    onOpenWork: () -> Unit,
     onErrorAction: (AppError) -> Unit,
     onDeleteError: (String) -> Unit,
     onClearErrors: () -> Unit
 ) {
     ScreenColumn {
         SystemCard(systemOn, onToggleSystem)
-        PipelineCard(jobs, onOpenWork)
+        SystemScreen(vm = vm, jobs = jobs, onScanNow = onScanNow, onPauseJob = onPauseJob, onResumeJob = onResumeJob)
         if (errors.isNotEmpty()) {
             ErrorSection(errors, onErrorAction, onDeleteError, onClearErrors)
         }

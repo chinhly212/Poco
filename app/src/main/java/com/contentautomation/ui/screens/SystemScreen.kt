@@ -76,7 +76,7 @@ fun SystemScreen(
             .take(MAX_VISIBLE_JOBS)
     }
 
-    ScreenColumn {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         FlatCard {
             Column(
                 Modifier.fillMaxWidth().padding(14.dp),
