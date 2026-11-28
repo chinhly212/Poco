@@ -11,7 +11,6 @@ android {
     compileSdk = 34
     ndkVersion = "29.0.14206865"
 
-    // Tạo APK riêng cho từng kiến trúc ARM để tránh gói universal quá lớn.
     splits {
         abi {
             isEnable = true
@@ -25,7 +24,6 @@ android {
         applicationId = "com.contentautomation"
         minSdk = 26
         targetSdk = 34
-        // CI tăng phiên bản theo số lần chạy workflow; build local giữ phiên bản nền.
         val buildNumber = providers.gradleProperty("buildNumber").orNull?.toIntOrNull() ?: 0
         versionCode = 9 + buildNumber
         versionName = "1.7.$buildNumber"
@@ -57,7 +55,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Avoid release-only PNG crunching errors in existing image resources.
             isCrunchPngs = false
         }
     }
@@ -95,26 +92,14 @@ android {
 }
 
 dependencies {
-
-    // ==============================
-    // Jetpack Compose
-    // ==============================
-
-    val composeBom =
-        platform("androidx.compose:compose-bom:2024.09.02")
-
+    val composeBom = platform("androidx.compose:compose-bom:2024.09.02")
     implementation(composeBom)
 
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")
-
     debugImplementation("androidx.compose.ui:ui-tooling")
-
-    // ==============================
-    // Android UI & Lifecycle
-    // ==============================
 
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
@@ -122,116 +107,48 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.1")
     implementation("androidx.core:core-ktx:1.13.1")
 
-    // ==============================
-    // Kotlin Serialization
-    // ==============================
-
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
-
-    // ==============================
-    // Room Database
-    // ==============================
 
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
-
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // ==============================
-    // WorkManager
-    // ==============================
-
     implementation("androidx.work:work-runtime-ktx:2.9.1")
-
-    // ==============================
-    // Coroutines
-    // ==============================
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
-    // On-device OCR for sampled video frames (bundled Latin script model)
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
 
-    // Offline speech recognition runtime (native Android ARM64/ARMv7)
-    implementation("com.github.k2-fsa:sherpa-onnx:v1.13.5")
-
-    // ==============================
-    // Network
-    // ==============================
+    // Android AAR includes the native runtime. Exclude the duplicate JVM jar
+    // pulled transitively by the published sherpa artifact.
+    implementation("com.github.k2-fsa:sherpa-onnx:v1.13.5") {
+        exclude(group = "com.github.k2-fsa", module = "sherpa-onnx-jvm")
+    }
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
-
     implementation("com.google.code.gson:gson:2.11.0")
 
-    // ==============================
-    // YouTube-DL Android
-    // ==============================
-
     val youtubeDlVersion = "0.18.1"
-
-    implementation(
-        "io.github.junkfood02.youtubedl-android:library:$youtubeDlVersion"
-    )
-
-    // ==============================
-    // FFmpeg for YouTube-DL Android
-    // ==============================
-
-    implementation(
-        "io.github.junkfood02.youtubedl-android:ffmpeg:$youtubeDlVersion"
-    )
-
-    // ==============================
-    // Existing FFmpegKit
-    // ==============================
+    implementation("io.github.junkfood02.youtubedl-android:library:$youtubeDlVersion")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$youtubeDlVersion")
 
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.7")
-    // FFmpegKit references this Android exception formatter at runtime.
     implementation("com.arthenica:smart-exception-java:0.2.1")
 
-    // Google Identity authorization for per-user Google Drive access
     implementation("com.google.android.gms:play-services-auth:22.0.0")
-
-    // ==============================
-    // Google Drive
-    // ==============================
-
     implementation("com.google.auth:google-auth-library-oauth2-http:1.20.0")
-
-    implementation(
-        "com.google.apis:google-api-services-drive:v3-rev20240509-2.0.0"
-    )
-
+    implementation("com.google.apis:google-api-services-drive:v3-rev20240509-2.0.0")
     implementation("com.google.http-client:google-http-client-gson:1.43.3")
-
-    // ==============================
-    // Secure Preferences & DataStore
-    // ==============================
 
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-
-    // ==============================
-    // Coil Image Loading
-    // ==============================
-
     implementation("io.coil-kt:coil-compose:2.7.0")
-
-    // ==============================
-    // Haze UI Effects
-    // ==============================
-
     implementation("dev.chrisbanes.haze:haze:1.2.2")
-
-    // ==============================
-    // Media3 Transformer (Video Compression)
-    // ==============================
 
     val media3Version = "1.4.1"
     implementation("androidx.media3:media3-transformer:$media3Version")
