@@ -58,6 +58,15 @@ data class DouyinChannelLibraryUiState(
     val message: String? = null
 )
 
+data class DouyinDownloadProgressUiState(
+    val videoId: String,
+    val state: WorkInfo.State,
+    val downloadedBytes: Long = 0L,
+    val totalBytes: Long = -1L,
+    val percent: Int = 0,
+    val message: String = "Đang chờ tải…"
+)
+
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val application = app as ContentAutomationApp
@@ -68,6 +77,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _douyinLibrary = MutableStateFlow(DouyinChannelLibraryUiState())
     val douyinLibrary = _douyinLibrary.asStateFlow()
+
+    private val _douyinDownloadProgress = MutableStateFlow<List<DouyinDownloadProgressUiState>>(emptyList())
+    val douyinDownloadProgress = _douyinDownloadProgress.asStateFlow()
+
+    private val douyinDownloadObserver = Observer<List<WorkInfo>> { infos ->
+        _douyinDownloadProgress.value = infos
+            .filter { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }
+            .mapNotNull { info ->
+                val videoId = info.inputData.getString("video_id") ?: return@mapNotNull null
+                DouyinDownloadProgressUiState(
+                    videoId = videoId,
+                    state = info.state,
+                    downloadedBytes = info.progress.getLong("bytes_downloaded", 0L),
+                    totalBytes = info.progress.getLong("total_bytes", -1L),
+                    percent = info.progress.getInt("progress_percent", 0).coerceIn(0, 100),
+                    message = info.progress.getString("message")
+                        ?: if (info.state == WorkInfo.State.RUNNING) "Đang chuẩn bị tải…" else "Đang chờ lượt tải…"
+                )
+            }
+    }
 
     private val scanWorkObserver = Observer<List<WorkInfo>> { infos ->
         val info = infos.lastOrNull()
@@ -95,12 +124,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         WorkManager.getInstance(app)
             .getWorkInfosForUniqueWorkLiveData(AutomationForegroundService.SCAN_WORK_NAME)
             .observeForever(scanWorkObserver)
+        WorkManager.getInstance(app)
+            .getWorkInfosByTagLiveData("muchi-douyin-archive-download")
+            .observeForever(douyinDownloadObserver)
     }
 
     override fun onCleared() {
         WorkManager.getInstance(application)
             .getWorkInfosForUniqueWorkLiveData(AutomationForegroundService.SCAN_WORK_NAME)
             .removeObserver(scanWorkObserver)
+        WorkManager.getInstance(application)
+            .getWorkInfosByTagLiveData("muchi-douyin-archive-download")
+            .removeObserver(douyinDownloadObserver)
         super.onCleared()
     }
 
