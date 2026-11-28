@@ -549,7 +549,7 @@ fun EditScreen(
                 Text(if (isExportRunning) "Đang xuất video..." else "Xuất video MP4 có lồng tiếng")
             }
             GText(
-                "Bản xuất giữ nguyên hình ảnh video, giảm âm thanh gốc xuống 22% và phối trộn giọng đọc theo mốc thời gian. Nếu video không có tiếng gốc, chỉ xuất track lồng tiếng.",
+                "Bản xuất giữ nguyên hình ảnh video, trộn tiếng gốc ở mức 22% với giọng đọc và nhúng phụ đề đã dịch thành track có thể bật/tắt trong trình phát. Phụ đề chưa được đốt trực tiếp lên hình ảnh.",
                 11.sp,
                 color = EditMuted
             )
