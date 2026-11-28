@@ -313,9 +313,9 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
 
             val nickname = feedProfile?.optString("nickname")
                 ?.takeIf { it.isNotBlank() && it != "null" }
+                ?: feedProfile?.optString("unique_id")?.takeIf { it.isNotBlank() && it != "null" }
                 ?: stringField("nickname", "nick_name", "user_name", "display_name")
                 ?: pageTitle
-                ?: feedProfile?.optString("unique_id")?.takeIf { it.isNotBlank() && it != "null" }
                 ?: throw SourceUnavailableException("Douyin không trả tên chủ kênh thật. Hãy thử đăng nhập lại rồi xác minh hồ sơ.")
             val avatar = feedProfile?.optString("avatar_url")?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
                 ?: stringField("avatar_larger", "avatar_url", "avatar_thumb", "avatar")
@@ -332,7 +332,6 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
                     ?: numberField("follower_count", "followerCount", "mplatform_followers_count"),
                 followingCount = feedProfile?.optLong("following_count")?.takeIf { it > 0L }
                     ?: numberField("following_count", "followingCount")
-                    ?: feedProfile?.optLong("following_count")?.takeIf { it > 0L }
             )
         } catch (e: CancellationException) {
             throw e
