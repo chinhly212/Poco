@@ -39,6 +39,9 @@ interface SourceVideoDao {
     @Query("SELECT COUNT(*) FROM source_videos WHERE source_account_id = :accountId AND external_video_id = :extId")
     suspend fun exists(accountId: String, extId: String): Int
 
+    @Query("SELECT * FROM source_videos WHERE source_account_id = :accountId AND external_video_id = :extId LIMIT 1")
+    suspend fun findByAccountAndExternalId(accountId: String, extId: String): SourceVideo?
+
     @Query("SELECT * FROM source_videos WHERE id = :id")
     suspend fun findById(id: String): SourceVideo?
 
