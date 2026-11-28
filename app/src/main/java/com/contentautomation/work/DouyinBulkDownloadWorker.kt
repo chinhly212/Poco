@@ -22,8 +22,7 @@ import com.contentautomation.ContentAutomationApp
 import com.contentautomation.MainActivity
 import com.contentautomation.data.db.entity.VideoStatus
 import com.contentautomation.video.MediaStoreSaver
-import com.yausername.youtubedl_android.YoutubeDL
-import com.yausername.youtubedl_android.YoutubeDLRequest
+import com.contentautomation.video.AiVideoServerClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -50,46 +49,20 @@ class DouyinBulkDownloadWorker(
 
         if (!app.awaitMediaEngines()) return@withContext Result.retry()
         setForeground(createForegroundInfo(videoId, "Đang chuẩn bị tải video Douyin…"))
-        val workDir = File(applicationContext.filesDir, "MuChi/DouyinArchive/$videoId").apply { mkdirs() }
+        val workDir = File(applicationContext.cacheDir, "MuChi/DouyinArchive/$videoId").apply { mkdirs() }
         val target = File(workDir, "douyin-original.mp4")
-        val outputTemplate = File(workDir, "douyin-source.%(ext)s").absolutePath
 
         try {
             app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.DOWNLOADING.name)
             target.delete()
-
-            val cookie = app.prefs.getSecret("platform_cookie_douyin").orEmpty()
-            val cookieFile = File.createTempFile("muchi-douyin-download-", ".cookies", applicationContext.cacheDir)
-            try {
-                val cookieLines = cookie.split(";").mapNotNull { part ->
-                    val pair = part.trim().split("=", limit = 2)
-                    if (pair.size != 2 || pair[0].isBlank()) null
-                    else ".douyin.com\tTRUE\t/\tTRUE\t0\t${pair[0].trim()}\t${pair[1].trim()}"
-                }
-                if (cookieLines.isNotEmpty()) {
-                    cookieFile.writeText("# Netscape HTTP Cookie File\n" + cookieLines.joinToString("\n"), Charsets.UTF_8)
-                }
-                YoutubeDL.getInstance().execute(
-                    YoutubeDLRequest(video.sourceUrl).apply {
-                        if (cookieLines.isNotEmpty()) addOption("--cookies", cookieFile.absolutePath)
-                        addOption("--no-playlist")
-                        addOption("--force-ipv4")
-                        addOption("--retries", "3")
-                        addOption("--socket-timeout", "30")
-                        addOption("--no-warnings")
-                        addOption("-o", outputTemplate)
-                        addOption("-f", "best")
-                    }
-                )
-            } finally {
-                cookieFile.delete()
+            setProgress(workDataOf("message" to "Đang yêu cầu máy chủ phân giải video Douyin…", "video_id" to video.id))
+            val downloadResult = AiVideoServerClient().downloadVideo(video.sourceUrl, target)
+            val downloaded = target.takeIf { it.isFile && it.length() > 0L }
+                ?: throw IllegalStateException("Máy chủ không trả file video hợp lệ.")
+            if (downloadResult.bytesWritten != downloaded.length()) {
+                throw IllegalStateException("Kích thước video tải về không khớp dữ liệu đã nhận.")
             }
-
-            val downloaded = if (target.exists() && target.length() > 0L) target else {
-                workDir.listFiles()
-                    ?.filter { it.isFile && it.name.startsWith("douyin-source.") && it.length() > 0L }
-                    ?.maxByOrNull { it.lastModified() }
-            } ?: throw IllegalStateException("Không tìm thấy tệp video sau khi tải.")
+            setProgress(workDataOf("message" to "Đã nhận ${(downloaded.length() / 1024L)} KB · đang lưu vào Movies…", "video_id" to video.id))
 
             val safeAccount = account.accountName
                 .replace(Regex("[^a-zA-Z0-9_-]"), "_")
@@ -98,6 +71,8 @@ class DouyinBulkDownloadWorker(
             val displayName = "Douyin_${safeAccount}_${video.externalVideoId.take(18)}.mp4"
             val savedUri = MediaStoreSaver(applicationContext)
                 .saveVideoToGallery(downloaded, displayName)
+            if (savedUri.toString().isBlank()) throw IllegalStateException("Android chưa xác nhận vị trí video đã lưu.")
+            downloaded.delete()
 
             DriveBackupWorker.enqueue(
                 applicationContext,
@@ -106,7 +81,7 @@ class DouyinBulkDownloadWorker(
                 "douyin_${video.id}_original"
             )
             app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.SAVED_TO_PHONE.name)
-            setProgress(workDataOf("message" to "Đã lưu video vào Movies", "video_id" to video.id))
+            setProgress(workDataOf("message" to "Đã lưu video vào Movies · ${downloadResult.bytesWritten} byte", "video_id" to video.id))
             Result.success(workDataOf("saved_uri" to savedUri.toString(), "display_name" to displayName))
         } catch (cancelled: CancellationException) {
             throw cancelled
