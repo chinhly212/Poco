@@ -64,6 +64,7 @@ fun SystemScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     var filter by remember { mutableStateOf(JobFilter.ALL) }
     val scanProgress by vm.scanProgress.collectAsStateWithLifecycle()
+    val douyinDownloads by vm.douyinDownloadProgress.collectAsStateWithLifecycle()
 
     val counts = remember(jobs) {
         JobFilter.entries.associateWith { f ->
@@ -140,6 +141,49 @@ fun SystemScreen(
                         },
                         modifier = Modifier.weight(1f)
                     )
+                }
+            }
+        }
+
+        if (douyinDownloads.isNotEmpty()) {
+            FlatCard {
+                Column(
+                    Modifier.fillMaxWidth().padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    GText(
+                        "Tải video Douyin · ${douyinDownloads.size} tác vụ đang hoạt động",
+                        14.sp,
+                        weight = FontWeight.SemiBold,
+                        color = Ink
+                    )
+                    douyinDownloads.forEach { download ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                GText(
+                                    download.videoId,
+                                    11.sp,
+                                    color = Ink,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                GText(
+                                    if (download.totalBytes > 0L) "${download.percent}%" else formatDownloadBytes(download.downloadedBytes),
+                                    11.sp,
+                                    weight = FontWeight.SemiBold,
+                                    color = Blue
+                                )
+                            }
+                            if (download.totalBytes > 0L) {
+                                LinearProgressIndicator(
+                                    progress = { download.percent / 100f },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else {
+                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            }
+                            GText(download.message, 10.sp, color = Muted)
+                        }
+                    }
                 }
             }
         }
@@ -368,4 +412,13 @@ private fun stageLabel(stage: PipelineStage): String = when (stage) {
     PipelineStage.EXPORT -> "Lưu vào điện thoại"
     PipelineStage.UPLOAD -> "Sao lưu (chưa bật)"
     PipelineStage.VERIFY -> "Kiểm tra tệp"
+}
+
+private fun formatDownloadBytes(value: Long): String {
+    if (value < 1024L) return "$value B"
+    val units = listOf("KB", "MB", "GB", "TB")
+    var amount = value.toDouble()
+    var index = -1
+    do { amount /= 1024.0; index++ } while (amount >= 1024.0 && index < units.lastIndex)
+    return String.format(java.util.Locale.getDefault(), "%.1f %s", amount, units[index])
 }
