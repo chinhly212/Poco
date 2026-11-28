@@ -16,7 +16,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
@@ -36,10 +39,16 @@ fun PlatformWebLoginDialog(
         "https://www.douyin.com/"
     }
     val cookieHosts = if (normalized == "KUAISHOU") {
-        listOf("https://www.kuaishou.com", "https://passport.kuaishou.com")
+        listOf("https://www.kuaishou.com", "https://kuaishou.com", "https://passport.kuaishou.com")
     } else {
-        listOf("https://www.douyin.com", "https://passport.douyin.com")
+        listOf(
+            "https://www.douyin.com/",
+            "https://douyin.com/",
+            "https://passport.douyin.com/",
+            "https://creator.douyin.com/"
+        )
     }
+    var sessionMessage by remember(platform) { mutableStateOf<String?>(null) }
     val webView = remember(platform) {
         WebView(context).apply {
             settings.javaScriptEnabled = true
@@ -54,7 +63,7 @@ fun PlatformWebLoginDialog(
         }
     }
     DisposableEffect(webView) {
-        onDispose { webView.stopLoading() }
+        onDispose { webView.stopLoading(); webView.destroy() }
     }
 
     AlertDialog(
@@ -67,22 +76,44 @@ fun PlatformWebLoginDialog(
                     factory = { webView },
                     modifier = Modifier.fillMaxWidth().height(520.dp)
                 )
+                sessionMessage?.let {
+                    Text(it, color = androidx.compose.ui.graphics.Color(0xFFB45309))
+                }
             }
         },
         confirmButton = {
             Button(onClick = {
-                CookieManager.getInstance().flush()
-                val cookieParts = cookieHosts.flatMap { host ->
-                    CookieManager.getInstance().getCookie(host)
-                        ?.split(";")
-                        ?.map { it.trim() }
-                        .orEmpty()
-                }.filter { it.contains("=") }
-                // Cookie names vary by Kuaishou login flow and region. Do not
-                // reject a valid session because it lacks a hard-coded cookie name.
-                val cookies = cookieParts
-                    .distinctBy { it.substringBefore("=") }
-                    .joinToString("; ")
+                val manager = CookieManager.getInstance()
+                manager.flush()
+                val cookieMap = linkedMapOf<String, String>()
+                cookieHosts.forEach { host ->
+                    manager.getCookie(host).orEmpty()
+                        .split(";")
+                        .map { it.trim() }
+                        .filter { it.contains("=") }
+                        .forEach { part ->
+                            val name = part.substringBefore("=").trim()
+                            val value = part.substringAfter("=", "").trim()
+                            if (name.isBlank() || value.isBlank()) return@forEach
+                            val existing = cookieMap[name]
+                            // Prefer canonical UIFID over a temporary or empty duplicate.
+                            if (existing == null || name.equals("UIFID", true)) {
+                                cookieMap[name] = value
+                            }
+                        }
+                }
+                val hasUifid = cookieMap.keys.any {
+                    it.equals("UIFID", true) || it.equals("UIFID_TEMP", true)
+                }
+                if (normalized != "KUAISHOU" && !hasUifid) {
+                    sessionMessage = "Chưa lấy được UIFID từ phiên Douyin. Hãy tải lại trang, chờ đăng nhập hoàn tất rồi bấm lưu phiên lại. Không thể quét kênh nếu thiếu cookie này."
+                    return@Button
+                }
+                val cookies = cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" }
+                if (cookies.isBlank()) {
+                    sessionMessage = "Không đọc được cookie. Hãy đăng nhập lại rồi thử lưu phiên."
+                    return@Button
+                }
                 onSaveSession(cookies)
             }) {
                 Text("Đã đăng nhập – lưu phiên")
