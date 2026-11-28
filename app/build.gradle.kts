@@ -6,6 +6,12 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+configurations.configureEach {
+    // Sherpa Android AAR already contains the JVM wrapper classes.
+    // Exclude the separately published JVM jar from every dependency path.
+    exclude(group = "com.github.k2-fsa", module = "sherpa-onnx-jvm")
+}
+
 android {
     namespace = "com.contentautomation"
     compileSdk = 34
@@ -123,9 +129,7 @@ dependencies {
 
     // Android AAR includes the native runtime. Exclude the duplicate JVM jar
     // pulled transitively by the published sherpa artifact.
-    implementation("com.github.k2-fsa:sherpa-onnx:v1.13.5") {
-        exclude(group = "com.github.k2-fsa", module = "sherpa-onnx-jvm")
-    }
+    implementation("com.github.k2-fsa:sherpa-onnx:v1.13.5")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
