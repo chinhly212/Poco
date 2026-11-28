@@ -733,10 +733,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _douyinLibrary.value = DouyinChannelLibraryUiState(
                 accountId = accountId,
                 loading = true,
-                message = "Đang quét Douyin trực tiếp trên điện thoại…"
+                message = "Đang kết nối Douyin và chuẩn bị lấy trang video đầu tiên…"
             )
             try {
-                val account = application.database.sourceAccountDao().findById(accountId)
+                val accountDao = application.database.sourceAccountDao()
+                val account = accountDao.findById(accountId)
                     ?: throw IllegalArgumentException("Không tìm thấy kênh Douyin.")
                 require(account.platform.equals("DOUYIN", ignoreCase = true)) {
                     "Chức năng này chỉ dành cho kênh Douyin."
@@ -746,52 +747,71 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     ?: throw IllegalStateException("Phiên Douyin chưa kết nối. Hãy đăng nhập Douyin trong Cài đặt.")
 
                 val adapter = com.contentautomation.domain.source.DouyinAdapter(application.filesDir)
-                val videos = adapter.getLatestVideos(account.accountIdentifier, cookie).distinctBy { it.id }
-                val dao = application.database.sourceVideoDao()
-                val visibleVideos = mutableListOf<SourceVideoItem>()
-                var savedToDatabase = 0
+                // Refresh creator identity from the real author object before displaying the archive.
+                val profile = runCatching { adapter.verifyProfile(account.accountIdentifier, cookie) }.getOrNull()
+                val accountName = profile?.displayName?.takeIf { it.isNotBlank() } ?: account.accountName
+                if (profile != null) {
+                    accountDao.update(account.copy(
+                        accountName = accountName,
+                        profileDescription = profile.description,
+                        profileAvatarUrl = profile.avatarUrl,
+                        profileVideoCount = profile.videoCount,
+                        profileFollowerCount = profile.followerCount,
+                        profileFollowingCount = profile.followingCount,
+                        profileVerifiedAt = System.currentTimeMillis()
+                    ))
+                }
 
-                videos.chunked(20).forEachIndexed { _, batch ->
-                    for (item in batch) {
-                        val existing = dao.findByAccountAndExternalId(account.id, item.id)
-                        if (existing == null) {
-                            val inserted = dao.insert(
-                                SourceVideo(
-                                    sourceAccountId = account.id,
-                                    externalVideoId = item.id,
-                                    sourceUrl = item.url,
-                                    title = item.title,
-                                    descriptionZh = item.description,
-                                    publishedAt = item.publishedAt,
-                                    status = VideoStatus.NEW.name
+                val dao = application.database.sourceVideoDao()
+                val visibleVideos = linkedMapOf<String, SourceVideoItem>()
+                var savedToDatabase = 0
+                val videos = adapter.getAllVideos(account.accountIdentifier, cookie) { pageVideos, totalSoFar, hasMore ->
+                    for (item in pageVideos) {
+                        if (visibleVideos.putIfAbsent(item.id, item) == null) {
+                            val existing = dao.findByAccountAndExternalId(account.id, item.id)
+                            if (existing == null) {
+                                val inserted = dao.insert(
+                                    SourceVideo(
+                                        sourceAccountId = account.id,
+                                        externalVideoId = item.id,
+                                        sourceUrl = item.url,
+                                        title = item.title,
+                                        descriptionZh = item.description,
+                                        publishedAt = item.publishedAt,
+                                        status = VideoStatus.NEW.name
+                                    )
                                 )
-                            )
-                            if (inserted != -1L) savedToDatabase++
+                                if (inserted != -1L) savedToDatabase++
+                            }
                         }
-                        visibleVideos += item
                     }
+                    val currentVideos = visibleVideos.values.toList()
                     _douyinLibrary.value = DouyinChannelLibraryUiState(
                         accountId = account.id,
-                        accountName = account.accountName,
-                        loading = true,
-                        videos = visibleVideos.toList(),
-                        message = "Đã ghi ${visibleVideos.size}/${videos.size} video vào bộ nhớ điện thoại…"
+                        accountName = accountName,
+                        loading = hasMore,
+                        videos = currentVideos,
+                        message = if (hasMore) {
+                            "Đã lấy được $totalSoFar video · đang quét trang tiếp theo…"
+                        } else {
+                            "Đã lấy được $totalSoFar video · đang hoàn tất danh sách…"
+                        }
                     )
                 }
 
-                application.database.sourceAccountDao().updateLastScan(account.id, System.currentTimeMillis())
+                accountDao.updateLastScan(account.id, System.currentTimeMillis())
                 _douyinLibrary.value = DouyinChannelLibraryUiState(
                     accountId = account.id,
-                    accountName = account.accountName,
+                    accountName = accountName,
                     loading = false,
-                    videos = visibleVideos.toList(),
-                    message = "Đã quét ${videos.size} video · lưu mới ${savedToDatabase} video vào cơ sở dữ liệu trên máy. Hãy chọn video muốn tải."
+                    videos = videos,
+                    message = "Hoàn tất: ${videos.size} video · lưu mới $savedToDatabase video. Hãy chọn video muốn tải."
                 )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _douyinLibrary.value = DouyinChannelLibraryUiState(
-                    accountId = accountId,
+                val current = _douyinLibrary.value
+                _douyinLibrary.value = current.copy(
                     loading = false,
                     message = e.message ?: "Không thể quét kênh Douyin."
                 )
