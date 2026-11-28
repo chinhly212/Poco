@@ -241,6 +241,7 @@ fun AppNavHost(vm: MainViewModel) {
         vm.phoneStorage.collectAsStateWithLifecycle()
 
     val driveState by vm.driveState.collectAsStateWithLifecycle()
+    val douyinLibrary by vm.douyinLibrary.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.refreshDrive() }
 
     val backStackEntry by
@@ -476,7 +477,11 @@ fun AppNavHost(vm: MainViewModel) {
                         onLoginDouyin = { platformLogin = "DOUYIN" },
                         onLoginKuaishou = { platformLogin = "KUAISHOU" },
                         onLogoutDouyin = { vm.clearPlatformSession("DOUYIN"); sessionRefresh++ },
-                        onLogoutKuaishou = { vm.clearPlatformSession("KUAISHOU"); sessionRefresh++ }
+                        onLogoutKuaishou = { vm.clearPlatformSession("KUAISHOU"); sessionRefresh++ },
+                        douyinLibrary = douyinLibrary,
+                        onScanDouyinChannel = { vm.scanDouyinChannel(it) },
+                        onDownloadSelectedDouyinVideos = { vm.downloadSelectedDouyinVideos(it) },
+                        onClearDouyinLibrary = { vm.clearDouyinLibrary() }
                     )
                 }
 
