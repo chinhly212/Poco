@@ -4,6 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Inbox
@@ -142,19 +146,35 @@ fun SystemScreen(
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             GText("Lọc công việc", 14.sp, weight = FontWeight.SemiBold, color = Ink)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                JobFilter.entries.chunked(3).forEach { rowFilters ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        rowFilters.forEach { item ->
-                            FilterTile(
-                                label = item.label,
-                                count = counts[item] ?: 0,
-                                selected = filter == item,
-                                modifier = Modifier.weight(1f),
-                                onClick = { filter = item }
-                            )
-                        }
-                    }
+            val selectedIndex = JobFilter.entries.indexOf(filter).coerceAtLeast(0)
+            val filterProgress by animateFloatAsState(
+                targetValue = selectedIndex / (JobFilter.entries.size - 1).toFloat(),
+                animationSpec = tween(durationMillis = 300),
+                label = "job_filter_progress"
+            )
+            Box(
+                Modifier.fillMaxWidth().height(5.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(Color(0xFFE4E4E7))
+            ) {
+                Box(
+                    Modifier.fillMaxWidth(filterProgress.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .background(filterColor(filter))
+                )
+            }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                JobFilter.entries.forEach { item ->
+                    FilterRailItem(
+                        label = item.label,
+                        count = counts[item] ?: 0,
+                        selected = filter == item,
+                        color = filterColor(item),
+                        onClick = { filter = item }
+                    )
                 }
             }
         }
@@ -245,32 +265,53 @@ private fun FlatActionButton(
     }
 }
 
+private fun filterColor(filter: JobFilter): Color = when (filter) {
+    JobFilter.ALL -> Ink
+    JobFilter.RUNNING -> Blue
+    JobFilter.PENDING -> Muted
+    JobFilter.DONE -> Green
+    JobFilter.FAILED -> Red
+    JobFilter.PAUSED -> Amber
+}
+
 @Composable
-private fun FilterTile(
+private fun FilterRailItem(
     label: String,
     count: Int,
     selected: Boolean,
-    modifier: Modifier,
+    color: Color,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(9.dp)
     Column(
-        modifier.aspectRatio(1.12f)
-            .clip(shape)
-            .background(Color.White)
-            .border(
-                if (selected) 1.5.dp else 1.dp,
-                if (selected) Ink else BorderColor,
-                shape
-            )
+        Modifier.widthIn(min = 62.dp)
+            .clip(RoundedCornerShape(7.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 5.dp, vertical = 9.dp),
+            .padding(horizontal = 3.dp, vertical = 3.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
-        GText(count.toString(), 18.sp, weight = FontWeight.Bold, color = Ink)
-        Spacer(Modifier.height(3.dp))
-        GText(label, 11.sp, color = Muted, align = TextAlign.Center)
+        GText(
+            count.toString(),
+            14.sp,
+            weight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) color else Muted
+        )
+        GText(
+            label,
+            9.sp,
+            weight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) color else Muted,
+            maxLines = 1
+        )
+        if (selected) {
+            Box(
+                Modifier.padding(top = 2.dp).width(22.dp).height(2.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(color)
+            )
+        } else {
+            Spacer(Modifier.height(4.dp))
+        }
     }
 }
 
