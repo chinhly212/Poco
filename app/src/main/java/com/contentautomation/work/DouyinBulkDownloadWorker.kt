@@ -22,7 +22,8 @@ import com.contentautomation.ContentAutomationApp
 import com.contentautomation.MainActivity
 import com.contentautomation.data.db.entity.VideoStatus
 import com.contentautomation.video.MediaStoreSaver
-import com.contentautomation.video.AiVideoServerClient
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -84,38 +85,53 @@ class DouyinBulkDownloadWorker(
         try {
             app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.DOWNLOADING.name)
             target.delete()
-            setForeground(createForegroundInfo(videoId, "Đang yêu cầu máy chủ phân giải video Douyin…"))
-            setProgress(workDataOf("message" to "Đang phân giải video Douyin…", "video_id" to video.id, "external_video_id" to video.externalVideoId))
-            val downloadResult = AiVideoServerClient().downloadVideo(video.sourceUrl, target) { received, total ->
-                val percent = if (total != null && total > 0L) {
-                    ((received * 100L) / total).toInt().coerceIn(0, 99)
-                } else 0
-                val receivedLabel = formatBytes(received)
-                val totalLabel = total?.takeIf { it > 0L }?.let(::formatBytes)
-                val message = if (totalLabel != null) {
-                    "Đang tải video · $receivedLabel / $totalLabel"
-                } else {
-                    "Đang tải video · $receivedLabel"
+            setForeground(createForegroundInfo(videoId, "Đang tải trực tiếp từ Douyin về điện thoại…"))
+            setProgress(workDataOf("message" to "Đang phân giải video trên điện thoại…", "video_id" to video.id, "external_video_id" to video.externalVideoId))
+            val cookieHeader = app.prefs.getSecret("platform_cookie_douyin").orEmpty()
+            if (cookieHeader.isBlank()) throw IllegalStateException("Phiên Douyin đã hết hạn. Hãy đăng nhập lại trong Cài đặt.")
+            val cookieFile = File(applicationContext.cacheDir, "douyin-${videoId}.cookies")
+            try {
+                val cookieLines = cookieHeader.split(";").mapNotNull { part ->
+                    val pair = part.trim().split("=", limit = 2)
+                    if (pair.size != 2 || pair[0].isBlank()) null
+                    else ".douyin.com\\tTRUE\\t/\\tTRUE\\t0\\t${pair[0].trim()}\\t${pair[1].trim()}"
                 }
-                setProgress(
-                    workDataOf(
+                if (cookieLines.isEmpty()) throw IllegalStateException("Phiên Douyin không có cookie hợp lệ.")
+                cookieFile.writeText("# Netscape HTTP Cookie File\\n" + cookieLines.joinToString("\\n"), Charsets.UTF_8)
+                val request = YoutubeDLRequest(video.sourceUrl).apply {
+                    addOption("--format", "best[ext=mp4]/best")
+                    addOption("--merge-output-format", "mp4")
+                    addOption("--output", target.absolutePath)
+                    addOption("--no-playlist")
+                    addOption("--force-ipv4")
+                    addOption("--socket-timeout", "30")
+                    addOption("--retries", "3")
+                    addOption("--extractor-retries", "3")
+                    addOption("--cookies", cookieFile.absolutePath)
+                    addOption("--newline")
+                }
+                YoutubeDL.getInstance().execute(request) { progress, etaInSeconds ->
+                    val percent = progress.toInt().coerceIn(0, 99)
+                    val message = if (etaInSeconds > 0L) {
+                        "Đang tải trực tiếp · $percent% · còn khoảng ${etaInSeconds}s"
+                    } else {
+                        "Đang tải trực tiếp · $percent%"
+                    }
+                    setProgressAsync(workDataOf(
                         "message" to message,
                         "video_id" to video.id,
                         "external_video_id" to video.externalVideoId,
-                        "bytes_downloaded" to received,
-                        "total_bytes" to (total ?: -1L),
                         "progress_percent" to percent
-                    )
-                )
-                setForeground(createForegroundInfo(videoId, message))
+                    ))
+                    setForegroundAsync(createForegroundInfo(videoId, message))
+                }
+            } finally {
+                cookieFile.delete()
             }
             val downloaded = target.takeIf { it.isFile && it.length() > 0L }
-                ?: throw IllegalStateException("Máy chủ không trả file video hợp lệ.")
-            if (downloadResult.bytesWritten != downloaded.length()) {
-                throw IllegalStateException("Kích thước video tải về không khớp dữ liệu đã nhận.")
-            }
-            setForeground(createForegroundInfo(videoId, "Đã nhận video · đang lưu vào Movies…"))
-            setProgress(workDataOf("message" to "Đã nhận video · đang lưu vào Movies…", "video_id" to video.id, "external_video_id" to video.externalVideoId))
+                ?: throw IllegalStateException("Douyin không trả file video hợp lệ về điện thoại.")
+            setForeground(createForegroundInfo(videoId, "Đã tải trực tiếp · đang lưu vào Movies…"))
+            setProgress(workDataOf("message" to "Đã tải trực tiếp · đang lưu vào Movies…", "video_id" to video.id, "external_video_id" to video.externalVideoId))
 
             val safeAccount = account.accountName
                 .replace(Regex("[^a-zA-Z0-9_-]"), "_")
