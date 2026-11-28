@@ -278,7 +278,10 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
             // Douyin may serve a profile shell without serialized nickname data.
             // In that case, ask the signed profile-feed scanner for the author object
             // attached to the creator's first public video.
-            val feedProfile = if (stringField("nickname", "nick_name", "user_name", "display_name").isNullOrBlank() && pageTitle.isNullOrBlank()) {
+            // Prefer the author object returned by Douyin's actual creator-feed
+            // API. HTML may contain recommendations or unrelated creator cards,
+            // so a global nickname regex must never override the channel owner.
+            val feedProfile = runCatching {
                 val scanPayload = JSONObject().apply {
                     put("sec_uid", secUid)
                     put("cookie", cookieHeader)
@@ -298,35 +301,36 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
                         val detail = runCatching { JSONObject(body).optString("detail") }.getOrNull()
                         throw SourceUnavailableException(
                             detail?.takeIf { it.isNotBlank() }
-                                ?: "Máy chủ chưa lấy được thông tin tác giả Douyin (HTTP ${response.code})."
+                                ?: "Không lấy được thông tin chủ kênh Douyin (HTTP ${response.code})."
                         )
                     }
                     body
                 }
-                val scanJson = runCatching { JSONObject(scanText) }.getOrNull()
-                    ?: throw SourceUnavailableException("Máy chủ trả dữ liệu hồ sơ Douyin không hợp lệ.")
+                val scanJson = JSONObject(scanText)
                 scanJson.optJSONObject("profile")
-            } else null
+            }.getOrNull()
 
-            val nickname = stringField("nickname", "nick_name", "user_name", "display_name")
+            val nickname = feedProfile?.optString("nickname")
+                ?.takeIf { it.isNotBlank() && it != "null" }
+                ?: stringField("nickname", "nick_name", "user_name", "display_name")
                 ?: pageTitle
-                ?: feedProfile?.optString("nickname")?.takeIf { it.isNotBlank() && it != "null" }
                 ?: feedProfile?.optString("unique_id")?.takeIf { it.isNotBlank() && it != "null" }
-                ?: throw SourceUnavailableException("Đã mở được hồ sơ nhưng cả trang hồ sơ và danh sách video đều không cung cấp tên tác giả.")
-            val avatar = stringField("avatar_larger", "avatar_url", "avatar_thumb", "avatar")
-                ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
-                ?: feedProfile?.optString("avatar_url")?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                ?: throw SourceUnavailableException("Douyin không trả tên chủ kênh thật. Hãy thử đăng nhập lại rồi xác minh hồ sơ.")
+            val avatar = feedProfile?.optString("avatar_url")?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                ?: stringField("avatar_larger", "avatar_url", "avatar_thumb", "avatar")
+                    ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
             SourceProfileInfo(
                 displayName = nickname,
                 identifier = secUid,
                 description = stringField("signature", "desc", "description")
                     ?: feedProfile?.optString("signature")?.takeIf { it.isNotBlank() && it != "null" },
                 avatarUrl = avatar,
-                videoCount = numberField("aweme_count", "video_count")?.toInt()
-                    ?: feedProfile?.optLong("aweme_count")?.takeIf { it > 0L }?.toInt(),
-                followerCount = numberField("follower_count", "followerCount", "mplatform_followers_count")
-                    ?: feedProfile?.optLong("follower_count")?.takeIf { it > 0L },
-                followingCount = numberField("following_count", "followingCount")
+                videoCount = feedProfile?.optLong("aweme_count")?.takeIf { it > 0L }?.toInt()
+                    ?: numberField("aweme_count", "video_count")?.toInt(),
+                followerCount = feedProfile?.optLong("follower_count")?.takeIf { it > 0L }
+                    ?: numberField("follower_count", "followerCount", "mplatform_followers_count"),
+                followingCount = feedProfile?.optLong("following_count")?.takeIf { it > 0L }
+                    ?: numberField("following_count", "followingCount")
                     ?: feedProfile?.optLong("following_count")?.takeIf { it > 0L }
             )
         } catch (e: CancellationException) {
