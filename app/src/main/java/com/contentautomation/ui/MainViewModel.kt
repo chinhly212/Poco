@@ -683,7 +683,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _douyinLibrary.value = DouyinChannelLibraryUiState(
                 accountId = accountId,
                 loading = true,
-                message = "Đang lấy toàn bộ video của kênh Douyin…"
+                message = "Đang quét Douyin trực tiếp trên điện thoại…"
             )
             try {
                 val account = application.database.sourceAccountDao().findById(accountId)
@@ -694,14 +694,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val cookie = application.prefs.getSecret("platform_cookie_douyin")
                     ?.takeIf { it.isNotBlank() }
                     ?: throw IllegalStateException("Phiên Douyin chưa kết nối. Hãy đăng nhập Douyin trong Cài đặt.")
+
                 val adapter = com.contentautomation.domain.source.DouyinAdapter(application.filesDir)
                 val videos = adapter.getLatestVideos(account.accountIdentifier, cookie).distinctBy { it.id }
+                val dao = application.database.sourceVideoDao()
+                val visibleVideos = mutableListOf<SourceVideoItem>()
+                var savedToDatabase = 0
+
+                videos.chunked(20).forEachIndexed { _, batch ->
+                    for (item in batch) {
+                        val existing = dao.findByAccountAndExternalId(account.id, item.id)
+                        if (existing == null) {
+                            val inserted = dao.insert(
+                                SourceVideo(
+                                    sourceAccountId = account.id,
+                                    externalVideoId = item.id,
+                                    sourceUrl = item.url,
+                                    title = item.title,
+                                    descriptionZh = item.description,
+                                    publishedAt = item.publishedAt,
+                                    status = VideoStatus.NEW.name
+                                )
+                            )
+                            if (inserted != -1L) savedToDatabase++
+                        }
+                        visibleVideos += item
+                    }
+                    _douyinLibrary.value = DouyinChannelLibraryUiState(
+                        accountId = account.id,
+                        accountName = account.accountName,
+                        loading = true,
+                        videos = visibleVideos.toList(),
+                        message = "Đã ghi ${visibleVideos.size}/${videos.size} video vào bộ nhớ điện thoại…"
+                    )
+                }
+
+                application.database.sourceAccountDao().updateLastScan(account.id, System.currentTimeMillis())
                 _douyinLibrary.value = DouyinChannelLibraryUiState(
                     accountId = account.id,
                     accountName = account.accountName,
                     loading = false,
-                    videos = videos,
-                    message = if (videos.isEmpty()) "Không tìm thấy video nào hoặc Douyin không trả dữ liệu." else "Đã quét ${videos.size} video. Hãy chọn video muốn tải."
+                    videos = visibleVideos.toList(),
+                    message = "Đã quét ${videos.size} video · lưu mới ${savedToDatabase} video vào cơ sở dữ liệu trên máy. Hãy chọn video muốn tải."
                 )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
