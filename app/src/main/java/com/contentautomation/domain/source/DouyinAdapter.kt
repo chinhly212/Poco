@@ -22,6 +22,7 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
 
     private companion object {
         const val MAX_VIDEOS = 600
+        const val PAGE_SIZE = 20
         const val SCAN_API_URL = "https://ai-video-server-59tj.onrender.com/douyin/profile/videos"
         val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -56,18 +57,27 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
     override suspend fun getLatestVideos(
         accountIdentifier: String,
         cookieHeader: String?
+    ): List<SourceVideoItem> = getAllVideos(accountIdentifier, cookieHeader) { _, _, _ -> }
+
+    /**
+     * Fetches one Douyin creator-feed page at a time. Each page is delivered to
+     * the caller immediately, so the UI can render thumbnails and progress
+     * while the remaining pages are still being scanned.
+     */
+    suspend fun getAllVideos(
+        accountIdentifier: String,
+        cookieHeader: String?,
+        onPage: suspend (videos: List<SourceVideoItem>, totalSoFar: Int, hasMore: Boolean) -> Unit
     ): List<SourceVideoItem> = withContext(Dispatchers.IO) {
         val rawIdentifier = accountIdentifier.trim()
         val parsedIdentifier = runCatching { android.net.Uri.parse(rawIdentifier) }.getOrNull()
         val secUid = listOf("sec_uid", "sec_user_id", "secUid")
             .firstNotNullOfOrNull { key -> parsedIdentifier?.getQueryParameter(key) }
             ?.let { android.net.Uri.decode(it) }
-            ?: parsedIdentifier?.pathSegments
-                ?.let { segments ->
-                    val userIndex = segments.indexOfFirst { it.equals("user", ignoreCase = true) }
-                    if (userIndex >= 0) segments.getOrNull(userIndex + 1) else null
-                }
-                ?.let { android.net.Uri.decode(it) }
+            ?: parsedIdentifier?.pathSegments?.let { segments ->
+                val userIndex = segments.indexOfFirst { it.equals("user", ignoreCase = true) }
+                if (userIndex >= 0) segments.getOrNull(userIndex + 1) else null
+            }?.let { android.net.Uri.decode(it) }
             ?: rawIdentifier.substringBefore('?').substringBefore('#').trim('/')
         if (!secUid.matches(Regex("""[A-Za-z0-9._~-]{12,256}"""))) {
             throw SourceUnavailableException("Mã sec_uid Douyin không hợp lệ. Hãy kết nối lại bằng link hồ sơ Douyin hoặc sec_uid đầy đủ.")
@@ -77,61 +87,70 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
             throw SourceUnavailableException("Phiên đăng nhập Douyin chưa có cookie. Hãy đăng nhập lại trong Cài đặt.")
         }
 
-        val payload = JSONObject().apply {
-            put("sec_uid", secUid)
-            put("cookie", cookie)
-            put("since_timestamp", 0)
-            put("max_items", MAX_VIDEOS)
-            put("cursor", "0")
-        }
-        val request = Request.Builder()
-            .url(SCAN_API_URL)
-            .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
-            .header("Accept", "application/json")
-            .header("Content-Type", "application/json")
-            .build()
-
-        val responseText = scanClient.newCall(request).execute().use { response ->
-            val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                val detail = runCatching { JSONObject(body).optString("detail") }.getOrNull()
+        val videos = linkedMapOf<String, SourceVideoItem>()
+        var cursor = "0"
+        var hasMore = true
+        var pageNumber = 0
+        while (hasMore && videos.size < MAX_VIDEOS && pageNumber < 40) {
+            val payload = JSONObject().apply {
+                put("sec_uid", secUid)
+                put("cookie", cookie)
+                put("since_timestamp", 0)
+                put("max_items", PAGE_SIZE)
+                put("cursor", cursor)
+            }
+            val request = Request.Builder()
+                .url(SCAN_API_URL)
+                .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .build()
+            val responseText = scanClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    val detail = runCatching { JSONObject(body).optString("detail") }.getOrNull()
+                    throw SourceUnavailableException(
+                        detail?.takeIf { it.isNotBlank() }
+                            ?: "Máy chủ chưa quét được danh sách Douyin (HTTP ${response.code})."
+                    )
+                }
+                body
+            }
+            val result = runCatching { JSONObject(responseText) }.getOrElse {
+                throw SourceUnavailableException("Máy chủ quét Douyin trả về dữ liệu không hợp lệ.")
+            }
+            if (result.optString("status") != "success") {
                 throw SourceUnavailableException(
-                    detail?.takeIf { it.isNotBlank() }
-                        ?: "Máy chủ chưa quét được danh sách Douyin (HTTP ${response.code})."
+                    result.optString("message").ifBlank { "Máy chủ không lấy được danh sách video Douyin." }
                 )
             }
-            body
-        }
-        val result = runCatching { JSONObject(responseText) }.getOrElse {
-            throw SourceUnavailableException("Máy chủ quét Douyin trả về dữ liệu không hợp lệ.")
-        }
-        if (result.optString("status") != "success") {
-            throw SourceUnavailableException(
-                result.optString("message").ifBlank { "Máy chủ không lấy được danh sách video Douyin." }
-            )
-        }
-        val entries = result.optJSONArray("videos")
-            ?: throw SourceUnavailableException("Máy chủ không trả danh sách video Douyin.")
-        val videos = linkedMapOf<String, SourceVideoItem>()
-        for (index in 0 until entries.length()) {
-            val item = entries.optJSONObject(index) ?: continue
-            val id = item.optString("id").takeIf { it.isNotBlank() && it != "null" } ?: continue
-            val url = item.optString("url").ifBlank { videoUrl(id) }
-            val title = item.optString("title").takeIf { it.isNotBlank() && it != "null" }
-            val description = item.optString("description").takeIf { it.isNotBlank() && it != "null" }
-            val publishedAt = item.optLong("published_at", 0L).takeIf { it > 0L }
-            val thumbnailUrl = listOf("thumbnail_url", "cover_url", "cover", "thumbnail")
-                .firstNotNullOfOrNull { key ->
-                    item.optString(key).takeIf { it.startsWith("https://") || it.startsWith("http://") }
-                }
-            videos.putIfAbsent(id, SourceVideoItem(
-                id = id,
-                url = url,
-                title = title,
-                description = description,
-                publishedAt = publishedAt,
-                thumbnailUrl = thumbnailUrl
-            ))
+            val entries = result.optJSONArray("videos")
+                ?: throw SourceUnavailableException("Máy chủ không trả danh sách video Douyin.")
+            for (index in 0 until entries.length()) {
+                val item = entries.optJSONObject(index) ?: continue
+                val id = item.optString("id").takeIf { it.isNotBlank() && it != "null" } ?: continue
+                val url = item.optString("url").ifBlank { videoUrl(id) }
+                val title = item.optString("title").takeIf { it.isNotBlank() && it != "null" }
+                val description = item.optString("description").takeIf { it.isNotBlank() && it != "null" }
+                val publishedAt = item.optLong("published_at", 0L).takeIf { it > 0L }
+                val thumbnailUrl = listOf("thumbnail_url", "cover_url", "cover", "thumbnail")
+                    .firstNotNullOfOrNull { key ->
+                        item.optString(key).takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                    }
+                videos.putIfAbsent(id, SourceVideoItem(
+                    id = id,
+                    url = url,
+                    title = title,
+                    description = description,
+                    publishedAt = publishedAt,
+                    thumbnailUrl = thumbnailUrl
+                ))
+            }
+            pageNumber++
+            val nextCursor = result.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
+            hasMore = result.optBoolean("has_more") && !nextCursor.isNullOrBlank() && nextCursor != cursor
+            onPage(videos.values.toList(), videos.size, hasMore)
+            cursor = nextCursor ?: break
         }
         if (videos.isEmpty()) {
             throw SourceUnavailableException("Douyin không có video công khai hoặc máy chủ chưa đọc được danh sách.")
