@@ -45,9 +45,10 @@ class AiVideoServerClient(
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(180, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .callTimeout(240, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.MINUTES)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .callTimeout(20, TimeUnit.MINUTES)
+        .retryOnConnectionFailure(true)
         .followRedirects(true)
         .build()
 
