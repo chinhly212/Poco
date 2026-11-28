@@ -1,16 +1,25 @@
 package com.contentautomation.work
 
 import android.content.Context
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
+import androidx.core.app.NotificationCompat
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.contentautomation.ContentAutomationApp
+import com.contentautomation.MainActivity
 import com.contentautomation.data.db.entity.VideoStatus
 import com.contentautomation.video.MediaStoreSaver
 import com.yausername.youtubedl_android.YoutubeDL
@@ -39,6 +48,8 @@ class DouyinBulkDownloadWorker(
         val account = app.database.sourceAccountDao().findById(video.sourceAccountId)
             ?: return@withContext Result.failure()
 
+        if (!app.awaitMediaEngines()) return@withContext Result.retry()
+        setForeground(createForegroundInfo(videoId, "Đang chuẩn bị tải video Douyin…"))
         val workDir = File(applicationContext.filesDir, "MuChi/DouyinArchive/$videoId").apply { mkdirs() }
         val target = File(workDir, "douyin-original.mp4")
         val outputTemplate = File(workDir, "douyin-source.%(ext)s").absolutePath
@@ -110,8 +121,41 @@ class DouyinBulkDownloadWorker(
         }
     }
 
+    private fun createForegroundInfo(videoId: String, message: String): ForegroundInfo {
+        val channelId = "muchi_douyin_downloads"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = applicationContext.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(
+                NotificationChannel(channelId, "Tải video Douyin", NotificationManager.IMPORTANCE_LOW).apply {
+                    setShowBadge(false)
+                }
+            )
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            applicationContext,
+            0,
+            Intent(applicationContext, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val notification = NotificationCompat.Builder(applicationContext, channelId)
+            .setContentTitle("MuChi · Tải Douyin")
+            .setContentText(message)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        val notificationId = 0x200 + Math.floorMod(videoId.hashCode(), 100000)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            ForegroundInfo(notificationId, notification)
+        }
+    }
+
     companion object {
         private const val KEY_VIDEO_ID = "video_id"
+        private const val DOWNLOAD_LANES = 3
 
         fun enqueue(context: Context, videoId: String) {
             val request = OneTimeWorkRequestBuilder<DouyinBulkDownloadWorker>()
@@ -124,9 +168,10 @@ class DouyinBulkDownloadWorker(
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .addTag("muchi-douyin-archive-download")
                 .build()
+            val lane = Math.floorMod(videoId.hashCode(), DOWNLOAD_LANES)
             WorkManager.getInstance(context).enqueueUniqueWork(
-                "douyin-archive-download-$videoId",
-                ExistingWorkPolicy.KEEP,
+                "muchi-douyin-download-lane-$lane",
+                ExistingWorkPolicy.APPEND_OR_REPLACE,
                 request
             )
         }
