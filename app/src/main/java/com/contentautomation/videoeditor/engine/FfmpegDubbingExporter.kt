@@ -10,9 +10,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Muxes generated TTS clips into an MP4 while keeping the source video stream.
- * The rendered audio track contains the dubbed voice; source audio is not mixed
- * in this first pass.
+ * Keeps the source video, mixes its original audio quietly with generated
+ * voice clips, and places each voice clip at its subtitle cue start time.
+ * Videos without an audio stream are exported with the generated voice only.
  */
 class FfmpegDubbingExporter(private val context: Context) {
 
@@ -27,8 +27,9 @@ class FfmpegDubbingExporter(private val context: Context) {
 
         val workDir = File(context.cacheDir, "muchi-export").apply { mkdirs() }
         check(workDir.isDirectory) { "Không tạo được thư mục xuất video." }
-        val inputVideo = File(workDir, "source-${System.currentTimeMillis()}.mp4")
-        val outputVideo = File(workDir, "dubbed-${System.currentTimeMillis()}.mp4")
+        val stamp = System.currentTimeMillis()
+        val inputVideo = File(workDir, "source-$stamp.mp4")
+        val outputVideo = File(workDir, "dubbed-$stamp.mp4")
 
         try {
             context.contentResolver.openInputStream(videoUri)?.use { input ->
@@ -43,34 +44,55 @@ class FfmpegDubbingExporter(private val context: Context) {
                 source
             }
 
-            val args = mutableListOf<String>()
-            args += listOf("-y", "-i", inputVideo.absolutePath)
-            audioFiles.forEach { args += listOf("-i", it.absolutePath) }
+            val baseArgs = mutableListOf<String>()
+            baseArgs += listOf("-y", "-i", inputVideo.absolutePath)
+            audioFiles.forEach { baseArgs += listOf("-i", it.absolutePath) }
 
-            val filters = mutableListOf<String>()
-            voiceCues.forEachIndexed { index, cue ->
-                val delay = cue.startMs.coerceAtLeast(0L)
-                filters += "[${index + 1}:a]adelay=$delay|$delay[dub$index]"
+            fun buildArguments(includeOriginalAudio: Boolean): List<String> {
+                val filters = mutableListOf<String>()
+                voiceCues.forEachIndexed { index, cue ->
+                    val delay = cue.startMs.coerceAtLeast(0L)
+                    filters += "[${index + 1}:a]adelay=$delay|$delay[dub$index]"
+                }
+
+                val dubbedInputs = voiceCues.indices.joinToString("") { "[dub$it]" }
+                if (includeOriginalAudio) {
+                    filters += "[0:a]volume=0.22[original]"
+                    filters += "[original]$dubbedInputs" +
+                        "amix=inputs=${voiceCues.size + 1}:duration=longest:" +
+                        "dropout_transition=0:normalize=0[aout]"
+                } else {
+                    filters += dubbedInputs +
+                        "amix=inputs=${voiceCues.size}:duration=longest:" +
+                        "dropout_transition=0:normalize=0[aout]"
+                }
+
+                return baseArgs + listOf(
+                    "-filter_complex", filters.joinToString(";"),
+                    "-map", "0:v:0",
+                    "-map", "[aout]",
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-b:a", "192k",
+                    "-movflags", "+faststart",
+                    "-f", "mp4",
+                    outputVideo.absolutePath
+                )
             }
-            val mixInputs = voiceCues.indices.joinToString("") { "[dub$it]" }
-            filters += "$mixInputs" +
-                "amix=inputs=${voiceCues.size}:duration=longest:dropout_transition=0:normalize=0[aout]"
 
-            args += listOf(
-                "-filter_complex", filters.joinToString(";"),
-                "-map", "0:v:0",
-                "-map", "[aout]",
-                "-c:v", "copy",
-                "-c:a", "aac",
-                "-b:a", "192k",
-                "-movflags", "+faststart",
-                "-f", "mp4",
-                outputVideo.absolutePath
-            )
-
-            val session = FFmpegKit.executeWithArguments(args.toTypedArray())
+            var session = FFmpegKit.executeWithArguments(buildArguments(includeOriginalAudio = true).toTypedArray())
+            if (!ReturnCode.isSuccess(session.returnCode)) {
+                val logs = session.allLogsAsString.orEmpty()
+                val noSourceAudio = logs.contains("matches no streams", ignoreCase = true) ||
+                    logs.contains("Stream specifier ':a' in filtergraph", ignoreCase = true)
+                if (!noSourceAudio) {
+                    error("FFmpeg không thể ghép giọng đọc: ${session.failStackTrace ?: logs}")
+                }
+                outputVideo.delete()
+                session = FFmpegKit.executeWithArguments(buildArguments(includeOriginalAudio = false).toTypedArray())
+            }
             check(ReturnCode.isSuccess(session.returnCode)) {
-                "FFmpeg không thể ghép giọng đọc: ${session.failStackTrace ?: session.allLogsAsString}"
+                "FFmpeg không thể xuất video: ${session.failStackTrace ?: session.allLogsAsString}"
             }
             check(outputVideo.isFile && outputVideo.length() > 1024L) {
                 "Tệp video xuất ra không hợp lệ."
