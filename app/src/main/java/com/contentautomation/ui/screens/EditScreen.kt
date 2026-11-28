@@ -348,9 +348,9 @@ fun EditScreen(
                         result.onSuccess { translated ->
                             subtitles.clear()
                             subtitles.addAll(translated)
-                            statusMessage = "Đã dịch \${translated.size} đoạn phụ đề sang \${targetLanguage}."
+                            statusMessage = "Đã dịch ${translated.size} đoạn phụ đề sang ${targetLanguage}."
                         }.onFailure {
-                            statusMessage = "Dịch phụ đề thất bại: \${it.message ?: "Lỗi không xác định"}"
+                            statusMessage = "Dịch phụ đề thất bại: ${it.message ?: "Lỗi không xác định"}"
                         }
                         isTranslationRunning = false
                     }
@@ -359,7 +359,7 @@ fun EditScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = EditInk),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (isTranslationRunning) "Đang dịch phụ đề..." else "Dịch toàn bộ \${subtitles.size} đoạn")
+                Text(if (isTranslationRunning) "Đang dịch phụ đề..." else "Dịch toàn bộ ${subtitles.size} đoạn")
             }
             GText("OCR offline hỗ trợ Latin/Việt và Trung. STT hiện dùng mô hình offline tiếng Trung/Anh; mốc thời gian chia theo cửa sổ 10 giây. Dịch cần API AI đã cấu hình.", 11.sp, color = EditMuted)
         }
