@@ -2,11 +2,11 @@ package com.contentautomation.domain.source
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -21,12 +21,20 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
     private val cookieDirectoryPath = cookieDirectory ?: File(System.getProperty("java.io.tmpdir") ?: "/data/local/tmp")
 
     private companion object {
-        const val PAGE_SIZE = 20
         const val MAX_VIDEOS = 600
-        const val MAX_PAGES = MAX_VIDEOS / PAGE_SIZE
-        const val PAGE_DELAY_MS = 900L
-        const val USER_POST_API = "https://www.douyin.com/aweme/v1/web/aweme/post/"
+        const val SCAN_API_URL = "https://ai-video-server-59tj.onrender.com/douyin/profile/videos"
+        val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    }
+
+    private val scanClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(40, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(20, TimeUnit.MINUTES)
+            .followRedirects(true)
+            .build()
     }
 
     private val profileClient by lazy {
@@ -58,102 +66,61 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
             throw SourceUnavailableException("Phiên đăng nhập Douyin chưa có cookie. Hãy đăng nhập lại trong Cài đặt.")
         }
 
-        val cookieMap = cookie.split(";").mapNotNull { part ->
-            val pair = part.trim().split("=", limit = 2)
-            if (pair.size != 2 || pair[0].isBlank()) null else pair[0].trim() to pair[1].trim()
-        }.toMap()
-        val msToken = cookieMap["msToken"].orEmpty()
-        val uifid = cookieMap["UIFID"] ?: cookieMap["UIFID_TEMP"]
+        val payload = JSONObject().apply {
+            put("sec_uid", secUid)
+            put("cookie", cookie)
+            put("since_timestamp", 0)
+            put("max_items", MAX_VIDEOS)
+            put("cursor", "0")
+        }
+        val request = Request.Builder()
+            .url(SCAN_API_URL)
+            .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .build()
 
-        val collected = linkedMapOf<String, SourceVideoItem>()
-        var maxCursor = "0"
-        var hasMore = true
-
-        for (page in 0 until MAX_PAGES) {
-            if (!hasMore || collected.size >= MAX_VIDEOS) break
-            val url = USER_POST_API.toHttpUrl().newBuilder()
-                .addQueryParameter("device_platform", "webapp")
-                .addQueryParameter("aid", "6383")
-                .addQueryParameter("channel", "channel_pc_web")
-                .addQueryParameter("version_code", "190600")
-                .addQueryParameter("version_name", "19.6.0")
-                .addQueryParameter("pc_client_type", "1")
-                .addQueryParameter("cookie_enabled", "true")
-                .addQueryParameter("browser_language", "zh-CN")
-                .addQueryParameter("browser_platform", "Win32")
-                .addQueryParameter("browser_name", "Chrome")
-                .addQueryParameter("browser_version", "131.0.0.0")
-                .addQueryParameter("browser_online", "true")
-                .addQueryParameter("engine_name", "Blink")
-                .addQueryParameter("os_name", "Windows")
-                .addQueryParameter("platform", "PC")
-                .addQueryParameter("screen_width", "1920")
-                .addQueryParameter("screen_height", "1080")
-                .addQueryParameter("sec_user_id", secUid)
-                .addQueryParameter("count", PAGE_SIZE.toString())
-                .addQueryParameter("max_cursor", maxCursor)
-                .addQueryParameter("locate_query", "false")
-                .addQueryParameter("publish_video_strategy_type", "2")
-                .apply { if (msToken.isNotBlank()) addQueryParameter("msToken", msToken) }
-                .build()
-
-            val requestBuilder = Request.Builder()
-                .url(url)
-                .get()
-                .header("User-Agent", USER_AGENT)
-                .header("Accept", "application/json, text/plain, */*")
-                .header("Referer", profileUrl(secUid))
-                .header("Origin", "https://www.douyin.com")
-                .header("Cookie", cookie)
-                .header("x-tt-argus", "1")
-            if (!uifid.isNullOrBlank()) requestBuilder.header("uifid", uifid)
-
-            val responseText = profileClient.newCall(requestBuilder.build()).execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
-                    throw SourceUnavailableException("Douyin API trả HTTP ${response.code}. ${body.take(180)}")
-                }
-                body
-            }
-            val data = runCatching { JSONObject(responseText) }.getOrElse {
-                throw SourceUnavailableException("Douyin API không trả JSON hợp lệ ở trang ${page + 1}.")
-            }
-            val statusCode = data.optInt("status_code", 0)
-            if (statusCode != 0) {
-                val message = data.optString("status_msg").ifBlank { data.optString("message") }
+        val responseText = scanClient.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                val detail = runCatching { JSONObject(body).optString("detail") }.getOrNull()
                 throw SourceUnavailableException(
-                    "Douyin từ chối API danh sách (status_code=$statusCode)${if (message.isNotBlank()) ": $message" else ""}. Phiên đăng nhập hoặc chữ ký bảo vệ của Douyin có thể cần làm mới."
+                    detail?.takeIf { it.isNotBlank() }
+                        ?: "Máy chủ chưa quét được danh sách Douyin (HTTP ${response.code})."
                 )
             }
-
-            val entries = data.optJSONArray("aweme_list")
-                ?: throw SourceUnavailableException("Douyin không trả trường aweme_list ở trang ${page + 1}.")
-            for (index in 0 until entries.length()) {
-                val item = entries.optJSONObject(index) ?: continue
-                val id = item.optString("aweme_id").takeIf { it.isNotBlank() && it != "null" } ?: continue
-                val seconds = item.optLong("create_time", 0L)
-                val desc = item.optString("desc").takeIf { it.isNotBlank() && it != "null" }
-                collected.putIfAbsent(id, SourceVideoItem(
-                    id = id,
-                    url = videoUrl(id),
-                    title = desc,
-                    description = desc,
-                    publishedAt = seconds.takeIf { it > 0L }?.times(1000L)
-                ))
-            }
-
-            hasMore = data.optInt("has_more", 0) == 1
-            val nextCursor = data.optString("max_cursor").takeIf { it.isNotBlank() && it != "null" }
-            if (nextCursor == null || nextCursor == maxCursor) hasMore = false
-            else maxCursor = nextCursor
-
-            if (hasMore && collected.size < MAX_VIDEOS) delay(PAGE_DELAY_MS)
+            body
         }
-
-        if (collected.isEmpty()) {
-            throw SourceUnavailableException("Douyin đã phản hồi nhưng không có video công khai trong danh sách này.")
+        val result = runCatching { JSONObject(responseText) }.getOrElse {
+            throw SourceUnavailableException("Máy chủ quét Douyin trả về dữ liệu không hợp lệ.")
         }
-        collected.values.take(MAX_VIDEOS)
+        if (result.optString("status") != "success") {
+            throw SourceUnavailableException(
+                result.optString("message").ifBlank { "Máy chủ không lấy được danh sách video Douyin." }
+            )
+        }
+        val entries = result.optJSONArray("videos")
+            ?: throw SourceUnavailableException("Máy chủ không trả danh sách video Douyin.")
+        val videos = linkedMapOf<String, SourceVideoItem>()
+        for (index in 0 until entries.length()) {
+            val item = entries.optJSONObject(index) ?: continue
+            val id = item.optString("id").takeIf { it.isNotBlank() && it != "null" } ?: continue
+            val url = item.optString("url").ifBlank { videoUrl(id) }
+            val title = item.optString("title").takeIf { it.isNotBlank() && it != "null" }
+            val description = item.optString("description").takeIf { it.isNotBlank() && it != "null" }
+            val publishedAt = item.optLong("published_at", 0L).takeIf { it > 0L }
+            videos.putIfAbsent(id, SourceVideoItem(
+                id = id,
+                url = url,
+                title = title,
+                description = description,
+                publishedAt = publishedAt
+            ))
+        }
+        if (videos.isEmpty()) {
+            throw SourceUnavailableException("Douyin không có video công khai hoặc máy chủ chưa đọc được danh sách.")
+        }
+        videos.values.toList()
     }
 
     override suspend fun verifyProfile(
