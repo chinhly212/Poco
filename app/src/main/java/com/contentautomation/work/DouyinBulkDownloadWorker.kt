@@ -77,7 +77,6 @@ class DouyinBulkDownloadWorker(
                 "progress_percent" to 0
             )
         )
-        if (!app.awaitMediaEngines()) return@withContext Result.retry()
         setForeground(createForegroundInfo(videoId, "Đang chuẩn bị tải video Douyin…"))
         val workDir = File(applicationContext.cacheDir, "MuChi/DouyinArchive/$videoId").apply { mkdirs() }
         val target = File(workDir, "douyin-original.mp4")
