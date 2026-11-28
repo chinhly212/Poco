@@ -55,14 +55,16 @@ class DouyinBulkDownloadWorker(
         try {
             app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.DOWNLOADING.name)
             target.delete()
-            setProgress(workDataOf("message" to "Đang yêu cầu máy chủ phân giải video Douyin…", "video_id" to video.id))
+            setForeground(createForegroundInfo(videoId, "Đang yêu cầu máy chủ phân giải video Douyin…"))
+            setProgress(workDataOf("message" to "Đang phân giải video Douyin…", "video_id" to video.id))
             val downloadResult = AiVideoServerClient().downloadVideo(video.sourceUrl, target)
             val downloaded = target.takeIf { it.isFile && it.length() > 0L }
                 ?: throw IllegalStateException("Máy chủ không trả file video hợp lệ.")
             if (downloadResult.bytesWritten != downloaded.length()) {
                 throw IllegalStateException("Kích thước video tải về không khớp dữ liệu đã nhận.")
             }
-            setProgress(workDataOf("message" to "Đã nhận ${(downloaded.length() / 1024L)} KB · đang lưu vào Movies…", "video_id" to video.id))
+            setForeground(createForegroundInfo(videoId, "Đã nhận video · đang lưu vào Movies…"))
+            setProgress(workDataOf("message" to "Đã nhận video · đang lưu vào Movies…", "video_id" to video.id))
 
             val safeAccount = account.accountName
                 .replace(Regex("[^a-zA-Z0-9_-]"), "_")
@@ -81,6 +83,7 @@ class DouyinBulkDownloadWorker(
                 "douyin_${video.id}_original"
             )
             app.database.sourceVideoDao().updateStatus(video.id, VideoStatus.SAVED_TO_PHONE.name)
+            setForeground(createForegroundInfo(videoId, "Đã lưu video vào Movies"))
             setProgress(workDataOf("message" to "Đã lưu video vào Movies · ${downloadResult.bytesWritten} byte", "video_id" to video.id))
             Result.success(workDataOf("saved_uri" to savedUri.toString(), "display_name" to displayName))
         } catch (cancelled: CancellationException) {
