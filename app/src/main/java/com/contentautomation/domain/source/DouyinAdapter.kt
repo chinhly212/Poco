@@ -179,14 +179,52 @@ class DouyinAdapter(cookieDirectory: File? = null) : YtDlpProfileAdapter(cookieD
                 return null
             }
 
-            val pathId = finalUri.pathSegments.let { segments ->
-                segments.indexOf("user").takeIf { it >= 0 }?.let { segments.getOrNull(it + 1) }
+            // Resolve sec_uid from the redirected profile URL first, then from Douyin's
+            // embedded page data. Short links (v.douyin.com/...) commonly redirect,
+            // and the final URL is not guaranteed to retain the /user/ path.
+            fun normalizeSecUid(candidate: String?): String? =
+                candidate?.trim()?.trim('"', '\'', '/', '\\')
+                    ?.takeIf { it.matches(Regex("""[A-Za-z0-9._~-]{12,256}""")) }
+
+            fun secUidFromUri(rawUrl: String): String? {
+                val uri = runCatching { android.net.Uri.parse(rawUrl) }.getOrNull() ?: return null
+                for (key in listOf("sec_uid", "secUid", "sec_user_id")) {
+                    normalizeSecUid(uri.getQueryParameter(key))?.let { return it }
+                }
+                val segments = uri.pathSegments
+                val userIndex = segments.indexOf("user")
+                return userIndex.takeIf { it >= 0 }
+                    ?.let { segments.getOrNull(it + 1) }
+                    ?.let(::normalizeSecUid)
             }
-            val secUid = stringField("sec_uid", "secUid", "sec_user_id")
-                ?: Regex("""/user/(MS4wLjAB[A-Za-z0-9_-]+)""").find(resolvedUrl)?.groupValues?.getOrNull(1)
-                ?: pathId?.takeIf { it.startsWith("MS4wLjAB") }
-            if (secUid.isNullOrBlank() || !secUid.startsWith("MS4wLjAB")) {
-                throw SourceUnavailableException("Chưa lấy được mã hồ sơ Douyin (sec_uid). Hãy dùng link trang cá nhân, không dùng ID hiển thị.")
+
+            // Douyin embeds escaped JSON in some profile HTML responses.
+            val normalizedHtml = html
+                .replace("\\u002F", "/")
+                .replace("\\u002f", "/")
+                .replace("\\/", "/")
+                .replace("\\u003D", "=")
+                .replace("\\u0026", "&")
+                .replace("\\\"", "\"")
+                .replace("&quot;", "\"")
+                .replace("&#34;", "\"")
+                .replace("&amp;", "&")
+
+            // Supports quoted/unquoted keys and sec_uid/secUid/sec_user_id spellings.
+            val secUidPattern = Regex(
+                """(?is)["']?(?:sec_uid|secUid|sec_user_id)["']?\s*[:=]\s*["']([A-Za-z0-9._~-]{12,256})["']"""
+            )
+            val secUidFromHtml = secUidPattern.find(normalizedHtml)
+                ?.groupValues?.getOrNull(1)
+                ?.let(::normalizeSecUid)
+
+            val secUid = secUidFromUri(resolvedUrl)
+                ?: secUidFromUri(identifier)
+                ?: secUidFromHtml
+                ?: stringField("sec_uid", "secUid", "sec_user_id")?.let(::normalizeSecUid)
+
+            if (secUid == null) {
+                throw SourceUnavailableException("Chưa lấy được mã hồ sơ Douyin (sec_uid). Link rút gọn có thể chưa chuyển tới dữ liệu hồ sơ hoặc Douyin không nhúng mã hồ sơ trong HTML.")
             }
 
             val pageTitle = Regex("""<title[^>]*>(.*?)</title>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
