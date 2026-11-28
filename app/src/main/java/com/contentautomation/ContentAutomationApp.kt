@@ -78,19 +78,13 @@ class ContentAutomationApp : Application(), Configuration.Provider {
                 YoutubeDL.getInstance().init(applicationContext)
                 FFmpeg.getInstance().init(applicationContext)
 
-                // Refresh yt-dlp from the official stable release. A network/update
-                // failure must not prevent the rest of the app from starting.
-                runCatching {
-                    val updateStatus = YoutubeDL.getInstance().updateYoutubeDL(applicationContext)
-                    Log.i("MuChiEngine", "yt-dlp update status: $updateStatus; version=${YoutubeDL.getInstance().version(applicationContext)}")
-                }.onFailure { updateError ->
-                    Log.w("MuChiEngine", "Could not update yt-dlp; keeping the bundled/cached version", updateError)
-                }
-
+                // Mark the local engines ready immediately after initialization.
+                // A network update of yt-dlp must never hold the on-device download
+                // queue in its waiting state; downloads use the bundled/cached binary.
                 isEngineInitialized = true
                 engineInitializationError = null
                 mediaEnginesReady.complete(true)
-                Log.d("MuChiEngine", "YoutubeDL and FFmpeg initialized")
+                Log.d("MuChiEngine", "YoutubeDL and FFmpeg initialized; local downloads are ready")
             } catch (e: Exception) {
                 isEngineInitialized = false
                 engineInitializationError = e.message
