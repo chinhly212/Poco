@@ -62,6 +62,7 @@ import com.contentautomation.videoeditor.domain.SrtCodec
 import com.contentautomation.videoeditor.domain.SubtitleCue
 import com.contentautomation.videoeditor.engine.AndroidDeviceResourceMonitor
 import com.contentautomation.videoeditor.engine.AiSubtitleTranslator
+import com.contentautomation.videoeditor.engine.AndroidTextToSpeechDubbingEngine
 import com.contentautomation.ui.MainViewModel
 import com.contentautomation.videoeditor.engine.MlKitVideoTextRecognizer
 import com.contentautomation.videoeditor.engine.SherpaOnnxChineseModelManager
@@ -107,6 +108,7 @@ fun EditScreen(
     var isSpeechModelDownloading by remember { mutableStateOf(false) }
     var isSpeechRunning by remember { mutableStateOf(false) }
     var isTranslationRunning by remember { mutableStateOf(false) }
+    var isDubbingRunning by remember { mutableStateOf(false) }
     val speechModelManager = remember(context) { SherpaOnnxChineseModelManager(context) }
     var hasSpeechModel by remember(context) { mutableStateOf(speechModelManager.isInstalled()) }
     val processingProfile = when (selectedProfile) {
@@ -428,16 +430,56 @@ fun EditScreen(
 
         SectionCard {
             SectionTitle("4. Lồng tiếng và âm thanh", Icons.Outlined.AudioFile)
-            WorkflowRow("Tạo giọng đọc từ bản dịch", "Chọn giọng, tốc độ và tạo từng đoạn", Icons.Outlined.Mic)
-            WorkflowRow("Phối âm thanh", "Giọng đọc, âm thanh gốc và nhạc nền", Icons.Outlined.AudioFile)
-            GText("Piper / TTS Android và bộ phối âm sẽ được kết nối ở phần engine.", 11.sp, color = EditMuted)
+            WorkflowRow(
+                "Tạo giọng đọc từ bản dịch",
+                "Dùng giọng TTS đã cài trên Android, không cần tải mô hình",
+                Icons.Outlined.Mic,
+                status = if (subtitles.any { !it.voiceAudioPath.isNullOrBlank() }) "Đã tạo" else "Android TTS"
+            )
+            Button(
+                onClick = {
+                    if (isDubbingRunning || subtitles.none { it.translatedText.isNotBlank() }) return@Button
+                    isDubbingRunning = true
+                    statusMessage = "Đang tạo từng đoạn giọng đọc bằng Android TTS..."
+                    val sourceCues = subtitles.toList()
+                    coroutineScope.launch {
+                        val result = runCatching {
+                            AndroidTextToSpeechDubbingEngine(context).generateAll(
+                                cues = sourceCues,
+                                language = targetLanguage,
+                                speed = 1f
+                            )
+                        }
+                        result.onSuccess { dubbed ->
+                            subtitles.clear()
+                            subtitles.addAll(dubbed)
+                            val count = dubbed.count { !it.voiceAudioPath.isNullOrBlank() }
+                            statusMessage = "Đã tạo $count tệp giọng đọc. Âm thanh đang lưu trong bộ nhớ ứng dụng."
+                        }.onFailure {
+                            statusMessage = "Lồng tiếng thất bại: ${it.message ?: "Lỗi không xác định"}"
+                        }
+                        isDubbingRunning = false
+                    }
+                },
+                enabled = subtitles.any { it.translatedText.isNotBlank() } && !isDubbingRunning,
+                colors = ButtonDefaults.buttonColors(containerColor = EditInk),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isDubbingRunning) "Đang tạo giọng đọc..." else "Tạo giọng đọc cho phụ đề đã dịch")
+            }
+            WorkflowRow("Phối âm thanh", "Ghép giọng đọc với video và nhạc nền", Icons.Outlined.AudioFile)
+            GText(
+                "Mỗi câu được tạo thành một tệp WAV riêng. Hiện đã tạo giọng đọc; ghép vào video và xuất thành phẩm là bước engine tiếp theo.",
+                11.sp,
+                color = EditMuted
+            )
         }
 
         SectionCard {
             SectionTitle("5. Timeline và lớp biên tập", Icons.Outlined.OndemandVideo)
             TimelineTrack("Video", "Hình ảnh gốc")
             TimelineTrack("Phụ đề", "${subtitles.size} đoạn")
-            TimelineTrack("Lồng tiếng", "Chưa có âm thanh")
+            TimelineTrack("Lồng tiếng", "${subtitles.count { !it.voiceAudioPath.isNullOrBlank() }} tệp âm thanh")
             TimelineTrack("Văn bản / Logo / Blur / Mask", "Các lớp phủ")
         }
 
