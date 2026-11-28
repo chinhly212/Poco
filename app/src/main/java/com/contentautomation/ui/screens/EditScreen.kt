@@ -260,7 +260,7 @@ fun EditScreen(
                             statusMessage = if (found.isEmpty()) {
                                 "STT hoàn tất: không nhận diện được lời nói."
                             } else {
-                                "STT hoàn tất: " + found.size + " đoạn. Mốc thời gian hiện chia theo cửa sổ 30 giây."
+                                "STT hoàn tất: " + found.size + " đoạn. Mốc thời gian hiện chia theo cửa sổ 10 giây."
                             }
                         }.onFailure {
                             statusMessage = "STT thất bại: " + (it.message ?: "Lỗi không xác định")
@@ -324,7 +324,7 @@ fun EditScreen(
                 }
             }
             WorkflowRow("Dịch theo ngữ cảnh", "Giữ cách xưng hô và mạch hội thoại", Icons.Outlined.Language)
-            GText("OCR offline hỗ trợ Latin/Việt và Trung. STT dùng mô hình offline tiếng Trung/Anh tải riêng; mốc thời gian hiện chia theo cửa sổ 30 giây.", 11.sp, color = EditMuted)
+            GText("OCR offline hỗ trợ Latin/Việt và Trung. STT dùng mô hình offline tiếng Trung/Anh tải riêng; mốc thời gian hiện chia theo cửa sổ 10 giây.", 11.sp, color = EditMuted)
         }
 
         SectionCard {
