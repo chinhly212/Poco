@@ -33,7 +33,8 @@ data class DriveUiState(
     val loading: Boolean = false,
     val account: DriveAccountInfo? = null,
     val files: List<DriveFileItem> = emptyList(),
-    val message: String? = null
+    val message: String? = null,
+    val autoBackupEnabled: Boolean = true
 )
 
 data class ApiConnectionStatus(
@@ -93,13 +94,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val driveClient = GoogleDriveClient(app)
     private val _driveState = MutableStateFlow(
-        DriveUiState(connected = driveClient.hasSavedToken())
+        DriveUiState(
+            connected = driveClient.hasSavedToken(),
+            autoBackupEnabled = driveClient.isAutoBackupEnabled()
+        )
     )
     val driveState = _driveState.asStateFlow()
 
     fun acceptDriveAccessToken(token: String) {
         driveClient.saveAccessToken(token)
         refreshDrive()
+    }
+
+    fun setDriveAutoBackupEnabled(enabled: Boolean) {
+        driveClient.setAutoBackupEnabled(enabled)
+        _driveState.update { it.copy(autoBackupEnabled = enabled) }
     }
 
     fun refreshDrive() {
@@ -109,7 +118,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (!driveClient.hasSavedToken()) {
                     _driveState.value = DriveUiState(
                         connected = false,
-                        message = "Phiên Drive hết hạn. Hãy kết nối lại."
+                        message = "Chưa kết nối Google Drive.",
+                        autoBackupEnabled = driveClient.isAutoBackupEnabled()
                     )
                     return@launch
                 }
@@ -119,7 +129,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     connected = true,
                     loading = false,
                     account = account,
-                    files = files
+                    files = files,
+                    autoBackupEnabled = driveClient.isAutoBackupEnabled()
                 )
             } catch (e: Exception) {
                 _driveState.update {
@@ -179,7 +190,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun disconnectDrive() {
         driveClient.clearAccessToken()
-        _driveState.value = DriveUiState(connected = false, message = "Đã ngắt kết nối Google Drive.")
+        _driveState.value = DriveUiState(
+            connected = false,
+            message = "Đã ngắt kết nối Google Drive.",
+            autoBackupEnabled = driveClient.isAutoBackupEnabled()
+        )
     }
 
 

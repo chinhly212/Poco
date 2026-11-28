@@ -7,7 +7,6 @@ import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
@@ -15,6 +14,12 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okio.BufferedSink
 import okio.source
 import org.json.JSONObject
+import org.json.JSONArray
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.Scope
+import com.google.android.gms.tasks.Tasks
+import com.google.api.services.drive.DriveScopes
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -56,29 +61,60 @@ class GoogleDriveClient(context: Context) {
     }
 
     fun saveAccessToken(token: String) {
-        securePrefs.edit().putString(KEY_ACCESS_TOKEN, token)
-            .putLong(KEY_SAVED_AT, System.currentTimeMillis()).apply()
+        securePrefs.edit()
+            .putString(KEY_ACCESS_TOKEN, token)
+            .putLong(KEY_SAVED_AT, System.currentTimeMillis())
+            .remove(KEY_BACKUP_FOLDER_ID)
+            .apply()
     }
 
     fun clearAccessToken() {
-        securePrefs.edit().remove(KEY_ACCESS_TOKEN).remove(KEY_SAVED_AT).apply()
+        securePrefs.edit()
+            .remove(KEY_ACCESS_TOKEN)
+            .remove(KEY_SAVED_AT)
+            .remove(KEY_BACKUP_FOLDER_ID)
+            .apply()
     }
 
-    fun hasSavedToken(): Boolean {
-        val token = securePrefs.getString(KEY_ACCESS_TOKEN, null)
-        val savedAt = securePrefs.getLong(KEY_SAVED_AT, 0L)
-        return !token.isNullOrBlank() && System.currentTimeMillis() - savedAt < TOKEN_LIFETIME_MS
+    fun hasSavedToken(): Boolean =
+        !securePrefs.getString(KEY_ACCESS_TOKEN, null).isNullOrBlank()
+
+    fun isAutoBackupEnabled(): Boolean =
+        securePrefs.getBoolean(KEY_AUTO_BACKUP, true)
+
+    fun setAutoBackupEnabled(enabled: Boolean) {
+        securePrefs.edit().putBoolean(KEY_AUTO_BACKUP, enabled).apply()
     }
 
-    private fun token(): String {
-        val value = securePrefs.getString(KEY_ACCESS_TOKEN, null)
-            ?: error("Chưa kết nối Google Drive.")
+    private suspend fun token(): String {
+        val saved = securePrefs.getString(KEY_ACCESS_TOKEN, null)
         val savedAt = securePrefs.getLong(KEY_SAVED_AT, 0L)
-        if (System.currentTimeMillis() - savedAt >= TOKEN_LIFETIME_MS) {
-            clearAccessToken()
-            error("Phiên Google Drive đã hết hạn. Hãy kết nối lại.")
+        if (!saved.isNullOrBlank() && System.currentTimeMillis() - savedAt < TOKEN_LIFETIME_MS) {
+            return saved
         }
-        return value
+
+        val request = AuthorizationRequest.builder()
+            .setRequestedScopes(
+                listOf(
+                    Scope(DriveScopes.DRIVE_FILE),
+                    Scope("openid"),
+                    Scope("email"),
+                    Scope("profile")
+                )
+            )
+            .build()
+        val authorization = Tasks.await(
+            Identity.getAuthorizationClient(appContext).authorize(request),
+            30,
+            TimeUnit.SECONDS
+        )
+        if (authorization.hasResolution()) {
+            error("Google Drive cần xác nhận lại quyền. Hãy mở MuChi → Cài đặt → Kết nối Google Drive.")
+        }
+        val refreshed = authorization.accessToken
+            ?: error("Google không cấp access token mới. Hãy kết nối lại Google Drive.")
+        saveAccessToken(refreshed)
+        return refreshed
     }
 
     private suspend fun getJson(url: String): JSONObject = withContext(Dispatchers.IO) {
@@ -119,42 +155,25 @@ class GoogleDriveClient(context: Context) {
         }
     }
 
-    suspend fun upload(uri: Uri, displayName: String, mimeType: String): DriveFileItem =
-        withContext(Dispatchers.IO) {
-            val length = appContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
-                ?: -1L
-            if (length <= 0L) error("Không xác định được dung lượng tệp để tải lên.")
-            val metadata = JSONObject().put("name", displayName).put("mimeType", mimeType)
-            val initiate = Request.Builder()
-                .url("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,mimeType,size,modifiedTime")
-                .header("Authorization", "Bearer ${token()}")
-                .header("X-Upload-Content-Type", mimeType)
-                .header("X-Upload-Content-Length", length.toString())
-                .post(metadata.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .build()
-            val uploadUrl = http.newCall(initiate).execute().use { response ->
-                if (!response.isSuccessful) error("Không thể khởi tạo tải lên (HTTP ${response.code}).")
-                response.header("Location") ?: error("Google Drive không trả đường dẫn tải lên.")
-            }
-            val streamBody = object : RequestBody() {
-                override fun contentType() = mimeType.toMediaType()
-                override fun contentLength() = length
-                override fun writeTo(sink: BufferedSink) {
-                    val input = appContext.contentResolver.openInputStream(uri)
-                        ?: error("Không mở được tệp nguồn.")
-                    input.source().use { source -> sink.writeAll(source) }
-                }
-            }
-            val uploadRequest = Request.Builder()
-                .url(uploadUrl)
-                .header("Authorization", "Bearer ${token()}")
-                .put(streamBody)
-                .build()
-            http.newCall(uploadRequest).execute().use { response ->
-                val text = response.body?.string().orEmpty()
-                if (!response.isSuccessful) error("Tải lên thất bại HTTP ${response.code}: ${text.take(250)}")
-                val item = JSONObject(text)
-                DriveFileItem(
+    suspend fun upload(
+        uri: Uri,
+        displayName: String,
+        mimeType: String,
+        backupKey: String? = null
+    ): DriveFileItem = withContext(Dispatchers.IO) {
+        val length = appContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+            ?: -1L
+        if (length <= 0L) error("Không xác định được dung lượng tệp để tải lên.")
+
+        if (!backupKey.isNullOrBlank()) {
+            val escapedKey = backupKey.replace("'", "\\'")
+            val query = "trashed = false and appProperties has { key='muchi_backup_key' and value='$escapedKey' }"
+            val existing = getJson(
+                "https://www.googleapis.com/drive/v3/files?q=\${Uri.encode(query)}&pageSize=1&fields=files(id,name,mimeType,size,modifiedTime)"
+            ).optJSONArray("files")
+            if (existing != null && existing.length() > 0) {
+                val item = existing.getJSONObject(0)
+                return@withContext DriveFileItem(
                     item.getString("id"),
                     item.optString("name"),
                     item.optString("mimeType"),
@@ -163,6 +182,88 @@ class GoogleDriveClient(context: Context) {
                 )
             }
         }
+
+        val metadata = JSONObject()
+            .put("name", displayName)
+            .put("mimeType", mimeType)
+        if (!backupKey.isNullOrBlank()) {
+            metadata.put("appProperties", JSONObject().put("muchi_backup_key", backupKey))
+            metadata.put("parents", JSONArray().put(ensureBackupFolderId()))
+        }
+
+        val bearer = token()
+        val initiate = Request.Builder()
+            .url("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,mimeType,size,modifiedTime")
+            .header("Authorization", "Bearer $bearer")
+            .header("X-Upload-Content-Type", mimeType)
+            .header("X-Upload-Content-Length", length.toString())
+            .post(metadata.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        val uploadUrl = http.newCall(initiate).execute().use { response ->
+            if (!response.isSuccessful) error("Không thể khởi tạo tải lên (HTTP \${response.code}).")
+            response.header("Location") ?: error("Google Drive không trả đường dẫn tải lên.")
+        }
+        val streamBody = object : RequestBody() {
+            override fun contentType() = mimeType.toMediaType()
+            override fun contentLength() = length
+            override fun writeTo(sink: BufferedSink) {
+                val input = appContext.contentResolver.openInputStream(uri)
+                    ?: error("Không mở được tệp nguồn.")
+                input.source().use { source -> sink.writeAll(source) }
+            }
+        }
+        val uploadRequest = Request.Builder()
+            .url(uploadUrl)
+            .header("Authorization", "Bearer $bearer")
+            .put(streamBody)
+            .build()
+        http.newCall(uploadRequest).execute().use { response ->
+            val responseText = response.body?.string().orEmpty()
+            if (!response.isSuccessful) error("Tải lên thất bại HTTP \${response.code}: \${responseText.take(250)}")
+            val item = JSONObject(responseText)
+            DriveFileItem(
+                item.getString("id"),
+                item.optString("name"),
+                item.optString("mimeType"),
+                item.optString("size").toLongOrNull() ?: length,
+                item.optString("modifiedTime")
+            )
+        }
+    }
+
+    private suspend fun ensureBackupFolderId(): String {
+        securePrefs.getString(KEY_BACKUP_FOLDER_ID, null)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        val query = "name = 'MuChi Auto Backup' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+        val found = getJson(
+            "https://www.googleapis.com/drive/v3/files?q=\${Uri.encode(query)}&pageSize=5&fields=files(id)"
+        ).optJSONArray("files")
+        val existingId = found?.takeIf { it.length() > 0 }
+            ?.getJSONObject(0)?.optString("id")?.takeIf { it.isNotBlank() }
+        if (existingId != null) {
+            securePrefs.edit().putString(KEY_BACKUP_FOLDER_ID, existingId).apply()
+            return existingId
+        }
+
+        val metadata = JSONObject()
+            .put("name", "MuChi Auto Backup")
+            .put("mimeType", "application/vnd.google-apps.folder")
+        val request = Request.Builder()
+            .url("https://www.googleapis.com/drive/v3/files?fields=id")
+            .header("Authorization", "Bearer \${token()}")
+            .post(metadata.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        val folderId = http.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) error("Không tạo được thư mục sao lưu Drive (HTTP \${response.code}).")
+            JSONObject(body).optString("id").takeIf { it.isNotBlank() }
+                ?: error("Google Drive không trả mã thư mục sao lưu.")
+        }
+        securePrefs.edit().putString(KEY_BACKUP_FOLDER_ID, folderId).apply()
+        return folderId
+    }
 
     suspend fun delete(fileId: String) = withContext(Dispatchers.IO) {
         val body = JSONObject().put("trashed", true)
@@ -192,6 +293,8 @@ class GoogleDriveClient(context: Context) {
     companion object {
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_SAVED_AT = "saved_at"
-        private const val TOKEN_LIFETIME_MS = 50 * 60 * 1000L
+        private const val KEY_AUTO_BACKUP = "auto_backup_enabled"
+        private const val KEY_BACKUP_FOLDER_ID = "backup_folder_id"
+        private const val TOKEN_LIFETIME_MS = 45 * 60 * 1000L
     }
 }

@@ -421,6 +421,7 @@ fun AppNavHost(vm: MainViewModel) {
                         onDeleteDriveFile = { vm.deleteDriveFile(it) },
                         onDownloadDriveFile = { id, name -> vm.downloadDriveFile(id, name) },
                         onDisconnectDrive = { vm.disconnectDrive() },
+                        onAutoBackupChanged = { vm.setDriveAutoBackupEnabled(it) },
 
                         onCopyId = {
                             val clipboard =

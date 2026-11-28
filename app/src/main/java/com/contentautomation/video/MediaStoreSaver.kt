@@ -22,8 +22,38 @@ class MediaStoreSaver(private val context: Context) {
     suspend fun saveVideoToGallery(sourceFile: File, displayName: String): Uri {
         if (!sourceFile.isFile) throw IOException("Không tìm thấy video cần lưu.")
         if (sourceFile.length() <= 0L) throw IOException("Video tải về bị rỗng.")
-        return saveVideoFromStream(FileInputStream(sourceFile), displayName, sourceFile.length())
+        val safeName = normalizeDisplayName(displayName)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            findExistingVideo(safeName, sourceFile.length())?.let { return it }
+        }
+        return saveVideoFromStream(FileInputStream(sourceFile), safeName, sourceFile.length())
     }
+
+    private suspend fun findExistingVideo(displayName: String, expectedBytes: Long): Uri? =
+        withContext(Dispatchers.IO) {
+            val projection = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.SIZE)
+            val selection = "\${MediaStore.Video.Media.DISPLAY_NAME}=? AND \${MediaStore.Video.Media.RELATIVE_PATH}=?"
+            val args = arrayOf(displayName, "\${Environment.DIRECTORY_MOVIES}/")
+            context.contentResolver.query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                selection,
+                args,
+                "\${MediaStore.Video.Media.DATE_ADDED} DESC"
+            )?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+                while (cursor.moveToNext()) {
+                    if (cursor.getLong(sizeColumn) == expectedBytes) {
+                        return@withContext Uri.withAppendedPath(
+                            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                            cursor.getLong(idColumn).toString()
+                        )
+                    }
+                }
+            }
+            null
+        }
 
     /**
      * Saves a network stream straight into the public Movies library. No

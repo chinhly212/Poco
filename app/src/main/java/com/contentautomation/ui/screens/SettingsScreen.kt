@@ -63,6 +63,7 @@ fun SettingsScreen(
     onDeleteDriveFile: (String) -> Unit,
     onDownloadDriveFile: (String, String) -> Unit,
     onDisconnectDrive: () -> Unit,
+    onAutoBackupChanged: (Boolean) -> Unit,
     onCopyId: () -> Unit,
     onAddAccount: () -> Unit,
     onSetAccountEnabled: (String, Boolean) -> Unit,
@@ -249,6 +250,21 @@ fun SettingsScreen(
                     Spacer(Modifier.width(6.dp))
                     SmallAction("Ngắt", onDisconnectDrive)
                 } else SmallAction("Kết nối lại", onConnectDrive)
+            }
+            if (drive.connected) {
+                SettingsDivider()
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Tự động sao lưu video", fontSize = 13.sp, color = SettingsInk, fontWeight = FontWeight.Medium)
+                        Text("Video tải về và video quét được sẽ tự lưu lên Drive", fontSize = 10.sp, color = SettingsMuted)
+                    }
+                    Switch(checked = drive.autoBackupEnabled, onCheckedChange = onAutoBackupChanged)
+                }
+            } else {
+                Text("Kết nối Google Drive để bật sao lưu video tự động.", fontSize = 10.sp, color = SettingsMuted, modifier = Modifier.padding(bottom = 6.dp))
             }
             if (drive.loading) Text("Đang đồng bộ…", fontSize = 11.sp, color = SettingsMuted, modifier = Modifier.padding(bottom = 6.dp))
             drive.message?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 11.sp, color = SettingsAmber, modifier = Modifier.padding(bottom = 6.dp)) }

@@ -8,6 +8,7 @@ import com.contentautomation.data.db.entity.*
 import com.contentautomation.video.MediaStoreSaver
 import com.contentautomation.video.PipelineMediaProcessor
 import com.contentautomation.video.VideoCompressor
+import com.contentautomation.work.DriveBackupWorker
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.CancellationException
@@ -119,8 +120,18 @@ class PipelineWorker(
                         throw IllegalStateException("Video tải về rỗng.")
                     }
 
+                    val sourceDisplayName = "MuChi_Goc_\${video.id.take(8)}.mp4"
+                    val sourceUri = MediaStoreSaver(applicationContext)
+                        .saveVideoToGallery(downloaded, sourceDisplayName)
+                    DriveBackupWorker.enqueue(
+                        applicationContext,
+                        sourceUri,
+                        sourceDisplayName,
+                        "video_\${video.id}_source"
+                    )
+
                     db.sourceVideoDao().updateStatus(video.id, VideoStatus.PROCESSING_VIDEO.name)
-                    next(PipelineStage.ANALYZE, "Đã tải video. Chờ tối ưu video.")
+                    next(PipelineStage.ANALYZE, "Đã tải video không logo, lưu vào điện thoại và đưa vào hàng đợi sao lưu Drive.")
                 }
 
                 PipelineStage.ANALYZE -> {
@@ -230,9 +241,15 @@ class PipelineWorker(
                         throw IllegalStateException("Không tìm thấy video đã ghép tiếng Việt để xuất.")
                     }
 
+                    val processedDisplayName = "MuChi_VI_\${video.id.take(8)}.mp4"
                     val savedUri = MediaStoreSaver(applicationContext)
-                        .saveVideoToGallery(dubbed, "MuChi_VI_${video.id.take(8)}.mp4")
-                        ?: throw IllegalStateException("Android không lưu được video vào thư viện.")
+                        .saveVideoToGallery(dubbed, processedDisplayName)
+                    DriveBackupWorker.enqueue(
+                        applicationContext,
+                        savedUri,
+                        processedDisplayName,
+                        "video_\${video.id}_processed"
+                    )
 
                     val processedDao = db.processedVideoDao()
                     val existing = processedDao.findBySourceId(video.id)
