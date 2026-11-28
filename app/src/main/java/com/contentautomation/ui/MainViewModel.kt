@@ -87,7 +87,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .mapNotNull { info ->
                 val videoId = info.progress.getString("external_video_id")
                     ?: info.outputData.getString("external_video_id")
-                    ?: info.inputData.getString("external_video_id")
+                    ?: info.tags.firstOrNull { it.startsWith("muchi-douyin-video:") }
+                        ?.substringAfter("muchi-douyin-video:")
                     ?: info.progress.getString("video_id")
                     ?: info.outputData.getString("video_id")
                     ?: info.id.toString()
