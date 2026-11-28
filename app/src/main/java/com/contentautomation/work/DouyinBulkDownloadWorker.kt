@@ -107,6 +107,7 @@ class DouyinBulkDownloadWorker(
                 val request = YoutubeDLRequest(video.sourceUrl).apply {
                     addOption("--format", "best[ext=mp4]/best")
                     addOption("--merge-output-format", "mp4")
+                    addOption("--remux-video", "mp4")
                     addOption("--output", target.absolutePath)
                     addOption("--no-playlist")
                     addOption("--force-ipv4")
