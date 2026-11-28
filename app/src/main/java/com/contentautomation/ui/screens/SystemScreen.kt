@@ -300,8 +300,7 @@ private fun FilterRailItem(
             label,
             9.sp,
             weight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) color else Muted,
-            maxLines = 1
+            color = if (selected) color else Muted
         )
         if (selected) {
             Box(
