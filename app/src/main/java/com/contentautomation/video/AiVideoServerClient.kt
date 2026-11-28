@@ -200,8 +200,11 @@ class AiVideoServerClient(
     }
 
 
-    suspend fun downloadVideo(sourceUrl: String, destination: File): AiVideoDownloadResult =
-        withContext(Dispatchers.IO) {
+    suspend fun downloadVideo(
+        sourceUrl: String,
+        destination: File,
+        onProgress: suspend (downloadedBytes: Long, totalBytes: Long?) -> Unit = { _, _ -> }
+    ): AiVideoDownloadResult = withContext(Dispatchers.IO) {
             destination.parentFile?.mkdirs()
             val resolveRequest = Request.Builder()
                 .url("${baseUrl.trimEnd('/')}/download")
@@ -271,11 +274,26 @@ class AiVideoServerClient(
                         throw IOException("Máy chủ không trả dữ liệu video (${contentType}).")
                     }
                     val expectedBytes = body.contentLength().takeIf { it > 0L }
-                    val copied = destination.outputStream().buffered().use { output ->
+                    var copied = 0L
+                    var lastReported = 0L
+                    destination.outputStream().buffered().use { output ->
                         body.byteStream().use { input ->
-                            input.copyTo(output).also { output.flush() }
+                            val buffer = ByteArray(64 * 1024)
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                output.write(buffer, 0, count)
+                                copied += count
+                                if (copied - lastReported >= 256 * 1024 || (expectedBytes != null && copied >= expectedBytes)) {
+                                    output.flush()
+                                    onProgress(copied, expectedBytes)
+                                    lastReported = copied
+                                }
+                            }
+                            output.flush()
                         }
                     }
+                    if (copied > lastReported) onProgress(copied, expectedBytes)
                     if (copied <= 0L) throw IOException("Video tải về bị rỗng.")
                     if (expectedBytes != null && copied != expectedBytes) {
                         throw IOException("Video chưa tải đủ dữ liệu: ${copied}/${expectedBytes} byte.")
