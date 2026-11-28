@@ -8,11 +8,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -28,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import com.contentautomation.data.db.entity.SourceAccount
+import com.contentautomation.domain.source.SourceVideoItem
 import com.contentautomation.data.remote.PocoChatProfile
 import com.contentautomation.data.remote.PocoChatRepository
 import com.contentautomation.data.remote.SupabaseAuth
@@ -36,6 +41,7 @@ import com.contentautomation.data.remote.MuChiAccountStatus
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.outlined.Person
 import com.contentautomation.ui.DriveUiState
+import com.contentautomation.ui.DouyinChannelLibraryUiState
 import com.contentautomation.ui.models.StorageInfo
 import java.util.Locale
 import kotlinx.coroutines.launch
@@ -80,7 +86,11 @@ fun SettingsScreen(
     onLoginDouyin: () -> Unit,
     onLoginKuaishou: () -> Unit,
     onLogoutDouyin: () -> Unit,
-    onLogoutKuaishou: () -> Unit
+    onLogoutKuaishou: () -> Unit,
+    douyinLibrary: DouyinChannelLibraryUiState,
+    onScanDouyinChannel: (String) -> Unit,
+    onDownloadSelectedDouyinVideos: (Set<String>) -> Unit,
+    onClearDouyinLibrary: () -> Unit
 ) {
     val context = LocalContext.current
     val profileRepo = remember(context, auth) { PocoChatRepository(context.applicationContext, auth) }
@@ -114,6 +124,7 @@ fun SettingsScreen(
     val douyin = accounts.count { it.platform.equals("douyin", true) }
     val kuaishou = accounts.count { it.platform.equals("kuaishou", true) }
     var confirmLogout by remember { mutableStateOf(false) }
+    var selectedDouyinIds by remember(douyinLibrary.accountId, douyinLibrary.videos) { mutableStateOf(emptySet<String>()) }
     val shortId = remember(deviceId) {
         if (deviceId.length > 18) "${deviceId.take(8)}...${deviceId.takeLast(7)}" else deviceId
     }
@@ -176,6 +187,10 @@ fun SettingsScreen(
                         Column(Modifier.weight(1f)) {
                             Text(account.accountName.ifBlank { account.accountIdentifier }, fontSize = 13.sp, color = SettingsInk, fontWeight = FontWeight.SemiBold, maxLines = 1)
                             Text("${account.platform.uppercase(Locale.ROOT)} · ${account.accountIdentifier}", fontSize = 11.sp, color = SettingsMuted, maxLines = 1)
+                        }
+                        if (account.platform.equals("DOUYIN", ignoreCase = true)) {
+                            SmallAction("Quét video", { onScanDouyinChannel(account.id) })
+                            Spacer(Modifier.width(6.dp))
                         }
                         Switch(checked = account.enabled, onCheckedChange = { onSetAccountEnabled(account.id, it) })
                         TextButton(onClick = { onDeleteAccount(account.id) }, contentPadding = PaddingValues(horizontal = 4.dp)) {
@@ -383,6 +398,121 @@ fun SettingsScreen(
             },
             dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("Hủy") } }
         )
+    }
+    if (douyinLibrary.accountId != null) {
+        DouyinVideoPickerDialog(
+            state = douyinLibrary,
+            selectedIds = selectedDouyinIds,
+            onSelectionChanged = { selectedDouyinIds = it },
+            onScanAgain = { douyinLibrary.accountId?.let(onScanDouyinChannel) },
+            onDownloadSelected = onDownloadSelectedDouyinVideos,
+            onDismiss = onClearDouyinLibrary
+        )
+    }
+}
+
+
+@Composable
+private fun DouyinVideoPickerDialog(
+    state: DouyinChannelLibraryUiState,
+    selectedIds: Set<String>,
+    onSelectionChanged: (Set<String>) -> Unit,
+    onScanAgain: () -> Unit,
+    onDownloadSelected: (Set<String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Video của kênh Douyin", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "\${state.accountName} · \${state.videos.size} video",
+                    fontSize = 11.sp,
+                    color = SettingsMuted
+                )
+            }
+        },
+        text = {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (state.loading) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+                state.message?.takeIf { it.isNotBlank() }?.let {
+                    Text(it, fontSize = 12.sp, color = SettingsMuted)
+                }
+                if (state.videos.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = selectedIds.size == state.videos.size && state.videos.isNotEmpty(),
+                            onCheckedChange = { checked ->
+                                onSelectionChanged(if (checked) state.videos.map { it.id }.toSet() else emptySet())
+                            }
+                        )
+                        Text("Chọn tất cả (\${state.videos.size})", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.weight(1f))
+                        Text("Đã chọn \${selectedIds.size}", fontSize = 11.sp, color = SettingsMuted)
+                    }
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 390.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        items(state.videos, key = { it.id }) { video ->
+                            DouyinVideoSelectionRow(
+                                video = video,
+                                checked = video.id in selectedIds,
+                                onCheckedChange = { checked ->
+                                    onSelectionChanged(if (checked) selectedIds + video.id else selectedIds - video.id)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !state.loading && selectedIds.isNotEmpty(),
+                onClick = { onDownloadSelected(selectedIds) }
+            ) {
+                Text(if (state.loading) "Đang xử lý…" else "Xác nhận tải (\${selectedIds.size})")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(enabled = !state.loading, onClick = onScanAgain) { Text("Quét lại") }
+                TextButton(onClick = onDismiss) { Text("Đóng") }
+            }
+        }
+    )
+}
+
+@Composable
+private fun DouyinVideoSelectionRow(
+    video: SourceVideoItem,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onCheckedChange(!checked) }.padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Column(Modifier.weight(1f)) {
+            Text(
+                video.title?.takeIf { it.isNotBlank() } ?: "Video \${video.id}",
+                fontSize = 12.sp,
+                color = SettingsInk,
+                maxLines = 2
+            )
+            Text(
+                video.publishedAt?.let {
+                    java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(java.util.Date(it))
+                } ?: video.id,
+                fontSize = 10.sp,
+                color = SettingsMuted
+            )
+        }
     }
 }
 
