@@ -750,7 +750,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     if (inserted == -1L) {
                         skipped++
                     } else {
-                        DownloadWorker.enqueue(application, video.id)
+                        com.contentautomation.work.DouyinBulkDownloadWorker.enqueue(application, video.id)
                         queued++
                     }
                 }
