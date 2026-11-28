@@ -427,7 +427,7 @@ private fun DouyinVideoPickerDialog(
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text("Video của kênh Douyin", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "\${state.accountName} · \${state.videos.size} video",
+                    "${state.accountName} · ${state.videos.size} video",
                     fontSize = 11.sp,
                     color = SettingsMuted
                 )
@@ -449,9 +449,9 @@ private fun DouyinVideoPickerDialog(
                                 onSelectionChanged(if (checked) state.videos.map { it.id }.toSet() else emptySet())
                             }
                         )
-                        Text("Chọn tất cả (\${state.videos.size})", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Chọn tất cả (${state.videos.size})", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.weight(1f))
-                        Text("Đã chọn \${selectedIds.size}", fontSize = 11.sp, color = SettingsMuted)
+                        Text("Đã chọn ${selectedIds.size}", fontSize = 11.sp, color = SettingsMuted)
                     }
                     LazyColumn(
                         modifier = Modifier.fillMaxWidth().heightIn(max = 390.dp),
@@ -475,7 +475,7 @@ private fun DouyinVideoPickerDialog(
                 enabled = !state.loading && selectedIds.isNotEmpty(),
                 onClick = { onDownloadSelected(selectedIds) }
             ) {
-                Text(if (state.loading) "Đang xử lý…" else "Xác nhận tải (\${selectedIds.size})")
+                Text(if (state.loading) "Đang xử lý…" else "Xác nhận tải (${selectedIds.size})")
             }
         },
         dismissButton = {
@@ -500,7 +500,7 @@ private fun DouyinVideoSelectionRow(
         Checkbox(checked = checked, onCheckedChange = onCheckedChange)
         Column(Modifier.weight(1f)) {
             Text(
-                video.title?.takeIf { it.isNotBlank() } ?: "Video \${video.id}",
+                video.title?.takeIf { it.isNotBlank() } ?: "Video ${video.id}",
                 fontSize = 12.sp,
                 color = SettingsInk,
                 maxLines = 2
