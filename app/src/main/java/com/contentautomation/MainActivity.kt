@@ -8,17 +8,17 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.viewinterop.AndroidView
+import android.widget.VideoView
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -57,11 +57,6 @@ class MainActivity : ComponentActivity() {
             var showSplash by remember { mutableStateOf(true) }
             var updateState by remember { mutableStateOf<UpdateUiState>(UpdateUiState.Idle) }
             var recheckAfterSkip by remember { mutableStateOf(false) }
-
-            LaunchedEffect(Unit) {
-                delay(2500)
-                showSplash = false
-            }
 
             // Lần mở app đầu tiên sau splash.
             LaunchedEffect(showSplash) {
